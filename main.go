@@ -20,7 +20,6 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
-	_ "github.com/lib/pq"
 )
 
 // Configuration from environment variables
@@ -331,19 +330,19 @@ func (h *WebSocketHub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	// Send periodic pings
+
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-				if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-					return
-				}
+		for range ticker.C {
+			conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
 			}
 		}
 	}()
+
+	// block main or wait for signals...
 }
 
 func (h *WebSocketHub) Broadcast(data interface{}) {
@@ -414,7 +413,7 @@ func (us *UDPSniffer) startListening() {
 	log.Printf("Started UDP listening on port %s", us.port)
 }
 
-func (us *UDPSniffer) handlePackets(ctx context.Context) {
+func (us *UDPSniffer) handlePackets(_ context.Context) {
 	if us.conn == nil {
 		return
 	}
