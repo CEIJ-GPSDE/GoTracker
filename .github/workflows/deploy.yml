@@ -9,12 +9,25 @@ on:
       branch:
         description: "Branch to deploy (feature branch only)"
         required: true
-      instances:
-        description: "Instances to deploy to (comma-separated, e.g. EC2_3,EC2_4)"
-        required: true
+      deploy_to_EC2_1:
+        description: "Deploy to EC2_1"
+        type: boolean
+        default: false
+      deploy_to_EC2_2:
+        description: "Deploy to EC2_2"
+        type: boolean
+        default: false
+      deploy_to_EC2_3:
+        description: "Deploy to EC2_3"
+        type: boolean
+        default: false
+      deploy_to_EC2_4:
+        description: "Deploy to EC2_4"
+        type: boolean
+        default: false
 
 jobs:
-  # Auto-deploy main
+  # Auto-deploy main branch to all prod instances
   deploy-main:
     if: github.ref_name == 'main'
     runs-on: ubuntu-latest
@@ -50,8 +63,6 @@ jobs:
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
             safe_branch="main"
-
-            # Inject DB secrets into systemd drop-in
             sudo mkdir -p /etc/systemd/system/location-tracker@${safe_branch}.d
             sudo bash -c "cat > /etc/systemd/system/location-tracker@${safe_branch}.d/env.conf <<EOF
             [Service]
@@ -61,32 +72,29 @@ jobs:
             Environment=DB_PASSWORD=${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}
             Environment=DB_SSLMODE=${{ secrets[format('{0}_DB_SSLMODE', matrix.instance)] }}
             EOF"
-
             sudo systemctl daemon-reload
             sudo systemctl restart location-tracker@${safe_branch}
 
-  # Manual feature deployment
+  # Manual feature branch deployment
   deploy-feature:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-  
-    steps:
-      - name: Parse instances into JSON array
-        id: parse
-        run: |
-          arr=$(echo "${{ github.event.inputs.instances }}" | tr ',' '\n' | jq -R . | jq -s .)
-          echo "instances=$arr" >> $GITHUB_OUTPUT
-  
     strategy:
       matrix:
-        instance: ${{ fromJSON(steps.parse.outputs.instances) }}
-  
+        instance: [EC2_1, EC2_2, EC2_3, EC2_4]
+
     steps:
+      - name: Skip unchecked EC2s
+        if: ${{ github.event.inputs['deploy_to_' + matrix.instance] != 'true' }}
+        run: echo "Skipping ${{ matrix.instance }} for this run"
+
       - uses: actions/checkout@v4
+        if: ${{ github.event.inputs['deploy_to_' + matrix.instance] == 'true' }}
         with:
           ref: ${{ github.event.inputs.branch }}
-  
+
       - name: Build feature branch
+        if: ${{ github.event.inputs['deploy_to_' + matrix.instance] == 'true' }}
         run: |
           branch="${{ github.event.inputs.branch }}"
           safe_branch=$(echo "$branch" | tr '/' '-')
@@ -94,8 +102,9 @@ jobs:
           mkdir -p build/${safe_branch}/static
           go build -o build/${safe_branch}/app-${safe_branch} main.go
           cp static/index.html build/${safe_branch}/static/index.html
-  
+
       - name: Upload to EC2
+        if: ${{ github.event.inputs['deploy_to_' + matrix.instance] == 'true' }}
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
@@ -103,8 +112,9 @@ jobs:
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           source: "build/*"
           target: "~/app/"
-  
+
       - name: Restart service
+        if: ${{ github.event.inputs['deploy_to_' + matrix.instance] == 'true' }}
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
@@ -113,7 +123,7 @@ jobs:
           script: |
             branch="${{ github.event.inputs.branch }}"
             safe_branch=$(echo "$branch" | tr '/' '-')
-  
+
             sudo mkdir -p /etc/systemd/system/location-tracker@${safe_branch}.d
             sudo bash -c "cat > /etc/systemd/system/location-tracker@${safe_branch}.d/env.conf <<EOF
             [Service]
@@ -123,7 +133,5 @@ jobs:
             Environment=DB_PASSWORD=${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}
             Environment=DB_SSLMODE=${{ secrets[format('{0}_DB_SSLMODE', matrix.instance)] }}
             EOF"
-  
             sudo systemctl daemon-reload
             sudo systemctl restart location-tracker@${safe_branch}
-  
