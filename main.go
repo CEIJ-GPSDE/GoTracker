@@ -20,6 +20,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
+	_ "github.com/lib/pq"
 )
 
 // Configuration from environment variables
