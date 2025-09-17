@@ -143,8 +143,17 @@ jobs:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
           username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
-          source: "deploy/${{ github.event.inputs.branch | tr '/' '-' }}/*"
-          target: "~/app/${{ github.event.inputs.branch | tr '/' '-' }}/"
+          source: "deploy/${{ env.SAFE_BRANCH }}/*"
+          target: "~/app/${{ env.SAFE_BRANCH }}/"
+        env:
+          SAFE_BRANCH: ${{ steps.prepare.outputs.safe_branch }}
+      - name: Set safe_branch output
+        if: matrix.deploy == 'true'
+        id: prepare
+        run: |
+          branch="${{ github.event.inputs.branch }}"
+          safe_branch=$(echo "$branch" | tr '/' '-')
+          echo "safe_branch=$safe_branch" >> $GITHUB_OUTPUT
       - name: Verify uploaded binary and database connection
         if: matrix.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
