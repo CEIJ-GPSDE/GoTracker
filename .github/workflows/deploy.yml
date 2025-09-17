@@ -63,6 +63,8 @@ jobs:
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
             safe_branch="main"
+
+            # Inject DB secrets into systemd drop-in
             sudo mkdir -p /etc/systemd/system/location-tracker@${safe_branch}.d
             sudo bash -c "cat > /etc/systemd/system/location-tracker@${safe_branch}.d/env.conf <<EOF
             [Service]
@@ -72,6 +74,7 @@ jobs:
             Environment=DB_PASSWORD=${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}
             Environment=DB_SSLMODE=${{ secrets[format('{0}_DB_SSLMODE', matrix.instance)] }}
             EOF"
+
             sudo systemctl daemon-reload
             sudo systemctl restart location-tracker@${safe_branch}
 
@@ -81,20 +84,28 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        instance: [EC2_1, EC2_2, EC2_3, EC2_4]
+        include:
+          - instance: EC2_1
+            deploy: ${{ github.event.inputs.deploy_to_EC2_1 }}
+          - instance: EC2_2
+            deploy: ${{ github.event.inputs.deploy_to_EC2_2 }}
+          - instance: EC2_3
+            deploy: ${{ github.event.inputs.deploy_to_EC2_3 }}
+          - instance: EC2_4
+            deploy: ${{ github.event.inputs.deploy_to_EC2_4 }}
 
     steps:
       - name: Skip unchecked EC2s
-        if: ${{ github.event.inputs['deploy_to_' + matrix.instance] != 'true' }}
+        if: matrix.deploy != 'true'
         run: echo "Skipping ${{ matrix.instance }} for this run"
 
       - uses: actions/checkout@v4
-        if: ${{ github.event.inputs['deploy_to_' + matrix.instance] == 'true' }}
+        if: matrix.deploy == 'true'
         with:
           ref: ${{ github.event.inputs.branch }}
 
       - name: Build feature branch
-        if: ${{ github.event.inputs['deploy_to_' + matrix.instance] == 'true' }}
+        if: matrix.deploy == 'true'
         run: |
           branch="${{ github.event.inputs.branch }}"
           safe_branch=$(echo "$branch" | tr '/' '-')
@@ -104,7 +115,7 @@ jobs:
           cp static/index.html build/${safe_branch}/static/index.html
 
       - name: Upload to EC2
-        if: ${{ github.event.inputs['deploy_to_' + matrix.instance] == 'true' }}
+        if: matrix.deploy == 'true'
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
@@ -114,7 +125,7 @@ jobs:
           target: "~/app/"
 
       - name: Restart service
-        if: ${{ github.event.inputs['deploy_to_' + matrix.instance] == 'true' }}
+        if: matrix.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
@@ -133,5 +144,6 @@ jobs:
             Environment=DB_PASSWORD=${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}
             Environment=DB_SSLMODE=${{ secrets[format('{0}_DB_SSLMODE', matrix.instance)] }}
             EOF"
+
             sudo systemctl daemon-reload
             sudo systemctl restart location-tracker@${safe_branch}
