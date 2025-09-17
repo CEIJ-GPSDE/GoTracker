@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time Location Tracker</title>
+    <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1404.0.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 20px;
+            height: calc(100vh - 180px);
+            min-height: 600px;
+        }
+
+        .map-container {
+            background: white;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            position: relative;
+        }
+
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+
+        .map-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 500;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .connected .status-dot {
+            background: #22c55e;
+        }
+
+        .disconnected .status-dot {
+            background: #ef4444;
+        }
+
+        .reconnecting .status-dot {
+            background: #f59e0b;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .card h3 {
+            color: #374151;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card-icon {
+            width: 24px;
+            height: 24px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 14px;
+        }
+
+        .location-info {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .location-item {
+            padding: 15px;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            background: white;
+            transition: all 0.3s ease;
+        }
+
+        .location-item:hover {
+            transform: translateX(5px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .location-item.latest {
+            background: linear-gradient(135deg, #ecfdf5, #d1fae5);
+            border-color: #22c55e;
+            animation: highlight 3s ease-in-out;
+        }
+
+        @keyframes highlight {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
+        }
+
+        .device-id {
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 8px;
+        }
+
+        .coordinates {
+            font-family: 'Courier New', monospace;
+            color: #6b7280;
+            font-size: 0.9rem;
+            margin-bottom: 5px;
+        }
+
+        .timestamp {
+            font-size: 0.8rem;
+            color: #9ca3af;
+        }
+
+        .controls {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #374151;
+        }
+
+        .control-group select,
+        .control-group input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 14px;
+            background: white;
+        }
+
+        .control-group select:focus,
+        .control-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .stats {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .stat-item:last-child {
+            border-bottom: none;
+        }
+
+        .stat-label {
+            color: #6b7280;
+            font-size: 0.9rem;
+        }
+
+        .stat-value {
+            font-weight: 600;
+            color: #374151;
+        }
+
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+            color: #6b7280;
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid #e5e7eb;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            color: #ef4444;
+            background: #fef2f2;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #fecaca;
+            margin-bottom: 15px;
+        }
+
+        @media (max-width: 1024px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+                grid-template-rows: 60vh auto;
+            }
+            
+            .sidebar {
+                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+                display: grid;
+                gap: 20px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .dashboard {
+                height: auto;
+                min-height: auto;
+            }
+            
+            .map-container {
+                height: 50vh;
+                min-height: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌍 Real-time Location Tracker</h1>
+            <p>Monitoring device locations with live updates</p>
+        </div>
+
+        <div class="dashboard">
+            <div class="map-container">
+                <div class="map-overlay">
+                    <div id="connection-status" class="status disconnected">
+                        <div class="status-dot"></div>
+                        <span>Connecting...</span>
+                    </div>
+                </div>
+                <div id="map"></div>
+            </div>
+
+            <div class="sidebar">
+                <div class="card location-info">
+                    <h3>
+                        <div class="card-icon">📍</div>
+                        Latest Locations
+                    </h3>
+                    <div id="locations-list">
+                        <div class="loading">
+                            <div class="spinner"></div>
+                            Loading locations...
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card controls">
+                    <h3>
+                        <div class="card-icon">⚙️</div>
+                        Controls
+                    </h3>
+                    <div class="control-group">
+                        <label for="device-filter">Filter by Device:</label>
+                        <select id="device-filter">
+                            <option value="">All Devices</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label for="history-limit">History Limit:</label>
+                        <input type="number" id="history-limit" value="50" min="10" max="500">
+                    </div>
+                    <button class="btn" onclick="locationTracker.refreshData()">
+                        Refresh Data
+                    </button>
+                </div>
+
+                <div class="card stats">
+                    <h3>
+                        <div class="card-icon">📊</div>
+                        Statistics
+                    </h3>
+                    <div class="stat-item">
+                        <span class="stat-label">Connected Clients:</span>
+                        <span class="stat-value" id="connected-clients">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Total Locations:</span>
+                        <span class="stat-value" id="total-locations">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Active Devices:</span>
+                        <span class="stat-value" id="active-devices">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Last Update:</span>
+                        <span class="stat-value" id="last-update">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    class LocationTracker {
+        constructor() {
+            this.ws = null;
+            this.map = null;
+            this.markers = new Map();
+            this.locations = [];
+            this.devices = new Set();
+            this.reconnectAttempts = 0;
+            this.maxReconnectAttempts = 10;
+            this.selectedDevice = '';
+            this.historyLimit = 50;
+            
+            // Configuration
+            this.config = {
+                apiBaseUrl: window.location.origin,
+                wsUrl: `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`,
+                mapStyle: 'https://demotiles.maplibre.org/style.json', // Free tile server
+                defaultCenter: [-74.0060, 40.7128], // NYC
+                defaultZoom: 10
+            };
+
+            this.initializeApp();
+        }
+
+        async initializeApp() {
+            try {
+                this.initializeMap();
+                this.setupEventListeners();
+                await this.loadInitialData();
+                this.connectWebSocket();
+                this.startStatsPolling();
+            } catch (error) {
+                console.error('Failed to initialize app:', error);
+                this.showError('Failed to initialize application');
+            }
+        }
+
+        initializeMap() {
+            this.map = new maplibregl.Map({
+                container: 'map',
+                style: this.config.mapStyle,
+                center: this.config.defaultCenter,
+                zoom: this.config.defaultZoom,
+                attributionControl: true
+            });
+
+            this.map.addControl(new maplibregl.NavigationControl(), 'top-right');
+            this.map.addControl(new maplibregl.FullscreenControl(), 'top-right');
+
+            this.map.on('load', () => {
+                console.log('Map loaded successfully');
+            });
+
+            this.map.on('error', (e) => {
+                console.error('Map error:', e);
+            });
+        }
+
+        setupEventListeners() {
+            // Device filter
+            document.getElementById('device-filter').addEventListener('change', (e) => {
+                this.selectedDevice = e.target.value;
+                this.filterAndDisplayLocations();
+            });
+
+            // History limit
+            document.getElementById('history-limit').addEventListener('change', (e) => {
+                this.historyLimit = parseInt(e.target.value);
+                this.refreshData();
+            });
+
+            // Refresh on window focus
+            window.addEventListener('focus', () => {
+                if (this.ws && this.ws.readyState !== WebSocket.OPEN) {
+                    this.connectWebSocket();
+                }
+            });
+        }
+
+        connectWebSocket() {
+            try {
+                this.ws = new WebSocket(this.config.wsUrl);
+                
+                this.ws.onopen = () => {
+                    console.log('WebSocket connected');
+                    this.updateConnectionStatus('Connected', 'connected');
+                    this.reconnectAttempts = 0;
+                };
+                
+                this.ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        this.handleLocationUpdate(data);
+                    } catch (error) {
+                        console.error('Error parsing WebSocket message:', error);
+                    }
+                };
+                
+                this.ws.onclose = (event) => {
+                    console.log('WebSocket disconnected:', event.code, event.reason);
+                    this.updateConnectionStatus('Disconnected', 'disconnected');
+                    this.scheduleReconnect();
+                };
+                
+                this.ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    this.updateConnectionStatus('Connection Error', 'disconnected');
+                };
+            } catch (error) {
+                console.error('Failed to create WebSocket connection:', error);
+                this.updateConnectionStatus('Connection Failed', 'disconnected');
+                this.scheduleReconnect();
+            }
+        }
+
+        scheduleReconnect() {
+            if (this.reconnectAttempts < this.maxReconnectAttempts) {
+                this.reconnectAttempts++;
+                const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
+                
+                this.updateConnectionStatus(
+                    `Reconnecting in ${Math.ceil(delay/1000)}s... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`, 
+                    'reconnecting'
+                );
+                
+                setTimeout(() => {
+                    this.connectWebSocket();
+                }, delay);
+            } else {
+                this.updateConnectionStatus('Connection failed - refresh page', 'disconnected');
+            }
+        }
+
+        async loadInitialData() {
+            try {
+                const response = await fetch(`${this.config.apiBaseUrl}/api/locations/history?limit=${this.historyLimit}`);
+                if (response.ok) {
+                    const locations = await response.json();
+                    this.locations = locations || [];
+                    this.updateDevicesList();
+                    this.displayLocations();
+                    this.updateStatistics();
+                    
+                    if (this.locations.length > 0) {
+                        this.centerMapOnLatestLocation();
+                    }
+                } else {
+                    console.error('Failed to load initial data:', response.status);
+                }
+            } catch (error) {
+                console.error('Error loading initial data:', error);
+                this.showError('Failed to load initial data');
+            }
+        }
+
+        handleLocationUpdate(location) {
+            console.log('Received location update:', location);
+            
+            // Add to locations array
+            this.locations.unshift(location);
+            
+            // Limit array size
+            if (this.locations.length > this.historyLimit * 2) {
+                this.locations = this.locations.slice(0, this.historyLimit);
+            }
+            
+            this.devices.add(location.device_id);
+            this.updateDevicesList();
+            this.updateMapMarker(location);
+            this.filterAndDisplayLocations();
+            this.updateStatistics();
+            
+            // Center map on new location
+            if (this.selectedDevice === '' || this.selectedDevice === location.device_id) {
+                this.centerMapOnLocation(location);
+            }
+        }
+
+        updateMapMarker(location) {
+            const deviceId = location.device_id;
+            
+            // Remove existing marker
+            if (this.markers.has(deviceId)) {
+                this.markers.get(deviceId).remove();
+            }
+            
+            // Create popup content
+            const popupContent = `
+                <div style="font-family: system-ui; min-width: 200px;">
+                    <h4 style="margin: 0 0 10px 0; color: #374151;">${deviceId}</h4>
+                    <div style="font-size: 12px; color: #6b7280; margin-bottom: 5px;">
+                        <strong>Coordinates:</strong><br>
+                        ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}
+                    </div>
+                    <div style="font-size: 12px; color: #6b7280;">
+                        <strong>Time:</strong><br>
+                        ${new Date(location.timestamp).toLocaleString()}
+                    </div>
+                </div>
+            `;
+
+            // Create new marker
+            const marker = new maplibregl.Marker({
+                color: this.getDeviceColor(deviceId)
+            })
+            .setLngLat([location.longitude, location.latitude])
+            .setPopup(new maplibregl.Popup().setHTML(popupContent))
+            .addTo(this.map);
+
+            this.markers.set(deviceId, marker);
+        }
+
+        getDeviceColor(deviceId) {
+            // Generate consistent colors for devices
+            const colors = ['#ef4444', '#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#06b6d4', '#f97316'];
+            const hash = deviceId.split('').reduce((a, b) => {
+                a = ((a << 5) - a) + b.charCodeAt(0);
+                return a & a;
+            }, 0);
+            return colors[Math.abs(hash) % colors.length];
+        }
+
+        centerMapOnLatestLocation() {
+            if (this.locations.length > 0) {
+                this.centerMapOnLocation(this.locations[0]);
+            }
+        }
+
+        centerMapOnLocation(location) {
+            this.map.flyTo({
+                center: [location.longitude, location.latitude],
+                zoom: Math.max(this.map.getZoom(), 12),
+                duration: 1000
+            });
+        }
+
+        updateDevicesList() {
+            const select = document.getElementById('device-filter');
+            const currentValue = select.value;
+            
+            // Clear existing options except "All Devices"
+            select.innerHTML = '<option value="">All Devices</option>';
+            
+            // Add device options
+            Array.from(this.devices).sort().forEach(deviceId => {
+                const option = document.createElement('option');
+                option.value = deviceId;
+                option.textContent = deviceId;
+                select.appendChild(option);
+            });
+            
+            // Restore selection
+            select.value = currentValue;
+        }
+
+        filterAndDisplayLocations() {
+            let filteredLocations = this.locations;
+            
+            if (this.selectedDevice) {
+                filteredLocations = this.locations.filter(loc => loc.device_id === this.selectedDevice);
+            }
+            
+            this.displayLocations(filteredLocations);
+        }
+
+        displayLocations(locations = this.locations) {
+            const container = document.getElementById('locations-list');
+            
+            if (locations.length === 0) {
+                container.innerHTML = '<div class="loading">No locations found</div>';
+                return;
+            }
+            
+            container.innerHTML = locations.slice(0, this.historyLimit).map((location, index) => `
+                <div class="location-item ${index === 0 ? 'latest' : ''}" onclick="locationTracker.centerMapOnLocation(${JSON.stringify(location).replace(/"/g, '&quot;')})">
+                    <div class="device-id">${location.device_id}</div>
+                    <div class="coordinates">${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}</div>
+                    <div class="timestamp">${new Date(location.timestamp).toLocaleString()}</div>
+                </div>
+            `).join('');
+        }
+
+        updateStatistics() {
+            document.getElementById('total-locations').textContent = this.locations.length;
+            document.getElementById('active-devices').textContent = this.devices.size;
+            document.getElementById('last-update').textContent = 
+                this.locations.length > 0 ? new Date(this.locations[0].timestamp).toLocaleString() : '-';
+        }
+
+        updateConnectionStatus(message, status) {
+            const statusElement = document.getElementById('connection-status');
+            statusElement.className = `status ${status}`;
+            statusElement.querySelector('span').textContent = message;
+        }
+
+        showError(message) {
+            const container = document.getElementById('locations-list');
+            container.innerHTML = `<div class="error">${message}</div>`;
+        }
+
+        async refreshData() {
+            try {
+                await this.loadInitialData();
+                console.log('Data refreshed successfully');
+            } catch (error) {
+                console.error('Failed to refresh data:', error);
+                this.showError('Failed to refresh data');
+            }
+        }
+
+        // Poll /api/stats every 5 seconds to populate the stats panel
+        startStatsPolling() {
+            const fetchAndUpdate = async () => {
+                try {
+                    const res = await fetch(`${this.config.apiBaseUrl}/api/stats`);
+                    if (!res.ok) return;
+                    const stats = await res.json();
+                    document.getElementById('connected-clients').textContent = stats.connected_clients ?? '-';
+                    document.getElementById('total-locations').textContent = stats.total_locations ?? '-';
+                    document.getElementById('active-devices').textContent = stats.active_devices ?? '-';
+                    document.getElementById('last-update').textContent = stats.last_update ? new Date(stats.last_update).toLocaleString() : '-';
+                } catch (err) {
+                    // ignore transient errors
+                }
+            };
+
+            fetchAndUpdate();
+            setInterval(fetchAndUpdate, 5000);
+        }
+    }
+
+    // Initialize the application
+    let locationTracker;
+    document.addEventListener('DOMContentLoaded', () => {
+        locationTracker = new LocationTracker();
+    });
+
+    // Global error handler
+    window.addEventListener('error', (event) => {
+        console.error('Global error:', event.error);
+    });
+
+    // Handle page visibility changes
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && locationTracker) {
+            // Page became visible, refresh connection if needed
+            if (!locationTracker.ws || locationTracker.ws.readyState !== WebSocket.OPEN) {
+                locationTracker.connectWebSocket();
+            }
+        }
+    });
+    </script>
+</body>
+</html>
