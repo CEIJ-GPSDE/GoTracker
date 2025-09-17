@@ -1,35 +1,12 @@
-name: Deploy Go App
+name: Deploy Main Branch
 
 on:
   push:
     branches:
       - main
-  workflow_dispatch:
-    inputs:
-      branch:
-        description: "Branch to deploy (feature branch only)"
-        required: true
-      deploy_to_EC2_1:
-        description: "Deploy to EC2_1"
-        type: boolean
-        default: false
-      deploy_to_EC2_2:
-        description: "Deploy to EC2_2"
-        type: boolean
-        default: false
-      deploy_to_EC2_3:
-        description: "Deploy to EC2_3"
-        type: boolean
-        default: false
-      deploy_to_EC2_4:
-        description: "Deploy to EC2_4"
-        type: boolean
-        default: false
 
 jobs:
-  # Auto-deploy main branch to all prod instances
   deploy-main:
-    if: github.ref_name == 'main'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -75,6 +52,23 @@ jobs:
           source: "deploy/main/*"
           target: "/home/ec2-user/app/main/"
           strip_components: 2
+          overwrite: true
+      - name: Verify file upload for main
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
+          username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
+          key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
+          script: |
+            echo "=== Checking uploaded files for main ==="
+            echo "Directory contents:"
+            ls -la /home/ec2-user/app/main/
+            
+            echo "Looking for binary file:"
+            find /home/ec2-user/app/main/ -name "app-*" -type f
+            
+            echo "Setting executable permissions on all binaries..."
+            find /home/ec2-user/app/main/ -name "app-*" -type f -exec chmod +x {} \;
       - name: Deploy SSL certificates
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -214,8 +208,21 @@ jobs:
           username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
+            echo "=== Final verification for main ==="
             ls -la /home/ec2-user/app/main/
-            chmod +x /home/ec2-user/app/main/app-main || echo "Binary not found in expected path"
+            
+            # Check if binary exists and is executable
+            binary_path="/home/ec2-user/app/main/app-main"
+            if [ -f "$binary_path" ]; then
+              echo "✅ Binary found at: $binary_path"
+              chmod +x "$binary_path"
+              ls -la "$binary_path"
+            else
+              echo "❌ Binary NOT found at expected path: $binary_path"
+              echo "Contents of directory:"
+              find /home/ec2-user/app/main/ -type f
+              exit 1
+            fi
             
             # Test database connection
             export DB_HOST="${{ secrets[format('{0}_DB_HOST', matrix.instance)] }}"
@@ -230,7 +237,7 @@ jobs:
             psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1" || echo "Database connection failed: $?"
             
             echo "Testing binary version..."
-            /home/ec2-user/app/main/app-main --version || echo "Failed to run binary: $?"
+            "$binary_path" --version || echo "Failed to run binary: $?"
       - name: Update and restart service
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -302,259 +309,6 @@ jobs:
               curl -f http://localhost:8080/api/health || echo "❌ HTTP health check failed"
             else
               echo "❌ Service failed to start"
-              sudo journalctl -u location-tracker@${safe_branch} --no-pager -l -n 50
-              exit 1
-            fi
-
-  # Manual feature branch deployment
-  deploy-feature:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - instance: EC2_1
-            deploy: ${{ github.event.inputs.deploy_to_EC2_1 }}
-          - instance: EC2_2
-            deploy: ${{ github.event.inputs.deploy_to_EC2_2 }}
-          - instance: EC2_3
-            deploy: ${{ github.event.inputs.deploy_to_EC2_3 }}
-          - instance: EC2_4
-            deploy: ${{ github.event.inputs.deploy_to_EC2_4 }}
-      fail-fast: false
-    steps:
-      - name: Skip unchecked EC2s
-        if: matrix.deploy != 'true'
-        run: echo "Skipping ${{ matrix.instance }} for this run"
-      - uses: actions/checkout@v4
-        if: matrix.deploy == 'true'
-        with:
-          ref: ${{ github.event.inputs.branch }}
-      - name: Build feature branch
-        if: matrix.deploy == 'true'
-        run: |
-          branch="${{ github.event.inputs.branch }}"
-          safe_branch=$(echo "$branch" | tr '/' '-')
-          go mod tidy
-          mkdir -p build/${safe_branch}/static
-          go build -ldflags="-X main.Version=${safe_branch}-$(git rev-parse --short HEAD)" -o build/${safe_branch}/app-${safe_branch} main.go
-          cp static/index.html build/${safe_branch}/static/index.html
-      - name: Prepare deploy folder
-        if: matrix.deploy == 'true'
-        run: |
-          branch="${{ github.event.inputs.branch }}"
-          safe_branch=$(echo "$branch" | tr '/' '-')
-          mkdir -p deploy/${safe_branch}
-          mv build/${safe_branch}/* deploy/${safe_branch}/
-      - name: Set safe_branch output
-        if: matrix.deploy == 'true'
-        id: prepare
-        run: |
-          branch="${{ github.event.inputs.branch }}"
-          safe_branch=$(echo "$branch" | tr '/' '-')
-          echo "safe_branch=$safe_branch" >> $GITHUB_OUTPUT
-      - name: Stop existing feature service and clean old binaries
-        if: matrix.deploy == 'true'
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
-          username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
-          key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
-          script: |
-            branch="${{ github.event.inputs.branch }}"
-            safe_branch=$(echo "$branch" | tr '/' '-')
-            
-            echo "Stopping existing feature service..."
-            sudo systemctl stop location-tracker@${safe_branch} || echo "Service was not running"
-            
-            echo "Cleaning old binaries..."
-            rm -f /home/ec2-user/app/${safe_branch}/app-${safe_branch}* || echo "No old binaries to remove"
-            
-            echo "Creating app directory structure..."
-            mkdir -p /home/ec2-user/app/${safe_branch}/static
-            mkdir -p /home/ec2-user/app/${safe_branch}/certs
-      - name: Upload to EC2
-        if: matrix.deploy == 'true'
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
-          username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
-          key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
-          source: "deploy/${{ steps.prepare.outputs.safe_branch }}/*"
-          target: "/home/ec2-user/app/${{ steps.prepare.outputs.safe_branch }}/"
-          strip_components: 2
-      - name: Deploy SSL certificates for feature branch
-        if: matrix.deploy == 'true'
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
-          username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
-          key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
-          script: |
-            branch="${{ github.event.inputs.branch }}"
-            safe_branch=$(echo "$branch" | tr '/' '-')
-            
-            # Create certificates directory for feature branch
-            mkdir -p /home/ec2-user/app/${safe_branch}/certs
-            
-            # Deploy certificates if provided (feature branches can share certificates with main)
-            if [ -n "${{ secrets[format('{0}_SSL_CERT', matrix.instance)] }}" ]; then
-              echo "Deploying SSL certificate for feature branch..."
-              echo '${{ secrets[format('{0}_SSL_CERT', matrix.instance)] }}' > /home/ec2-user/app/${safe_branch}/certs/server.crt
-              chmod 644 /home/ec2-user/app/${safe_branch}/certs/server.crt
-            fi
-            if [ -n "${{ secrets[format('{0}_SSL_KEY', matrix.instance)] }}" ]; then
-              echo "Deploying SSL private key for feature branch..."
-              echo '${{ secrets[format('{0}_SSL_KEY', matrix.instance)] }}' > /home/ec2-user/app/${safe_branch}/certs/server.key
-              chmod 600 /home/ec2-user/app/${safe_branch}/certs/server.key
-            fi
-            
-            echo "SSL certificates deployed for feature branch successfully"
-      - name: Update Nginx configuration for feature branch
-        if: matrix.deploy == 'true'
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
-          username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
-          key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
-          script: |
-            branch="${{ github.event.inputs.branch }}"
-            safe_branch=$(echo "$branch" | tr '/' '-')
-            nginx_location="/test/$branch"
-            
-            # Create a unique nginx config file for this branch
-            sudo bash -c "cat > /etc/nginx/conf.d/location-tracker-${safe_branch}.conf <<EOF
-            # Feature branch: ${branch}
-            server {
-                listen 80;
-                server_name ${{ secrets[format('{0}_DOMAIN', matrix.instance)] }};
-                
-                location ${nginx_location} {
-                    proxy_pass http://127.0.0.1:8081;
-                    proxy_http_version 1.1;
-                    proxy_set_header Upgrade \\\$http_upgrade;
-                    proxy_set_header Connection 'upgrade';
-                    proxy_set_header Host \\\$host;
-                    proxy_set_header X-Real-IP \\\$remote_addr;
-                    proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \\\$scheme;
-                    proxy_cache_bypass \\\$http_upgrade;
-                }
-                
-                location ${nginx_location}/ws {
-                    proxy_pass http://127.0.0.1:8081;
-                    proxy_http_version 1.1;
-                    proxy_set_header Upgrade \\\$http_upgrade;
-                    proxy_set_header Connection \"Upgrade\";
-                    proxy_set_header Host \\\$host;
-                    proxy_set_header X-Real-IP \\\$remote_addr;
-                    proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \\\$scheme;
-                }
-            }
-            EOF"
-            
-            # Test nginx configuration and reload
-            sudo nginx -t && sudo systemctl reload nginx || echo "Failed to reload Nginx"
-      - name: Verify uploaded binary and database connection
-        if: matrix.deploy == 'true'
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
-          username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
-          key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
-          script: |
-            branch="${{ github.event.inputs.branch }}"
-            safe_branch=$(echo "$branch" | tr '/' '-')
-            
-            ls -la /home/ec2-user/app/${safe_branch}/
-            chmod +x /home/ec2-user/app/${safe_branch}/app-${safe_branch} || echo "Binary not found in expected path"
-            
-            export DB_HOST="${{ secrets[format('{0}_DB_HOST', matrix.instance)] }}"
-            export DB_NAME="${{ secrets[format('{0}_DB_NAME', matrix.instance)] }}"
-            export DB_USER="${{ secrets[format('{0}_DB_USER', matrix.instance)] }}"
-            export DB_PASSWORD="${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}"
-            export DB_SSLMODE="require"
-            export PORT="8081"
-            
-            echo "Testing database connection..."
-            psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1" || echo "Database connection failed: $?"
-            
-            echo "Testing binary version..."
-            /home/ec2-user/app/${safe_branch}/app-${safe_branch} --version || echo "Failed to run binary: $?"
-      - name: Update and restart feature service
-        if: matrix.deploy == 'true'
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
-          username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
-          key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
-          script: |
-            branch="${{ github.event.inputs.branch }}"
-            safe_branch=$(echo "$branch" | tr '/' '-')
-            
-            sudo bash -c "cat > /etc/systemd/system/location-tracker@\${safe_branch}.service <<EOF
-            [Unit]
-            Description=Location Tracker (%i) - Feature Branch
-            After=network.target
-
-            [Service]
-            ExecStart=/home/ec2-user/app/%i/app-%i
-            Restart=always
-            RestartSec=10
-            User=ec2-user
-            WorkingDirectory=/home/ec2-user/app/%i
-            Environment=DB_HOST=${{ secrets[format('{0}_DB_HOST', matrix.instance)] }}
-            Environment=DB_NAME=${{ secrets[format('{0}_DB_NAME', matrix.instance)] }}
-            Environment=DB_USER=${{ secrets[format('{0}_DB_USER', matrix.instance)] }}
-            Environment=DB_PASSWORD=${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}
-            Environment=DB_SSLMODE=require
-            Environment=PORT=8081
-            Environment=HTTPS_PORT=8444
-            Environment=UDP_PORT=5052
-            Environment=LOG_FILE=/var/log/location-tracker-%i.log
-            
-            # Security settings
-            NoNewPrivileges=true
-            ProtectSystem=strict
-            ProtectHome=true
-            ReadWritePaths=/home/ec2-user/app/%i /var/log
-            PrivateTmp=true
-
-            [Install]
-            WantedBy=multi-user.target
-            EOF"
-            
-            # Create log file with proper permissions
-            sudo touch /var/log/location-tracker-${safe_branch}.log
-            sudo chown ec2-user:ec2-user /var/log/location-tracker-${safe_branch}.log
-            
-            sudo chmod 644 /etc/systemd/system/location-tracker@${safe_branch}.service
-            sudo systemctl daemon-reload
-            sudo systemctl restart location-tracker@${safe_branch}
-            sudo systemctl enable location-tracker@${safe_branch}
-            
-            # Wait for service to start
-            sleep 10
-            
-            # Verify service status and logs
-            echo "=== Service Status ==="
-            sudo systemctl status location-tracker@${safe_branch} --no-pager -l
-            
-            echo "=== Service Environment ==="
-            sudo systemctl show location-tracker@${safe_branch} --property=Environment
-            
-            echo "=== Recent Logs ==="
-            sudo journalctl -u location-tracker@${safe_branch} --no-pager -l -n 20
-            
-            # Check if service is running
-            if sudo systemctl is-active location-tracker@${safe_branch} >/dev/null; then
-              echo "✅ Feature branch service is running successfully"
-              # Test HTTP endpoint
-              curl -f http://localhost:8081/api/health || echo "❌ HTTP health check failed"
-              echo "📍 Feature branch accessible at: http://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch"
-            else
-              echo "❌ Feature branch service failed to start"
               sudo journalctl -u location-tracker@${safe_branch} --no-pager -l -n 50
               exit 1
             fi
