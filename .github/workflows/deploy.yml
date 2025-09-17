@@ -69,15 +69,23 @@ jobs:
   deploy-feature:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+  
+    steps:
+      - name: Parse instances into JSON array
+        id: parse
+        run: |
+          arr=$(echo "${{ github.event.inputs.instances }}" | tr ',' '\n' | jq -R . | jq -s .)
+          echo "instances=$arr" >> $GITHUB_OUTPUT
+  
     strategy:
       matrix:
-        instance: ${{ fromJSON('["' + join(inputs.instances, '","') + '"]') }}
-
+        instance: ${{ fromJSON(steps.parse.outputs.instances) }}
+  
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.branch }}
-
+  
       - name: Build feature branch
         run: |
           branch="${{ github.event.inputs.branch }}"
@@ -86,7 +94,7 @@ jobs:
           mkdir -p build/${safe_branch}/static
           go build -o build/${safe_branch}/app-${safe_branch} main.go
           cp static/index.html build/${safe_branch}/static/index.html
-
+  
       - name: Upload to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -95,7 +103,7 @@ jobs:
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           source: "build/*"
           target: "~/app/"
-
+  
       - name: Restart service
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -105,7 +113,7 @@ jobs:
           script: |
             branch="${{ github.event.inputs.branch }}"
             safe_branch=$(echo "$branch" | tr '/' '-')
-
+  
             sudo mkdir -p /etc/systemd/system/location-tracker@${safe_branch}.d
             sudo bash -c "cat > /etc/systemd/system/location-tracker@${safe_branch}.d/env.conf <<EOF
             [Service]
@@ -115,6 +123,7 @@ jobs:
             Environment=DB_PASSWORD=${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}
             Environment=DB_SSLMODE=${{ secrets[format('{0}_DB_SSLMODE', matrix.instance)] }}
             EOF"
-
+  
             sudo systemctl daemon-reload
             sudo systemctl restart location-tracker@${safe_branch}
+  
