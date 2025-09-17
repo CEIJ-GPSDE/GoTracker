@@ -20,8 +20,8 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
+        _ "github.com/lib/pq"
 )
-
 // Configuration from environment variables
 type Config struct {
 	DBHost     string
@@ -43,7 +43,7 @@ func loadConfig() *Config {
 		DBUser:     getEnv("DB_USER", "postgres"),
 		DBPassword: getEnv("DB_PASSWORD", "password"),
 		DBSSLMode:  getEnv("DB_SSLMODE", "disable"),
-		Port:       getEnv("PORT", "443"),
+		Port:       getEnv("PORT", "80"),
 		UDPPort:    getEnv("UDP_PORT", "5051"),
 		LogFile:    getEnv("LOG_FILE", ""),
 		CertFile:   getEnv("CERT_FILE", "certs/server.crt"),
