@@ -70,12 +70,12 @@ jobs:
             export DB_NAME=${{ secrets[format('{0}_DB_NAME', matrix.instance)] }}
             export DB_USER=${{ secrets[format('{0}_DB_USER', matrix.instance)] }}
             export DB_PASSWORD=${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}
-            export DB_SSLMODE=${{ secrets[format('{0}_DB_SSLMODE', matrix.instance)] }}
-            export API_PORT=8080
-            echo "Testing DB connection: host=$DB_HOST user=$DB_USER dbname=$DB_NAME sslmode=$DB_SSLMODE"
+            export DB_SSLMODE=require
+            export PORT=8080
+            echo "Environment variables: API_PORT=$PORT, DB_HOST=$DB_HOST, DB_NAME=$DB_NAME, DB_USER=$DB_USER, DB_SSLMODE=$DB_SSLMODE"
             psql -h $DB_HOST -U $DB_USER -d $DB_NAME -c "SELECT 1" || echo "Database connection failed: $?"
             /home/ec2-user/app/main/app-main --version || echo "Failed to run binary: $?"
-      - name: Restart service
+      - name: Update and restart service
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
@@ -83,18 +83,32 @@ jobs:
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
             safe_branch="main"
-            sudo mkdir -p /etc/systemd/system/location-tracker@${safe_branch}.d
-            sudo bash -c "cat > /etc/systemd/system/location-tracker@${safe_branch}.d/env.conf <<EOF
+            sudo bash -c "cat > /etc/systemd/system/location-tracker@${safe_branch}.service <<EOF
+            [Unit]
+            Description=Location Tracker (%i)
+            After=network.target
+
             [Service]
+            ExecStart=/home/ec2-user/app/%i/app-%i
+            Restart=always
+            User=ec2-user
+            WorkingDirectory=/home/ec2-user/app/%i
             Environment=DB_HOST=${{ secrets[format('{0}_DB_HOST', matrix.instance)] }}
             Environment=DB_NAME=${{ secrets[format('{0}_DB_NAME', matrix.instance)] }}
             Environment=DB_USER=${{ secrets[format('{0}_DB_USER', matrix.instance)] }}
             Environment=DB_PASSWORD=${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}
-            Environment=DB_SSLMODE=${{ secrets[format('{0}_DB_SSLMODE', matrix.instance)] }}
+            Environment=DB_SSLMODE=require
             Environment=PORT=8080
+
+            [Install]
+            WantedBy=multi-user.target
             EOF"
+            sudo chmod 644 /etc/systemd/system/location-tracker@${safe_branch}.service
             sudo systemctl daemon-reload
             sudo systemctl restart location-tracker@${safe_branch}
+            sudo systemctl enable location-tracker@${safe_branch}
+            # Log environment for debugging
+            sudo systemctl show location-tracker@${safe_branch} --property=Environment > /tmp/location-tracker-env.log
 
   # Manual feature branch deployment
   deploy-feature:
@@ -136,6 +150,13 @@ jobs:
           safe_branch=$(echo "$branch" | tr '/' '-')
           mkdir -p deploy/${safe_branch}
           mv build/${safe_branch}/* deploy/${safe_branch}/
+      - name: Set safe_branch output
+        if: matrix.deploy == 'true'
+        id: prepare
+        run: |
+          branch="${{ github.event.inputs.branch }}"
+          safe_branch=$(echo "$branch" | tr '/' '-')
+          echo "safe_branch=$safe_branch" >> $GITHUB_OUTPUT
       - name: Upload to EC2
         if: matrix.deploy == 'true'
         uses: appleboy/scp-action@v0.1.7
@@ -147,13 +168,6 @@ jobs:
           target: "~/app/${{ env.SAFE_BRANCH }}/"
         env:
           SAFE_BRANCH: ${{ steps.prepare.outputs.safe_branch }}
-      - name: Set safe_branch output
-        if: matrix.deploy == 'true'
-        id: prepare
-        run: |
-          branch="${{ github.event.inputs.branch }}"
-          safe_branch=$(echo "$branch" | tr '/' '-')
-          echo "safe_branch=$safe_branch" >> $GITHUB_OUTPUT
       - name: Verify uploaded binary and database connection
         if: matrix.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
@@ -170,9 +184,9 @@ jobs:
             export DB_NAME=${{ secrets[format('{0}_DB_NAME', matrix.instance)] }}
             export DB_USER=${{ secrets[format('{0}_DB_USER', matrix.instance)] }}
             export DB_PASSWORD=${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}
-            export DB_SSLMODE=${{ secrets[format('{0}_DB_SSLMODE', matrix.instance)] }}
-            export API_PORT=8081
-            echo "Testing DB connection: host=$DB_HOST user=$DB_USER dbname=$DB_NAME sslmode=$DB_SSLMODE"
+            export DB_SSLMODE=require
+            export PORT=8081
+            echo "Environment variables: API_PORT=$PORT, DB_HOST=$DB_HOST, DB_NAME=$DB_NAME, DB_USER=$DB_USER, DB_SSLMODE=$DB_SSLMODE"
             psql -h $DB_HOST -U $DB_USER -d $DB_NAME -c "SELECT 1" || echo "Database connection failed: $?"
             /home/ec2-user/app/${safe_branch}/app-${safe_branch} --version || echo "Failed to run binary: $?"
       - name: Update Nginx configuration
@@ -192,7 +206,7 @@ jobs:
             }
             EOF"
             sudo nginx -t && sudo systemctl reload nginx || echo "Failed to reload Nginx"
-      - name: Restart service
+      - name: Update and restart service
         if: matrix.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -202,15 +216,29 @@ jobs:
           script: |
             branch="${{ github.event.inputs.branch }}"
             safe_branch=$(echo "$branch" | tr '/' '-')
-            sudo mkdir -p /etc/systemd/system/location-tracker@${safe_branch}.d
-            sudo bash -c "cat > /etc/systemd/system/location-tracker@${safe_branch}.d/env.conf <<EOF
+            sudo bash -c "cat > /etc/systemd/system/location-tracker@${safe_branch}.service <<EOF
+            [Unit]
+            Description=Location Tracker (%i)
+            After=network.target
+
             [Service]
+            ExecStart=/home/ec2-user/app/%i/app-%i
+            Restart=always
+            User=ec2-user
+            WorkingDirectory=/home/ec2-user/app/%i
             Environment=DB_HOST=${{ secrets[format('{0}_DB_HOST', matrix.instance)] }}
             Environment=DB_NAME=${{ secrets[format('{0}_DB_NAME', matrix.instance)] }}
             Environment=DB_USER=${{ secrets[format('{0}_DB_USER', matrix.instance)] }}
             Environment=DB_PASSWORD=${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}
-            Environment=DB_SSLMODE=${{ secrets[format('{0}_DB_SSLMODE', matrix.instance)] }}
-            Environment=PORT=8081
+            Environment=DB_SSLMODE=require
+            Environment=API_PORT=8081
+
+            [Install]
+            WantedBy=multi-user.target
             EOF"
+            sudo chmod 644 /etc/systemd/system/location-tracker@${safe_branch}.service
             sudo systemctl daemon-reload
             sudo systemctl restart location-tracker@${safe_branch}
+            sudo systemctl enable location-tracker@${safe_branch}
+            # Log environment for debugging
+            sudo systemctl show location-tracker@${safe_branch} --property=Environment > /tmp/location-tracker-env.log
