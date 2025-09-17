@@ -91,7 +91,7 @@ jobs:
             Environment=DB_USER=${{ secrets[format('{0}_DB_USER', matrix.instance)] }}
             Environment=DB_PASSWORD=${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}
             Environment=DB_SSLMODE=${{ secrets[format('{0}_DB_SSLMODE', matrix.instance)] }}
-            Environment=API_PORT=8080
+            Environment=PORT=8080
             EOF"
             sudo systemctl daemon-reload
             sudo systemctl restart location-tracker@${safe_branch}
@@ -210,7 +210,7 @@ jobs:
             Environment=DB_USER=${{ secrets[format('{0}_DB_USER', matrix.instance)] }}
             Environment=DB_PASSWORD=${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}
             Environment=DB_SSLMODE=${{ secrets[format('{0}_DB_SSLMODE', matrix.instance)] }}
-            Environment=API_PORT=8081
+            Environment=PORT=8081
             EOF"
             sudo systemctl daemon-reload
             sudo systemctl restart location-tracker@${safe_branch}
