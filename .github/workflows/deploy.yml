@@ -46,13 +46,19 @@ jobs:
           go build -o build/${safe_branch}/app-${safe_branch} main.go
           cp static/index.html build/${safe_branch}/static/index.html
 
+      - name: Prepare deploy folder
+        run: |
+          safe_branch="main"
+          mkdir -p deploy/${safe_branch}
+          mv build/${safe_branch}/* deploy/${safe_branch}/
+
       - name: Upload to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
           username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
-          source: "build/*"
+          source: "deploy/*"
           target: "~/app/"
 
       - name: Restart service
@@ -64,7 +70,6 @@ jobs:
           script: |
             safe_branch="main"
 
-            # Inject DB secrets into systemd drop-in
             sudo mkdir -p /etc/systemd/system/location-tracker@${safe_branch}.d
             sudo bash -c "cat > /etc/systemd/system/location-tracker@${safe_branch}.d/env.conf <<EOF
             [Service]
@@ -114,6 +119,14 @@ jobs:
           go build -o build/${safe_branch}/app-${safe_branch} main.go
           cp static/index.html build/${safe_branch}/static/index.html
 
+      - name: Prepare deploy folder
+        if: matrix.deploy == 'true'
+        run: |
+          branch="${{ github.event.inputs.branch }}"
+          safe_branch=$(echo "$branch" | tr '/' '-')
+          mkdir -p deploy/${safe_branch}
+          mv build/${safe_branch}/* deploy/${safe_branch}/
+
       - name: Upload to EC2
         if: matrix.deploy == 'true'
         uses: appleboy/scp-action@v0.1.7
@@ -121,7 +134,7 @@ jobs:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
           username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
-          source: "build/*"
+          source: "deploy/*"
           target: "~/app/"
 
       - name: Restart service
