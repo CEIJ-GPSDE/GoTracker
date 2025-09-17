@@ -1,58 +1,120 @@
-name: Deploy Go App (Matrix with per-instance DB)
+name: Deploy Go App
 
 on:
   push:
     branches:
       - main
-      - 'feature/*'
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to deploy (feature branch only)"
+        required: true
+      instances:
+        description: "Instances to deploy to (comma-separated, e.g. EC2_3,EC2_4)"
+        required: true
 
 jobs:
-  deploy:
+  # Auto-deploy main
+  deploy-main:
+    if: github.ref_name == 'main'
     runs-on: ubuntu-latest
     strategy:
       matrix:
         instance: [EC2_1, EC2_2, EC2_3, EC2_4]
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Build Go binary
+      - name: Build main
         run: |
           go mod tidy
-          go build -o app main.go
+          safe_branch="main"
+          mkdir -p build/${safe_branch}/static
+          go build -o build/${safe_branch}/app-${safe_branch} main.go
+          cp static/index.html build/${safe_branch}/static/index.html
 
-          mkdir -p static
-          if [ "${{ github.ref_name }}" = "main" ]; then
-            cp index.html static/index.html
-          else
-            mkdir -p static/test/feature/${{ github.ref_name }}
-            cp index.html static/test/feature/${{ github.ref_name }}/index.html
-          fi
-
-      - name: Copy files to EC2
+      - name: Upload to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
           username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
-          source: "app,static/*"
-          target: "~/app"
+          source: "build/*"
+          target: "~/app/"
 
-      - name: Restart app on EC2
+      - name: Restart service
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
           username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
-          script_stop: false
           script: |
-            pkill app || true
-            cd ~/app
-            # Export per-instance DB secrets
-            export DB_HOST=${{ secrets[format('{0}_DB_HOST', matrix.instance)] }}
-            export DB_NAME=${{ secrets[format('{0}_DB_NAME', matrix.instance)] }}
-            export DB_USER=${{ secrets[format('{0}_DB_USER', matrix.instance)] }}
-            export DB_PASSWORD=${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}
-            export DB_SSLMODE=${{ secrets[format('{0}_DB_SSLMODE', matrix.instance)] }}
-            nohup ./app > app.log 2>&1 &
+            safe_branch="main"
+
+            # Inject DB secrets into systemd drop-in
+            sudo mkdir -p /etc/systemd/system/location-tracker@${safe_branch}.d
+            sudo bash -c "cat > /etc/systemd/system/location-tracker@${safe_branch}.d/env.conf <<EOF
+            [Service]
+            Environment=DB_HOST=${{ secrets[format('{0}_DB_HOST', matrix.instance)] }}
+            Environment=DB_NAME=${{ secrets[format('{0}_DB_NAME', matrix.instance)] }}
+            Environment=DB_USER=${{ secrets[format('{0}_DB_USER', matrix.instance)] }}
+            Environment=DB_PASSWORD=${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}
+            Environment=DB_SSLMODE=${{ secrets[format('{0}_DB_SSLMODE', matrix.instance)] }}
+            EOF"
+
+            sudo systemctl daemon-reload
+            sudo systemctl restart location-tracker@${safe_branch}
+
+  # Manual feature deployment
+  deploy-feature:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        instance: ${{ fromJSON('["' + join(inputs.instances, '","') + '"]') }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch }}
+
+      - name: Build feature branch
+        run: |
+          branch="${{ github.event.inputs.branch }}"
+          safe_branch=$(echo "$branch" | tr '/' '-')
+          go mod tidy
+          mkdir -p build/${safe_branch}/static
+          go build -o build/${safe_branch}/app-${safe_branch} main.go
+          cp static/index.html build/${safe_branch}/static/index.html
+
+      - name: Upload to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
+          username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
+          key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
+          source: "build/*"
+          target: "~/app/"
+
+      - name: Restart service
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
+          username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
+          key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
+          script: |
+            branch="${{ github.event.inputs.branch }}"
+            safe_branch=$(echo "$branch" | tr '/' '-')
+
+            sudo mkdir -p /etc/systemd/system/location-tracker@${safe_branch}.d
+            sudo bash -c "cat > /etc/systemd/system/location-tracker@${safe_branch}.d/env.conf <<EOF
+            [Service]
+            Environment=DB_HOST=${{ secrets[format('{0}_DB_HOST', matrix.instance)] }}
+            Environment=DB_NAME=${{ secrets[format('{0}_DB_NAME', matrix.instance)] }}
+            Environment=DB_USER=${{ secrets[format('{0}_DB_USER', matrix.instance)] }}
+            Environment=DB_PASSWORD=${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}
+            Environment=DB_SSLMODE=${{ secrets[format('{0}_DB_SSLMODE', matrix.instance)] }}
+            EOF"
+
+            sudo systemctl daemon-reload
+            sudo systemctl restart location-tracker@${safe_branch}
