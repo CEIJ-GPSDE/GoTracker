@@ -34,6 +34,7 @@ jobs:
     strategy:
       matrix:
         instance: [EC2_1, EC2_2, EC2_3, EC2_4]
+      fail-fast: false
 
     steps:
       - uses: actions/checkout@v4
@@ -98,6 +99,7 @@ jobs:
             deploy: ${{ github.event.inputs.deploy_to_EC2_3 }}
           - instance: EC2_4
             deploy: ${{ github.event.inputs.deploy_to_EC2_4 }}
+      fail-fast: false
 
     steps:
       - name: Skip unchecked EC2s
