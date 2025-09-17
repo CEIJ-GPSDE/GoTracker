@@ -25,8 +25,6 @@ import (
 	_ "github.com/lib/pq"
 	"golang.org/x/crypto/acme/autocert"
 )
-
-// Configuration from environment variables and command line flags
 type Config struct {
 	DBHost     string
 	DBName     string
@@ -47,6 +45,7 @@ type Config struct {
 }
 
 func loadConfig() *Config {
+
 	config := &Config{}
 
 	// Load from environment variables first
