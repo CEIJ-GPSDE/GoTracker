@@ -35,10 +35,8 @@ jobs:
       matrix:
         instance: [EC2_1, EC2_2, EC2_3, EC2_4]
       fail-fast: false
-
     steps:
       - uses: actions/checkout@v4
-
       - name: Build main
         run: |
           go mod tidy
@@ -46,22 +44,37 @@ jobs:
           mkdir -p build/${safe_branch}/static
           go build -o build/${safe_branch}/app-${safe_branch} main.go
           cp static/index.html build/${safe_branch}/static/index.html
-
       - name: Prepare deploy folder
         run: |
           safe_branch="main"
           mkdir -p deploy/${safe_branch}
           mv build/${safe_branch}/* deploy/${safe_branch}/
-
       - name: Upload to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
           username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
-          source: "deploy/*"
-          target: "~/app/"
-
+          source: "deploy/main/*"
+          target: "~/app/main/"
+      - name: Verify uploaded binary and database connection
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
+          username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
+          key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
+          script: |
+            ls -lR /home/ec2-user/app/
+            chmod +x /home/ec2-user/app/main/app-main || echo "Binary not found in expected path"
+            export DB_HOST=${{ secrets[format('{0}_DB_HOST', matrix.instance)] }}
+            export DB_NAME=${{ secrets[format('{0}_DB_NAME', matrix.instance)] }}
+            export DB_USER=${{ secrets[format('{0}_DB_USER', matrix.instance)] }}
+            export DB_PASSWORD=${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}
+            export DB_SSLMODE=${{ secrets[format('{0}_DB_SSLMODE', matrix.instance)] }}
+            export API_PORT=8080
+            echo "Testing DB connection: host=$DB_HOST user=$DB_USER dbname=$DB_NAME sslmode=$DB_SSLMODE"
+            psql -h $DB_HOST -U $DB_USER -d $DB_NAME -c "SELECT 1" || echo "Database connection failed: $?"
+            /home/ec2-user/app/main/app-main --version || echo "Failed to run binary: $?"
       - name: Restart service
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -70,7 +83,6 @@ jobs:
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
             safe_branch="main"
-
             sudo mkdir -p /etc/systemd/system/location-tracker@${safe_branch}.d
             sudo bash -c "cat > /etc/systemd/system/location-tracker@${safe_branch}.d/env.conf <<EOF
             [Service]
@@ -79,8 +91,8 @@ jobs:
             Environment=DB_USER=${{ secrets[format('{0}_DB_USER', matrix.instance)] }}
             Environment=DB_PASSWORD=${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}
             Environment=DB_SSLMODE=${{ secrets[format('{0}_DB_SSLMODE', matrix.instance)] }}
+            Environment=API_PORT=8080
             EOF"
-
             sudo systemctl daemon-reload
             sudo systemctl restart location-tracker@${safe_branch}
 
@@ -100,17 +112,14 @@ jobs:
           - instance: EC2_4
             deploy: ${{ github.event.inputs.deploy_to_EC2_4 }}
       fail-fast: false
-
     steps:
       - name: Skip unchecked EC2s
         if: matrix.deploy != 'true'
         run: echo "Skipping ${{ matrix.instance }} for this run"
-
       - uses: actions/checkout@v4
         if: matrix.deploy == 'true'
         with:
           ref: ${{ github.event.inputs.branch }}
-
       - name: Build feature branch
         if: matrix.deploy == 'true'
         run: |
@@ -120,7 +129,6 @@ jobs:
           mkdir -p build/${safe_branch}/static
           go build -o build/${safe_branch}/app-${safe_branch} main.go
           cp static/index.html build/${safe_branch}/static/index.html
-
       - name: Prepare deploy folder
         if: matrix.deploy == 'true'
         run: |
@@ -128,7 +136,6 @@ jobs:
           safe_branch=$(echo "$branch" | tr '/' '-')
           mkdir -p deploy/${safe_branch}
           mv build/${safe_branch}/* deploy/${safe_branch}/
-
       - name: Upload to EC2
         if: matrix.deploy == 'true'
         uses: appleboy/scp-action@v0.1.7
@@ -136,9 +143,46 @@ jobs:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
           username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
-          source: "deploy/*"
-          target: "~/app/"
-
+          source: "deploy/${{ github.event.inputs.branch | tr '/' '-' }}/*"
+          target: "~/app/${{ github.event.inputs.branch | tr '/' '-' }}/"
+      - name: Verify uploaded binary and database connection
+        if: matrix.deploy == 'true'
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
+          username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
+          key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
+          script: |
+            branch="${{ github.event.inputs.branch }}"
+            safe_branch=$(echo "$branch" | tr '/' '-')
+            ls -lR /home/ec2-user/app/
+            chmod +x /home/ec2-user/app/${safe_branch}/app-${safe_branch} || echo "Binary not found in expected path"
+            export DB_HOST=${{ secrets[format('{0}_DB_HOST', matrix.instance)] }}
+            export DB_NAME=${{ secrets[format('{0}_DB_NAME', matrix.instance)] }}
+            export DB_USER=${{ secrets[format('{0}_DB_USER', matrix.instance)] }}
+            export DB_PASSWORD=${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}
+            export DB_SSLMODE=${{ secrets[format('{0}_DB_SSLMODE', matrix.instance)] }}
+            export API_PORT=8081
+            echo "Testing DB connection: host=$DB_HOST user=$DB_USER dbname=$DB_NAME sslmode=$DB_SSLMODE"
+            psql -h $DB_HOST -U $DB_USER -d $DB_NAME -c "SELECT 1" || echo "Database connection failed: $?"
+            /home/ec2-user/app/${safe_branch}/app-${safe_branch} --version || echo "Failed to run binary: $?"
+      - name: Update Nginx configuration
+        if: matrix.deploy == 'true'
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
+          username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
+          key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
+          script: |
+            branch="${{ github.event.inputs.branch }}"
+            safe_branch=$(echo "$branch" | tr '/' '-')
+            nginx_location="/test/$branch"
+            sudo bash -c "cat >> /etc/nginx/conf.d/location-tracker.conf <<EOF
+            location $nginx_location {
+                proxy_pass http://127.0.0.1:8081;
+            }
+            EOF"
+            sudo nginx -t && sudo systemctl reload nginx || echo "Failed to reload Nginx"
       - name: Restart service
         if: matrix.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
@@ -149,7 +193,6 @@ jobs:
           script: |
             branch="${{ github.event.inputs.branch }}"
             safe_branch=$(echo "$branch" | tr '/' '-')
-
             sudo mkdir -p /etc/systemd/system/location-tracker@${safe_branch}.d
             sudo bash -c "cat > /etc/systemd/system/location-tracker@${safe_branch}.d/env.conf <<EOF
             [Service]
@@ -158,7 +201,7 @@ jobs:
             Environment=DB_USER=${{ secrets[format('{0}_DB_USER', matrix.instance)] }}
             Environment=DB_PASSWORD=${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}
             Environment=DB_SSLMODE=${{ secrets[format('{0}_DB_SSLMODE', matrix.instance)] }}
+            Environment=API_PORT=8081
             EOF"
-
             sudo systemctl daemon-reload
             sudo systemctl restart location-tracker@${safe_branch}
