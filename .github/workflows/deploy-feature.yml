@@ -50,9 +50,9 @@ jobs:
       - name: Build feature branch
         if: matrix.deploy == 'true'
         run: |
+          go mod tidy
           branch="${{ github.event.inputs.branch }}"
           safe_branch=$(echo "$branch" | tr '/' '-')
-          go mod tidy
           mkdir -p build/${safe_branch}/static
           go build -ldflags="-X main.Version=${safe_branch}-$(git rev-parse --short HEAD)" -o build/${safe_branch}/app-${safe_branch} main.go
           cp static/index.html build/${safe_branch}/static/index.html
@@ -93,9 +93,6 @@ jobs:
             echo "Creating app directory structure..."
             mkdir -p /home/ec2-user/app/${safe_branch}/static
             mkdir -p /home/ec2-user/app/${safe_branch}/certs
-            
-            echo "Directory created successfully:"
-            ls -la /home/ec2-user/app/${safe_branch}/
       - name: Upload files to EC2
         if: matrix.deploy == 'true'
         uses: appleboy/scp-action@v0.1.7
@@ -104,8 +101,8 @@ jobs:
           username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           source: "deploy/${{ steps.prepare.outputs.safe_branch }}/*"
-          target: "/home/ec2-user/app/"
-          strip_components: 1
+          target: "/home/ec2-user/app/${{ steps.prepare.outputs.safe_branch }}/"
+          strip_components: 2
           overwrite: true
       - name: Verify file upload for feature branch
         if: matrix.deploy == 'true'
@@ -127,9 +124,6 @@ jobs:
             
             echo "Setting executable permissions on all binaries..."
             find /home/ec2-user/app/${safe_branch}/ -name "app-*" -type f -exec chmod +x {} \;
-            
-            echo "Final directory listing:"
-            ls -la /home/ec2-user/app/${safe_branch}/
       - name: Deploy SSL certificates for feature branch
         if: matrix.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
@@ -261,7 +255,7 @@ jobs:
             safe_branch=$(echo "$branch" | tr '/' '-')
             
             # Create systemd service file
-            sudo bash -c "cat > /etc/systemd/system/location-tracker@${safe_branch}.service <<EOF
+            sudo bash -c "cat > /etc/systemd/system/location-tracker@\${safe_branch}.service <<EOF
             [Unit]
             Description=Location Tracker (%i) - Feature Branch
             After=network.target
@@ -280,6 +274,7 @@ jobs:
             Environment=PORT=8081
             Environment=HTTPS_PORT=8444
             Environment=UDP_PORT=5052
+            Environment=DOMAIN=${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}
             Environment=LOG_FILE=/var/log/location-tracker-%i.log
             
             # Security settings
