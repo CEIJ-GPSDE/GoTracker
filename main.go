@@ -17,6 +17,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+        "strings"
+
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
@@ -443,39 +445,62 @@ func (us *UDPSniffer) handlePackets(_ context.Context) {
 }
 
 func (us *UDPSniffer) parsePacket(data []byte) *LocationPacket {
-	// Simple parsing - expecting format: "deviceID,latitude,longitude"
-	// In production, implement your specific packet format parsing
-	parts := string(data)
-	if len(parts) < 10 { // Basic validation
-		return nil
-	}
+    // Log raw packet for debugging
+    log.Printf("Raw UDP packet: %s", string(data))
 
-	// For demonstration, we'll parse a simple CSV format or generate mock data
-	// Format: "device123,40.7128,-74.0060"
-	var deviceID string
-	var lat, lng float64
+    // Convert to string and trim whitespace
+    parts := strings.TrimSpace(string(data))
+    if len(parts) < 10 { // Basic validation
+        log.Printf("Packet too short: %s", parts)
+        return nil
+    }
 
-	parsed, err := fmt.Sscanf(parts, "%[^,],%f,%f", &deviceID, &lat, &lng)
-	if err != nil || parsed != 3 {
-		// If parsing fails, generate mock data for demonstration
-		deviceID = "device_" + strconv.Itoa(rand.Intn(1000))
-		lat = 40.7128 + (rand.Float64()-0.5)*0.1 // NYC area
-		lng = -74.0060 + (rand.Float64()-0.5)*0.1
-	}
+    // Split by comma
+    fields := strings.Split(parts, ",")
+    if len(fields) != 3 {
+        log.Printf("Invalid packet format, expected 'deviceID,latitude,longitude', got %d fields: %v", len(fields), fields)
+        return nil
+    }
 
-	// Validate coordinates
-	if lat < -90 || lat > 90 || lng < -180 || lng > 180 {
-		log.Printf("Invalid coordinates: lat=%f, lng=%f", lat, lng)
-		return nil
-	}
+    // Parse fields
+    deviceID := strings.TrimSpace(fields[0])
+    latStr := strings.TrimSpace(fields[1])
+    lngStr := strings.TrimSpace(fields[2])
 
-	return &LocationPacket{
-		DeviceID:  deviceID,
-		Latitude:  lat,
-		Longitude: lng,
-		Timestamp: time.Now(),
-	}
+    // Parse latitude and longitude
+    lat, err := strconv.ParseFloat(latStr, 64)
+    if err != nil {
+        log.Printf("Failed to parse latitude '%s': %v", latStr, err)
+        return nil
+    }
+    lng, err := strconv.ParseFloat(lngStr, 64)
+    if err != nil {
+        log.Printf("Failed to parse longitude '%s': %v", lngStr, err)
+        return nil
+    }
+
+    // Validate coordinates
+    if lat < -90 || lat > 90 || lng < -180 || lng > 180 {
+        log.Printf("Invalid coordinates: lat=%f, lng=%f", lat, lng)
+        return nil
+    }
+
+    // Validate deviceID
+    if deviceID == "" {
+        log.Printf("Empty deviceID in packet: %s", parts)
+        return nil
+    }
+
+    log.Printf("Parsed packet: DeviceID=%s, Lat=%f, Lng=%f", deviceID, lat, lng)
+
+    return &LocationPacket{
+        DeviceID:  deviceID,
+        Latitude:  lat,
+        Longitude: lng,
+        Timestamp: time.Now(),
+    }
 }
+
 
 func (us *UDPSniffer) storeLocation(packet *LocationPacket) error {
 	query := `
