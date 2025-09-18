@@ -96,16 +96,25 @@ jobs:
             
             echo "Directory created successfully:"
             ls -la /home/ec2-user/app/${safe_branch}/
-      - name: Upload to EC2
+      - name: Upload files via rsync over SSH
         if: matrix.deploy == 'true'
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
-          username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
-          key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
-          source: "deploy/${{ steps.prepare.outputs.safe_branch }}/"
-          target: "/home/ec2-user/app/"
-          overwrite: true
+        run: |
+          branch="${{ github.event.inputs.branch }}"
+          safe_branch=$(echo "$branch" | tr '/' '-')
+          
+          # Create SSH key file
+          echo "${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}" > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+          
+          # Use rsync to transfer files
+          rsync -avz -e "ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
+            deploy/${safe_branch}/ \
+            ${{ secrets[format('{0}_USER', matrix.instance)] }}@${{ secrets[format('{0}_HOST', matrix.instance)] }}:/home/ec2-user/app/${safe_branch}/
+          
+          # Cleanup
+          rm -f /tmp/deploy_key
+          
+          echo "Files transferred successfully"
       - name: Verify file upload
         if: matrix.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
