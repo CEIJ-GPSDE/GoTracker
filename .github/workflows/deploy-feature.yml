@@ -198,6 +198,7 @@ jobs:
             chmod +x /home/ec2-user/app/${safe_branch}/create_binary.sh
             
             echo "Directory prepared for manual upload"
+      -name: manual upload
         if: matrix.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
