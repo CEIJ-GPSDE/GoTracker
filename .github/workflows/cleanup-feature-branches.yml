@@ -1,0 +1,91 @@
+name: Cleanup Feature Branches
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch_to_remove:
+        description: "Feature branch to remove (e.g., feature/uribe)"
+        required: true
+        type: string
+      remove_from_EC2_1:
+        description: "Remove from EC2_1"
+        type: boolean
+        default: false
+      remove_from_EC2_2:
+        description: "Remove from EC2_2"
+        type: boolean
+        default: false
+      remove_from_EC2_3:
+        description: "Remove from EC2_3"
+        type: boolean
+        default: false
+      remove_from_EC2_4:
+        description: "Remove from EC2_4"
+        type: boolean
+        default: false
+
+jobs:
+  cleanup-feature:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - instance: EC2_1
+            remove: ${{ github.event.inputs.remove_from_EC2_1 }}
+          - instance: EC2_2
+            remove: ${{ github.event.inputs.remove_from_EC2_2 }}
+          - instance: EC2_3
+            remove: ${{ github.event.inputs.remove_from_EC2_3 }}
+          - instance: EC2_4
+            remove: ${{ github.event.inputs.remove_from_EC2_4 }}
+      fail-fast: false
+    steps:
+      - name: Skip unchecked EC2s
+        if: matrix.remove != 'true'
+        run: echo "Skipping cleanup for ${{ matrix.instance }}"
+      
+      - name: Cleanup feature branch deployment
+        if: matrix.remove == 'true'
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
+          username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
+          key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
+          script: |
+            branch="${{ github.event.inputs.branch_to_remove }}"
+            safe_branch=$(echo "$branch" | tr '/' '-')
+            
+            echo "=== Cleaning up feature branch: $branch ==="
+            echo "Safe branch name: $safe_branch"
+            
+            # Stop and disable the service
+            echo "Stopping service..."
+            sudo systemctl stop location-tracker@${safe_branch} || echo "Service was not running"
+            sudo systemctl disable location-tracker@${safe_branch} || echo "Service was not enabled"
+            
+            # Remove systemd service file
+            echo "Removing systemd service file..."
+            sudo rm -f /etc/systemd/system/location-tracker@${safe_branch}.service
+            sudo systemctl daemon-reload
+            
+            # Remove nginx configuration
+            echo "Removing nginx configuration..."
+            sudo rm -f /etc/nginx/conf.d/location-tracker-${safe_branch}.conf
+            sudo nginx -t && sudo systemctl reload nginx || echo "Nginx reload failed"
+            
+            # Remove application directory
+            echo "Removing application directory..."
+            rm -rf /home/ec2-user/app/${safe_branch}
+            
+            # Remove log file
+            echo "Removing log file..."
+            sudo rm -f /var/log/location-tracker-${safe_branch}.log
+            
+            echo "✅ Cleanup completed for branch: $branch"
+            
+            # Verify cleanup
+            echo "=== Verification ==="
+            echo "Service file exists: $(test -f /etc/systemd/system/location-tracker@${safe_branch}.service && echo 'YES' || echo 'NO')"
+            echo "Nginx config exists: $(test -f /etc/nginx/conf.d/location-tracker-${safe_branch}.conf && echo 'YES' || echo 'NO')"
+            echo "App directory exists: $(test -d /home/ec2-user/app/${safe_branch} && echo 'YES' || echo 'NO')"
+            echo "Log file exists: $(test -f /var/log/location-tracker-${safe_branch}.log && echo 'YES' || echo 'NO')"
