@@ -103,9 +103,8 @@ jobs:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
           username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
-          source: "deploy/${{ steps.prepare.outputs.safe_branch }}/*"
-          target: "/home/ec2-user/app/${{ steps.prepare.outputs.safe_branch }}/"
-          strip_components: 1
+          source: "deploy/${{ steps.prepare.outputs.safe_branch }}/"
+          target: "/home/ec2-user/app/"
           overwrite: true
       - name: Verify file upload
         if: matrix.deploy == 'true'
