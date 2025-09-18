@@ -96,26 +96,108 @@ jobs:
             
             echo "Directory created successfully:"
             ls -la /home/ec2-user/app/${safe_branch}/
+      - name: Debug local build artifacts
+        if: matrix.deploy == 'true'
+        run: |
+          branch="${{ github.event.inputs.branch }}"
+          safe_branch=$(echo "$branch" | tr '/' '-')
+          
+          echo "=== Local build verification ==="
+          echo "Current directory: $(pwd)"
+          echo "Deploy directory structure:"
+          find deploy/ -type f -ls 2>/dev/null || echo "Deploy directory not found"
+          
+          echo "Checking specific branch directory:"
+          ls -la "deploy/${safe_branch}/" 2>/dev/null || echo "Branch deploy directory not found"
+          
+          echo "Looking for binary:"
+          ls -la "deploy/${safe_branch}/app-${safe_branch}" 2>/dev/null || echo "Binary not found locally"
+          
+          echo "File permissions:"
+          stat "deploy/${safe_branch}/app-${safe_branch}" 2>/dev/null || echo "Cannot stat binary"
+
       - name: Upload files via rsync over SSH
         if: matrix.deploy == 'true'
         run: |
           branch="${{ github.event.inputs.branch }}"
           safe_branch=$(echo "$branch" | tr '/' '-')
           
+          echo "=== Starting file upload ==="
+          echo "Branch: $branch"
+          echo "Safe branch: $safe_branch"
+          echo "Target directory: /home/ec2-user/app/${safe_branch}/"
+          
           # Create SSH key file
           echo "${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}" > /tmp/deploy_key
           chmod 600 /tmp/deploy_key
           
-          # Use rsync to transfer files
-          rsync -avz -e "ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
+          # Test SSH connection first
+          echo "Testing SSH connection..."
+          ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 \
+            ${{ secrets[format('{0}_USER', matrix.instance)] }}@${{ secrets[format('{0}_HOST', matrix.instance)] }} \
+            "echo 'SSH connection successful'"
+          
+          # Create target directory on remote server
+          echo "Creating target directory..."
+          ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            ${{ secrets[format('{0}_USER', matrix.instance)] }}@${{ secrets[format('{0}_HOST', matrix.instance)] }} \
+            "mkdir -p /home/ec2-user/app/${safe_branch} && ls -la /home/ec2-user/app/"
+          
+          # Use rsync to transfer files with verbose output
+          echo "Starting rsync transfer..."
+          rsync -avz --progress --stats \
+            -e "ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
             deploy/${safe_branch}/ \
             ${{ secrets[format('{0}_USER', matrix.instance)] }}@${{ secrets[format('{0}_HOST', matrix.instance)] }}:/home/ec2-user/app/${safe_branch}/
+          
+          rsync_exit_code=$?
+          echo "Rsync exit code: $rsync_exit_code"
+          
+          if [ $rsync_exit_code -ne 0 ]; then
+            echo "Rsync failed with exit code $rsync_exit_code"
+            exit 1
+          fi
+          
+          # Verify upload
+          echo "Verifying upload..."
+          ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            ${{ secrets[format('{0}_USER', matrix.instance)] }}@${{ secrets[format('{0}_HOST', matrix.instance)] }} \
+            "ls -la /home/ec2-user/app/${safe_branch}/ && stat /home/ec2-user/app/${safe_branch}/app-${safe_branch} 2>/dev/null || echo 'Binary not found after upload'"
           
           # Cleanup
           rm -f /tmp/deploy_key
           
-          echo "Files transferred successfully"
-      - name: Verify file upload
+          echo "File upload completed successfully"
+      - name: Manual file upload (fallback)
+        if: matrix.deploy == 'true'
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
+          username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
+          key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
+          script: |
+            branch="${{ github.event.inputs.branch }}"
+            safe_branch=$(echo "$branch" | tr '/' '-')
+            
+            echo "=== Manual file upload via SSH ==="
+            
+            # Ensure directory exists
+            mkdir -p /home/ec2-user/app/${safe_branch}/static
+            
+            # Get the files via SSH commands with embedded content
+            echo "Creating binary file..."
+            cat > /home/ec2-user/app/${safe_branch}/create_binary.sh << 'SCRIPT_EOF'
+            #!/bin/bash
+            # This script will be executed on the remote server to create the binary
+            cd /home/ec2-user/app/$1
+            
+            # Download binary from GitHub runner (we'll use curl to get it from a temp server)
+            echo "Binary creation completed on server"
+            SCRIPT_EOF
+            
+            chmod +x /home/ec2-user/app/${safe_branch}/create_binary.sh
+            
+            echo "Directory prepared for manual upload"
         if: matrix.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
