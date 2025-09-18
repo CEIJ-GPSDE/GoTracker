@@ -198,7 +198,6 @@ jobs:
             chmod +x /home/ec2-user/app/${safe_branch}/create_binary.sh
             
             echo "Directory prepared for manual upload"
-      - name: manual upload
         if: matrix.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -386,11 +385,6 @@ jobs:
             # Create log file with proper permissions
             sudo touch /var/log/location-tracker-${safe_branch}.log
             sudo chown ec2-user:ec2-user /var/log/location-tracker-${safe_branch}.log
-            
-            sudo chmod 644 /etc/systemd/system/location-tracker@${safe_branch}.service
-            sudo systemctl daemon-reload
-            sudo systemctl restart location-tracker@${safe_branch}
-            sudo systemctl enable location-tracker@${safe_branch}
             
             # Wait for service to start
             sleep 10
