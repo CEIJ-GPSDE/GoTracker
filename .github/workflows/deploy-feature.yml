@@ -104,10 +104,10 @@ jobs:
           username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           source: "deploy/${{ steps.prepare.outputs.safe_branch }}/*"
-          target: "/home/ec2-user/app/${{ steps.prepare.outputs.safe_branch }}/"
-          strip_components: 2
+          target: "/home/ec2-user/app/"
+          strip_components: 1
           overwrite: true
-      - name: XD
+      - name: Verify file upload for feature branch
         if: matrix.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -118,7 +118,7 @@ jobs:
             branch="${{ github.event.inputs.branch }}"
             safe_branch=$(echo "$branch" | tr '/' '-')
             
-            echo "=== Checking uploaded files ==="
+            echo "=== Checking uploaded files for feature branch ==="
             echo "Directory contents:"
             ls -la /home/ec2-user/app/${safe_branch}/
             
@@ -220,7 +220,7 @@ jobs:
             branch="${{ github.event.inputs.branch }}"
             safe_branch=$(echo "$branch" | tr '/' '-')
             
-            echo "=== Final verification ==="
+            echo "=== Final verification for feature branch ==="
             ls -la /home/ec2-user/app/${safe_branch}/
             
             # Check if binary exists and is executable
@@ -260,7 +260,8 @@ jobs:
             branch="${{ github.event.inputs.branch }}"
             safe_branch=$(echo "$branch" | tr '/' '-')
             
-            sudo bash -c "cat > /etc/systemd/system/location-tracker@\${safe_branch}.service <<EOF
+            # Create systemd service file
+            sudo bash -c "cat > /etc/systemd/system/location-tracker@${safe_branch}.service <<EOF
             [Unit]
             Description=Location Tracker (%i) - Feature Branch
             After=network.target
@@ -295,6 +296,12 @@ jobs:
             # Create log file with proper permissions
             sudo touch /var/log/location-tracker-${safe_branch}.log
             sudo chown ec2-user:ec2-user /var/log/location-tracker-${safe_branch}.log
+            
+            # Reload systemd and restart service (THIS WAS MISSING!)
+            sudo chmod 644 /etc/systemd/system/location-tracker@${safe_branch}.service
+            sudo systemctl daemon-reload
+            sudo systemctl restart location-tracker@${safe_branch}
+            sudo systemctl enable location-tracker@${safe_branch}
             
             # Wait for service to start
             sleep 10
