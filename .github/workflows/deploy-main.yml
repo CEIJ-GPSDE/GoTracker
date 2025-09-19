@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        instance: [EC2_1, EC2_2, EC3, EC2_4]
+        instance: [EC2_1, EC2_2, EC2_3, EC2_4]
       fail-fast: false
     steps:
       - uses: actions/checkout@v4
@@ -34,19 +34,40 @@ jobs:
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
             echo "Cleaning up existing main deployment..."
+            # Stop and disable any systemd service
             if systemctl is-active --quiet location-tracker@main 2>/dev/null; then
               echo "Stopping old systemd service..."
               sudo systemctl stop location-tracker@main || echo "Service was not running"
               sudo systemctl disable location-tracker@main || echo "Service was not enabled"
             fi
+            # Stop and remove location-tracker-main container
             if docker ps -a --format '{{.Names}}' | grep -q "^location-tracker-main$"; then
               echo "Stopping existing container: location-tracker-main"
               docker stop location-tracker-main || echo "Container was not running"
-              docker rm location-tracker-main || echo "Failed to remove container"
+              docker rm -f location-tracker-main || echo "Failed to remove container"
             fi
+            # Remove location-tracker:main image
             if docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "^location-tracker:main$"; then
               echo "Removing old image: location-tracker:main"
-              docker rmi location-tracker:main || echo "Failed to remove image"
+              docker rmi -f location-tracker:main || echo "Failed to remove image"
+            fi
+            # Check for and free port 8080
+            echo "Checking for processes using port 8080..."
+            if sudo lsof -i :8080; then
+              echo "Found processes using port 8080, attempting to terminate..."
+              sudo lsof -i :8080 | awk 'NR>1 {print $2}' | xargs -r sudo kill -9 || echo "Failed to terminate some processes"
+              sleep 2
+              if sudo lsof -i :8080; then
+                echo "ERROR: Port 8080 still in use after cleanup"
+                exit 1
+              fi
+            else
+              echo "Port 8080 is free"
+            fi
+            # Clean up any orphaned Docker containers
+            if docker ps -a --format '{{.Names}}' | grep -q "location-tracker"; then
+              echo "Removing orphaned location-tracker containers..."
+              docker ps -a --filter "name=location-tracker" --format '{{.ID}}' | xargs -r docker rm -f || echo "Failed to remove some containers"
             fi
             mkdir -p /home/ec2-user/certs
             mkdir -p /home/ec2-user/logs
