@@ -156,7 +156,7 @@ jobs:
             sudo sed -i "/# Feature branch:/,/# End feature branch:/ { d; }" /etc/nginx/conf.d/location-tracker-main.conf
             sudo sed -i "/# Feature branch HTTPS:/,/# End feature branch HTTPS:/ { d; }" /etc/nginx/conf.d/location-tracker-main.conf
             # Add HTTP configuration for feature branch
-            sudo tee -a /etc/nginx/conf.d/location-tracker-main.conf > /dev/null <<'EOF'
+            sudo tee -a /etc/nginx/conf.d/location-tracker-main.conf | tee -a /tmp/deploy.log <<'EOF'
             # Feature branch: SAFE_BRANCH
             server {
                 listen 80;
@@ -199,7 +199,7 @@ jobs:
             # Add HTTPS server block if certificates exist
             if [ -f /etc/ssl/certs/location-tracker.crt ] && [ -f /etc/ssl/private/location-tracker.key ]; then
               echo "SSL certificates found, configuring HTTPS for feature branch..."
-              sudo tee -a /etc/nginx/conf.d/location-tracker-main.conf > /dev/null <<'EOF'
+              sudo tee -a /etc/nginx/conf.d/location-tracker-main.conf | tee -a /tmp/deploy.log <<'EOF'
             # Feature branch HTTPS: SAFE_BRANCH
             server {
                 listen 443 ssl;
@@ -221,7 +221,7 @@ jobs:
                 add_header Referrer-Policy "strict-origin-when-cross-origin";
 
                 location NGINX_LOCATION/ {
-                    proxy_pass https://127.0.0.1:8081/;
+                    proxy_pass http://127.0.0.1:8081/;
                     proxy_http_version 1.1;
                     proxy_set_header Upgrade $http_upgrade;
                     proxy_set_header Connection 'upgrade';
@@ -233,7 +233,7 @@ jobs:
                 }
 
                 location NGINX_LOCATION/ws {
-                    proxy_pass https://127.0.0.1:8081/ws;
+                    proxy_pass http://127.0.0.1:8081/ws;
                     proxy_http_version 1.1;
                     proxy_set_header Upgrade $http_upgrade;
                     proxy_set_header Connection "Upgrade";
@@ -251,8 +251,22 @@ jobs:
               sudo sed -i "s|NGINX_LOCATION|$nginx_location|g" /etc/nginx/conf.d/location-tracker-main.conf
             fi
             # Check for duplicate server names
-            if grep -A1 "server_name $domain" /etc/nginx/conf.d/location-tracker-main.conf | grep -q "server_name $domain.*server_name $domain"; then
-              echo "ERROR: Duplicate server_name $domain detected, restoring backup..."
+            server_count=$(grep -c "server_name $domain" /etc/nginx/conf.d/location-tracker-main.conf)
+            if [ "$server_count" -gt 2 ]; then
+              echo "ERROR: Detected $server_count server_name $domain entries, expected 2 or fewer (HTTP and HTTPS)"
+              cat /etc/nginx/conf.d/location-tracker-main.conf
+              sudo cp /tmp/nginx-main-backup-$safe_branch.conf /etc/nginx/conf.d/location-tracker-main.conf
+              exit 1
+            fi
+            # Debug: Log final Nginx configuration
+            echo "Final Nginx configuration:"
+            cat /etc/nginx/conf.d/location-tracker-main.conf
+            # Verify location block
+            if grep -q "location $nginx_location/" /etc/nginx/conf.d/location-tracker-main.conf; then
+              echo "Location block $nginx_location/ found in configuration"
+            else
+              echo "ERROR: Location block $nginx_location/ not found in configuration"
+              cat /etc/nginx/conf.d/location-tracker-main.conf
               sudo cp /tmp/nginx-main-backup-$safe_branch.conf /etc/nginx/conf.d/location-tracker-main.conf
               exit 1
             fi
@@ -330,7 +344,7 @@ jobs:
               -e AUTO_TLS=false \
               location-tracker:${safe_branch}
             echo "Waiting for container to start..."
-            sleep 20
+            sleep 30
             if docker ps --format '{{.Names}}' | grep -q "^${container_name}$"; then
               echo "Container started successfully: $container_name"
               docker ps | grep $container_name
@@ -340,6 +354,14 @@ jobs:
               docker ps -a | grep $container_name || echo "Container not found"
               echo "Container logs:"
               docker logs $container_name || echo "Failed to get logs"
+              exit 1
+            fi
+            # Verify port 8081 is bound
+            if sudo netstat -tuln | grep -q ":8081 "; then
+              echo "Port 8081 is now listening"
+            else
+              echo "ERROR: Port 8081 is not listening"
+              docker logs $container_name
               exit 1
             fi
             rm -f /tmp/location-tracker-${safe_branch}.tar
@@ -369,14 +391,16 @@ jobs:
                 echo "Feature branch: $branch"
                 echo "Container: $container_name"
                 echo "Local health: https://localhost:8081/api/health"
-                if [ -f /etc/ssl/certs/location-tracker.crt ]; then
-                  echo "Public URL: https://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch"
-                else
-                  echo "Public URL: http://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch"
-                fi
+                echo "Public URL: https://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch"
                 echo "Container status:"
                 docker ps | head -1
                 docker ps | grep $container_name
+                # Test public URL
+                if curl -f -s -k https://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch/api/health; then
+                  echo "Public URL health check PASSED"
+                else
+                  echo "WARNING: Public URL health check failed"
+                fi
                 exit 0
               else
                 echo "HTTPS health check failed (attempt $attempt/$max_attempts)"
@@ -387,14 +411,16 @@ jobs:
                   echo "Feature branch: $branch"
                   echo "Container: $container_name"
                   echo "Local health: http://localhost:8081/api/health"
-                  if [ -f /etc/ssl/certs/location-tracker.crt ]; then
-                    echo "Public URL: https://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch"
-                  else
-                    echo "Public URL: http://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch"
-                  fi
+                  echo "Public URL: http://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch"
                   echo "Container status:"
                   docker ps | head -1
                   docker ps | grep $container_name
+                  # Test public URL
+                  if curl -f -s http://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch/api/health; then
+                    echo "Public URL health check PASSED"
+                  else
+                    echo "WARNING: Public URL health check failed"
+                  fi
                   exit 0
                 else
                   echo "HTTP health check failed (attempt $attempt/$max_attempts)"
