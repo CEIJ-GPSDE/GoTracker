@@ -117,13 +117,16 @@ jobs:
           username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
+            # Clean up stale configuration files
+            sudo find /etc/nginx/conf.d -type f -name 'location-tracker-*.conf' ! -name 'location-tracker-main.conf' -exec rm {} \;
+            
             # Create main nginx configuration
             sudo tee /etc/nginx/conf.d/location-tracker-main.conf > /dev/null <<'EOF'
             # Main application configuration
             server {
                 listen 80;
                 server_name ${{ secrets[format('{0}_DOMAIN', matrix.instance)] }};
-
+                
                 # Main application root
                 location / {
                     proxy_pass http://127.0.0.1:8080;
@@ -136,7 +139,7 @@ jobs:
                     proxy_set_header X-Forwarded-Proto $scheme;
                     proxy_cache_bypass $http_upgrade;
                 }
-
+                
                 # WebSocket support for main app
                 location /ws {
                     proxy_pass http://127.0.0.1:8080;
@@ -150,21 +153,18 @@ jobs:
                 }
             }
             EOF
-
+            
             # Add HTTPS server block if certificates exist
             if [ -f /etc/ssl/certs/location-tracker.crt ] && [ -f /etc/ssl/private/location-tracker.key ]; then
               echo "SSL certificates found, configuring HTTPS..."
-
-              # Add HTTPS server block
+              
               sudo tee -a /etc/nginx/conf.d/location-tracker-main.conf > /dev/null <<'EOF'
-
             # HTTPS server block
             server {
                 listen 443 ssl;
                 http2 on;
                 server_name ${{ secrets[format('{0}_DOMAIN', matrix.instance)] }};
-
-                # SSL configuration
+                
                 ssl_certificate /etc/ssl/certs/location-tracker.crt;
                 ssl_certificate_key /etc/ssl/private/location-tracker.key;
                 ssl_protocols TLSv1.2 TLSv1.3;
@@ -172,15 +172,13 @@ jobs:
                 ssl_prefer_server_ciphers off;
                 ssl_session_cache shared:SSL:10m;
                 ssl_session_timeout 10m;
-
-                # Security headers
+                
                 add_header X-Frame-Options DENY;
                 add_header X-Content-Type-Options nosniff;
                 add_header X-XSS-Protection "1; mode=block";
                 add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
                 add_header Referrer-Policy "strict-origin-when-cross-origin";
-
-                # Main application root
+                
                 location / {
                     proxy_pass http://127.0.0.1:8080;
                     proxy_http_version 1.1;
@@ -192,8 +190,7 @@ jobs:
                     proxy_set_header X-Forwarded-Proto $scheme;
                     proxy_cache_bypass $http_upgrade;
                 }
-
-                # WebSocket support for main app
+                
                 location /ws {
                     proxy_pass http://127.0.0.1:8080;
                     proxy_http_version 1.1;
@@ -206,20 +203,16 @@ jobs:
                 }
             }
             EOF
-
-              # Update HTTP server to redirect to HTTPS, but preserve existing location blocks for feature branches
+            
               sudo sed -i '/# Main application root/,/}/c\
-                # Redirect main app to HTTPS\
                 location = / {\
                     return 301 https://$server_name$request_uri;\
                 }\
-                \
-                # Redirect main app paths to HTTPS (but not /test/)\
                 location ~ ^/(?!test/) {\
                     return 301 https://$server_name$request_uri;\
                 }' /etc/nginx/conf.d/location-tracker-main.conf
             fi
-
+            
             # Test and reload nginx configuration
             if sudo nginx -t; then
               sudo systemctl reload nginx
@@ -227,7 +220,7 @@ jobs:
             else
               echo "Nginx configuration test failed"
               exit 1
-            fi
+            fi    
             
       - name: Load and start Docker container
         uses: appleboy/ssh-action@v1.2.0
@@ -334,16 +327,16 @@ jobs:
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
             echo "=== Final Health Check ==="
-            
+
             # Check container status
             echo "Container status:"
             docker ps | head -1
             docker ps | grep location-tracker-main
-            
+
             # Test HTTP health endpoint
             max_attempts=5
             attempt=1
-            
+
             while [ $attempt -le $max_attempts ]; do
               echo "HTTP health check attempt $attempt/$max_attempts..."
               if curl -f -s http://localhost:8080/api/health; then
@@ -358,7 +351,7 @@ jobs:
               fi
               attempt=$((attempt + 1))
             done
-            
+
             # Test HTTPS health endpoint if certificates exist
             if [ -f /etc/ssl/certs/location-tracker.crt ]; then
               attempt=1
@@ -377,7 +370,7 @@ jobs:
                 attempt=$((attempt + 1))
               done
             fi
-            
+
             if [ $attempt -gt $max_attempts ]; then
               echo "ERROR: All health checks failed"
               echo "Container status:"
@@ -386,7 +379,7 @@ jobs:
               docker logs --tail 50 location-tracker-main
               exit 1
             fi
-            
+
             # Display success information
             echo "=== Deployment Successful ==="
             echo "Container: location-tracker-main"
@@ -397,7 +390,7 @@ jobs:
             else
               echo "Public URL: http://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}"
             fi
-            
+
             # Show container status
             echo "Container status:"
             docker ps | head -1

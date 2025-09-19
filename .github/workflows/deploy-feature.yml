@@ -164,8 +164,6 @@ jobs:
             nginx_location="/test/$branch"
             
             echo "Adding Nginx configuration for feature branch: $branch"
-            echo "Safe branch name: $safe_branch"
-            echo "Nginx location: $nginx_location"
             
             # Backup the current main config
             sudo cp /etc/nginx/conf.d/location-tracker-main.conf /tmp/nginx-main-backup-$safe_branch.conf
@@ -176,7 +174,7 @@ jobs:
               exit 1
             fi
             
-            # Remove any existing feature branch locations to avoid duplicates
+            # Remove any existing feature branch locations
             sudo sed -i "/# Feature branch: $branch/,/location $nginx_location\/ws/ { d; }" /etc/nginx/conf.d/location-tracker-main.conf
             
             # Add feature branch locations to HTTP server block
@@ -209,7 +207,7 @@ jobs:
               }" /etc/nginx/conf.d/location-tracker-main.conf
             fi
             
-            # Add feature branch locations to HTTPS server block if it exists
+            # Add feature branch locations to HTTPS server block
             if grep -q "listen 443 ssl" /etc/nginx/conf.d/location-tracker-main.conf; then
               sudo sed -i "/listen 443 ssl/,/server {/ {
                 /# Main application root/i\\
@@ -239,22 +237,20 @@ jobs:
               }" /etc/nginx/conf.d/location-tracker-main.conf
             fi
             
+            # Clean up stale feature branch configs
+            sudo find /etc/nginx/conf.d -type f -name 'location-tracker-*.conf' ! -name 'location-tracker-main.conf' -exec rm {} \;
+            
             # Test nginx configuration
-            echo "Testing nginx configuration..."
             if sudo nginx -t; then
               sudo systemctl reload nginx
               echo "Nginx configuration updated successfully"
             else
               echo "ERROR: Nginx configuration test failed"
-              echo "Restoring backup..."
               sudo cp /tmp/nginx-main-backup-$safe_branch.conf /etc/nginx/conf.d/location-tracker-main.conf
               sudo nginx -t
               exit 1
             fi
-            
-            # Clean up any stale feature branch configs
-            sudo find /etc/nginx/conf.d -type f -name 'location-tracker-*.conf' ! -name "location-tracker-main.conf" -exec rm {} \;
-                  
+
       - name: Load and start Docker container
         if: matrix.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
