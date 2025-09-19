@@ -1,4 +1,3 @@
-```yaml
 name: Deploy Main Branch
 
 on:
@@ -15,23 +14,18 @@ jobs:
       fail-fast: false
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Build Docker image
         run: |
           echo "Building Docker image for main branch"
-          
-          # Build the Docker image
           docker build \
             --build-arg VERSION=main-$(git rev-parse --short HEAD) \
             -t location-tracker:main \
             .
-          
-          # Save image to tar file for transfer
           docker save location-tracker:main > location-tracker-main.tar
-          
           echo "Docker image saved: location-tracker-main.tar"
           ls -la location-tracker-main.tar
-          
+
       - name: Stop existing container and clean old deployments
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -40,41 +34,33 @@ jobs:
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
             echo "Cleaning up existing main deployment..."
-            
-            # Stop and remove existing systemd service (migration cleanup)
             if systemctl is-active --quiet location-tracker@main 2>/dev/null; then
               echo "Stopping old systemd service..."
               sudo systemctl stop location-tracker@main || echo "Service was not running"
               sudo systemctl disable location-tracker@main || echo "Service was not enabled"
             fi
-            
-            # Stop and remove existing container
             if docker ps -a --format '{{.Names}}' | grep -q "^location-tracker-main$"; then
               echo "Stopping existing container: location-tracker-main"
               docker stop location-tracker-main || echo "Container was not running"
               docker rm location-tracker-main || echo "Failed to remove container"
             fi
-            
-            # Remove old image
             if docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "^location-tracker:main$"; then
               echo "Removing old image: location-tracker:main"
               docker rmi location-tracker:main || echo "Failed to remove image"
             fi
-            
-            # Create directory for SSL certificates and logs
             mkdir -p /home/ec2-user/certs
             mkdir -p /home/ec2-user/logs
             echo "Cleanup completed"
-            
+
       - name: Upload Docker image
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
           username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
-          source: "location-tracker-main.tar"
-          target: "/tmp/"
-          
+          source: location-tracker-main.tar
+          target: /tmp/
+
       - name: Deploy SSL certificates
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -82,35 +68,25 @@ jobs:
           username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
-            # Create certificates directories
             sudo mkdir -p /etc/ssl/certs /etc/ssl/private
             mkdir -p /home/ec2-user/certs
-            
-            # Deploy SSL certificate (if provided)
             if [ -n "${{ secrets[format('{0}_SSL_CERT', matrix.instance)] }}" ]; then
               echo "Deploying SSL certificate..."
-              echo '${{ secrets[format('{0}_SSL_CERT', matrix.instance)] }}' | sudo tee /etc/ssl/certs/location-tracker.crt > /dev/null
+              echo "${{ secrets[format('{0}_SSL_CERT', matrix.instance)] }}" | sudo tee /etc/ssl/certs/location-tracker.crt > /dev/null
               sudo chmod 644 /etc/ssl/certs/location-tracker.crt
-              
-              # Also copy to app directory for Docker
-              echo '${{ secrets[format('{0}_SSL_CERT', matrix.instance)] }}' > /home/ec2-user/certs/server.crt
+              echo "${{ secrets[format('{0}_SSL_CERT', matrix.instance)] }}" > /home/ec2-user/certs/server.crt
               chmod 644 /home/ec2-user/certs/server.crt
             fi
-            
-            # Deploy SSL private key (if provided)
             if [ -n "${{ secrets[format('{0}_SSL_KEY', matrix.instance)] }}" ]; then
               echo "Deploying SSL private key..."
-              echo '${{ secrets[format('{0}_SSL_KEY', matrix.instance)] }}' | sudo tee /etc/ssl/private/location-tracker.key > /dev/null
+              echo "${{ secrets[format('{0}_SSL_KEY', matrix.instance)] }}" | sudo tee /etc/ssl/private/location-tracker.key > /dev/null
               sudo chmod 600 /etc/ssl/private/location-tracker.key
               sudo chown root:root /etc/ssl/private/location-tracker.key
-              
-              # Also copy to app directory for Docker
-              echo '${{ secrets[format('{0}_SSL_KEY', matrix.instance)] }}' > /home/ec2-user/certs/server.key
+              echo "${{ secrets[format('{0}_SSL_KEY', matrix.instance)] }}" > /home/ec2-user/certs/server.key
               chmod 600 /home/ec2-user/certs/server.key
             fi
-            
             echo "SSL certificates deployed successfully"
-            
+
       - name: Setup Nginx configuration
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -118,62 +94,51 @@ jobs:
           username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
-            # Clean up stale configuration files
             sudo find /etc/nginx/conf.d -type f -name 'location-tracker-*.conf' ! -name 'location-tracker-main.conf' -exec rm {} \;
-
-            # Create main nginx configuration
-            sudo tee /etc/nginx/conf.d/location-tracker-main.conf > /dev/null <<EOF
-# Main application configuration
+            sudo tee /etc/nginx/conf.d/location-tracker-main.conf > /dev/null <<'EOF'
 server {
     listen 80;
     server_name ${{ secrets[format('{0}_DOMAIN', matrix.instance)] }};
 
-    # Main application root
     location / {
         proxy_pass http://127.0.0.1:8080;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_cache_bypass \$http_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
     }
 
-    # WebSocket support for main app
     location /ws {
         proxy_pass http://127.0.0.1:8080;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "Upgrade";
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
 
-# Public IP redirect from 8080
 server {
     listen 8080;
     server_name _;
 
     location / {
         if (-f /etc/ssl/certs/location-tracker.crt) {
-            return 301 https://\$host\$request_uri;
+            return 301 https://$host$request_uri;
         }
-        return 301 http://\$host\$request_uri;
+        return 301 http://$host$request_uri;
     }
 }
 EOF
-
-            # Add HTTPS server block if certificates exist
             if [ -f /etc/ssl/certs/location-tracker.crt ] && [ -f /etc/ssl/private/location-tracker.key ]; then
               echo "SSL certificates found, configuring HTTPS..."
-
-              sudo tee -a /etc/nginx/conf.d/location-tracker-main.conf > /dev/null <<EOF
-# HTTPS server block
+              sudo tee -a /etc/nginx/conf.d/location-tracker-main.conf > /dev/null <<'EOF'
 server {
     listen 443 ssl;
     http2 on;
@@ -196,42 +161,33 @@ server {
     location / {
         proxy_pass http://127.0.0.1:8080;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_cache_bypass \$http_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
     }
 
     location /ws {
         proxy_pass http://127.0.0.1:8080;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "Upgrade";
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
 EOF
-
-              # Update HTTP server to redirect to HTTPS, preserving feature branch locations
-              sudo sed -i '/# Main application root/,/}/c\
-                # Redirect main app to HTTPS\
-                location = / {\
-                    return 301 https://\$server_name\$request_uri;\
-                }\
-                \
-                # Redirect main app paths to HTTPS (but not /test/)\
-                location ~ ^/(?!test/) {\
-                    return 301 https://\$server_name\$request_uri;\
+              sudo sed -i '/location \//,/location \/ws/ s/location \//location = \//' /etc/nginx/conf.d/location-tracker-main.conf
+              sudo sed -i '/location = \//a\
+                location ~ ^/(?!test\/) {\
+                    return 301 https://$server_name$request_uri;\
                 }' /etc/nginx/conf.d/location-tracker-main.conf
             fi
-
-            # Test and reload nginx configuration
             if sudo nginx -t; then
               sudo systemctl reload nginx
               echo "Nginx configuration updated successfully"
@@ -239,7 +195,7 @@ EOF
               echo "Nginx configuration test failed"
               exit 1
             fi
-            
+
       - name: Load and start Docker container
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -248,13 +204,9 @@ EOF
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
             echo "Loading and starting Docker container: location-tracker-main"
-            
-            # Load Docker image
             if [ -f "/tmp/location-tracker-main.tar" ]; then
               echo "Loading Docker image from tar file..."
               docker load < /tmp/location-tracker-main.tar
-              
-              # Verify image was loaded
               if docker images | grep -q "location-tracker.*main"; then
                 echo "Docker image loaded successfully"
               else
@@ -266,8 +218,6 @@ EOF
               ls -la /tmp/location-tracker-*.tar || echo "No tar files found"
               exit 1
             fi
-            
-            # Start the container
             echo "Starting Docker container..."
             docker run -d \
               --name location-tracker-main \
@@ -286,12 +236,8 @@ EOF
               -e DOMAIN="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}" \
               -e AUTO_TLS=false \
               location-tracker:main
-            
-            # Wait for container to start
             echo "Waiting for container to start..."
             sleep 20
-            
-            # Verify container is running
             if docker ps --format '{{.Names}}' | grep -q "^location-tracker-main$"; then
               echo "Container started successfully: location-tracker-main"
               docker ps | grep location-tracker-main
@@ -303,10 +249,8 @@ EOF
               docker logs location-tracker-main || echo "Failed to get logs"
               exit 1
             fi
-            
-            # Clean up tar file
             rm -f /tmp/location-tracker-main.tar
-            
+
       - name: Test container and database connection
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -315,17 +259,11 @@ EOF
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
             echo "=== Final verification ==="
-            
-            # Check container status
             echo "Container status:"
             docker ps | head -1
             docker ps | grep location-tracker-main
-            
-            # Show recent container logs
             echo "Recent container logs:"
             docker logs --tail 20 location-tracker-main
-            
-            # Test database connection using container
             echo "Testing database connection..."
             docker exec location-tracker-main sh -c '
               if command -v psql >/dev/null; then
@@ -334,7 +272,7 @@ EOF
                 echo "psql not available in container, skipping database test"
               fi
             ' || echo "Database test failed"
-            
+
       - name: Health check and final verification
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -343,23 +281,15 @@ EOF
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
             echo "=== Final Health Check ==="
-            
-            # Check container status
             echo "Container status:"
             docker ps | head -1
             docker ps | grep location-tracker-main
-            
-            # Test HTTP health endpoint
             max_attempts=5
             attempt=1
-            
             while [ $attempt -le $max_attempts ]; do
               echo "HTTP health check attempt $attempt/$max_attempts..."
-              
               if curl -f -s http://localhost:8080/api/health; then
                 echo "HTTP health check PASSED"
-                
-                # Display success information
                 echo "=== Deployment Successful ==="
                 echo "Container: location-tracker-main"
                 echo "Local health: http://localhost:8080/api/health"
@@ -368,12 +298,9 @@ EOF
                 else
                   echo "Public URL: http://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}"
                 fi
-                
-                # Show container status
                 echo "Container status:"
                 docker ps | head -1
                 docker ps | grep location-tracker-main
-                
                 exit 0
               else
                 echo "HTTP health check failed (attempt $attempt/$max_attempts)"
@@ -382,15 +309,11 @@ EOF
                   sleep 10
                 fi
               fi
-              
               attempt=$((attempt + 1))
             done
-            
-            # If we get here, all health checks failed
             echo "ERROR: All health checks failed"
             echo "Container status:"
             docker ps -a | grep location-tracker-main
             echo "Recent container logs:"
             docker logs --tail 50 location-tracker-main
             exit 1
-```
