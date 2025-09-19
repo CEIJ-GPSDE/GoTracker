@@ -43,12 +43,12 @@ jobs:
       - name: Skip unchecked instances
         if: matrix.deploy != 'true'
         run: echo "Skipping ${{ matrix.instance }} - not selected for deployment"
-        
+
       - uses: actions/checkout@v4
         if: matrix.deploy == 'true'
         with:
           ref: ${{ github.event.inputs.branch }}
-          
+
       - name: Set safe branch name
         if: matrix.deploy == 'true'
         id: prepare
@@ -57,27 +57,21 @@ jobs:
           safe_branch=$(echo "$branch" | tr '/' '-' | tr '[:upper:]' '[:lower:]')
           echo "safe_branch=$safe_branch" >> $GITHUB_OUTPUT
           echo "Branch: $branch -> Safe: $safe_branch"
-          
+
       - name: Build Docker image
         if: matrix.deploy == 'true'
         run: |
           branch="${{ github.event.inputs.branch }}"
           safe_branch="${{ steps.prepare.outputs.safe_branch }}"
-          
           echo "Building Docker image for branch: $branch"
-          
-          # Build the Docker image
           docker build \
             --build-arg VERSION=${safe_branch}-$(git rev-parse --short HEAD) \
             -t location-tracker:${safe_branch} \
             .
-          
-          # Save image to tar file for transfer
           docker save location-tracker:${safe_branch} > location-tracker-${safe_branch}.tar
-          
           echo "Docker image saved: location-tracker-${safe_branch}.tar"
           ls -la location-tracker-${safe_branch}.tar
-          
+
       - name: Stop existing container and cleanup
         if: matrix.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
@@ -88,10 +82,7 @@ jobs:
           script: |
             safe_branch="${{ steps.prepare.outputs.safe_branch }}"
             container_name="location-tracker-${safe_branch}"
-            
             echo "Cleaning up existing deployment: $container_name"
-            
-            # Stop and remove existing container
             if docker ps -a --format '{{.Names}}' | grep -q "^${container_name}$"; then
               echo "Stopping existing container: $container_name"
               docker stop $container_name || echo "Container was not running"
@@ -99,17 +90,13 @@ jobs:
             else
               echo "No existing container found: $container_name"
             fi
-            
-            # Remove old image
             if docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "^location-tracker:${safe_branch}$"; then
               echo "Removing old image: location-tracker:${safe_branch}"
               docker rmi location-tracker:${safe_branch} || echo "Failed to remove image"
             fi
-            
-            # Create directory for SSL certificates
             mkdir -p /home/ec2-user/certs
             echo "Cleanup completed"
-            
+
       - name: Upload Docker image
         if: matrix.deploy == 'true'
         uses: appleboy/scp-action@v0.1.7
@@ -117,9 +104,9 @@ jobs:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
           username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
-          source: "location-tracker-${{ steps.prepare.outputs.safe_branch }}.tar"
-          target: "/tmp/"
-          
+          source: location-tracker-${{ steps.prepare.outputs.safe_branch }}.tar
+          target: /tmp/
+
       - name: Deploy SSL certificates
         if: matrix.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
@@ -128,29 +115,23 @@ jobs:
           username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
-            # Create certificates directory
             mkdir -p /home/ec2-user/certs
-            
-            # Deploy SSL certificate (if provided)
             if [ -n "${{ secrets[format('{0}_SSL_CERT', matrix.instance)] }}" ]; then
               echo "Deploying SSL certificate for feature branch..."
-              echo '${{ secrets[format('{0}_SSL_CERT', matrix.instance)] }}' > /home/ec2-user/certs/server.crt
+              echo "${{ secrets[format('{0}_SSL_CERT', matrix.instance)] }}" > /home/ec2-user/certs/server.crt
               chmod 644 /home/ec2-user/certs/server.crt
             else
               echo "No SSL certificate provided"
             fi
-            
-            # Deploy SSL private key (if provided)
             if [ -n "${{ secrets[format('{0}_SSL_KEY', matrix.instance)] }}" ]; then
               echo "Deploying SSL private key for feature branch..."
-              echo '${{ secrets[format('{0}_SSL_KEY', matrix.instance)] }}' > /home/ec2-user/certs/server.key
+              echo "${{ secrets[format('{0}_SSL_KEY', matrix.instance)] }}" > /home/ec2-user/certs/server.key
               chmod 600 /home/ec2-user/certs/server.key
             else
               echo "No SSL private key provided"
             fi
-            
             echo "SSL certificate deployment completed"
-            
+
       - name: Update Nginx configuration
         if: matrix.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
@@ -161,88 +142,71 @@ jobs:
           script: |
             branch="${{ github.event.inputs.branch }}"
             safe_branch="${{ steps.prepare.outputs.safe_branch }}"
+            domain="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}"
             nginx_location="/test/$branch"
-            
             echo "Adding Nginx configuration for feature branch: $branch"
             echo "Safe branch name: $safe_branch"
             echo "Nginx location: $nginx_location"
-            
-            # Backup the current main config
             sudo cp /etc/nginx/conf.d/location-tracker-main.conf /tmp/nginx-main-backup-$safe_branch.conf
-            
-            # Check if main config exists
             if [ ! -f /etc/nginx/conf.d/location-tracker-main.conf ]; then
               echo "ERROR: Main nginx configuration not found. Deploy main branch first."
               exit 1
             fi
-            
-            # Remove any existing feature branch locations to avoid duplicates
-            sudo sed -i "/# Feature branch: $branch/,/location $nginx_location\/ws/ { d; }" /etc/nginx/conf.d/location-tracker-main.conf
-            
-            # Add feature branch locations to HTTP server block
-            if grep -q "listen 80;" /etc/nginx/conf.d/location-tracker-main.conf; then
-              sudo sed -i "/listen 80;/,/server {/ {
-                /# Main application root/i\\
-                # Feature branch: $branch\\
-                location $nginx_location/ {\\
-                    proxy_pass http://127.0.0.1:8081/;\\
-                    proxy_http_version 1.1;\\
-                    proxy_set_header Upgrade \$http_upgrade;\\
-                    proxy_set_header Connection 'upgrade';\\
-                    proxy_set_header Host \$host;\\
-                    proxy_set_header X-Real-IP \$remote_addr;\\
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;\\
-                    proxy_set_header X-Forwarded-Proto \$scheme;\\
-                    proxy_cache_bypass \$http_upgrade;\\
-                }\\
-                \\
-                location $nginx_location/ws {\\
-                    proxy_pass http://127.0.0.1:8081/ws;\\
-                    proxy_http_version 1.1;\\
-                    proxy_set_header Upgrade \$http_upgrade;\\
-                    proxy_set_header Connection \"Upgrade\";\\
-                    proxy_set_header Host \$host;\\
-                    proxy_set_header X-Real-IP \$remote_addr;\\
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;\\
-                    proxy_set_header X-Forwarded-Proto \$scheme;\\
-                }\\
-              }" /etc/nginx/conf.d/location-tracker-main.conf
+            sudo sed -i "/# Feature branch: $safe_branch/,/location $nginx_location\\/ws/ { d; }" /etc/nginx/conf.d/location-tracker-main.conf
+            sudo tee -a /etc/nginx/conf.d/location-tracker-main.conf > /dev/null <<'EOF'
+            # Feature branch: $safe_branch
+            location $nginx_location/ {
+                proxy_pass http://127.0.0.1:8081/;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection 'upgrade';
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                proxy_cache_bypass $http_upgrade;
+            }
+
+            location $nginx_location/ws {
+                proxy_pass http://127.0.0.1:8081/ws;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection "Upgrade";
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+            }
+            EOF
+            if [ -f /etc/ssl/certs/location-tracker.crt ] && [ -f /etc/ssl/private/location-tracker.key ]; then
+              echo "SSL certificates found, configuring HTTPS for feature branch..."
+              sudo tee -a /etc/nginx/conf.d/location-tracker-main.conf > /dev/null <<'EOF'
+              # Feature branch HTTPS: $safe_branch
+              location $nginx_location/ {
+                  proxy_pass http://127.0.0.1:8081/;
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade $http_upgrade;
+                  proxy_set_header Connection 'upgrade';
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+                  proxy_cache_bypass $http_upgrade;
+              }
+
+              location $nginx_location/ws {
+                  proxy_pass http://127.0.0.1:8081/ws;
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade $http_upgrade;
+                  proxy_set_header Connection "Upgrade";
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+              }
+              EOF
             fi
-            
-            # Add feature branch locations to HTTPS server block if it exists
-            if grep -q "listen 443 ssl" /etc/nginx/conf.d/location-tracker-main.conf; then
-              sudo sed -i "/listen 443 ssl/,/server {/ {
-                /# Main application root/i\\
-                # Feature branch: $branch\\
-                location $nginx_location/ {\\
-                    proxy_pass http://127.0.0.1:8081/;\\
-                    proxy_http_version 1.1;\\
-                    proxy_set_header Upgrade \$http_upgrade;\\
-                    proxy_set_header Connection 'upgrade';\\
-                    proxy_set_header Host \$host;\\
-                    proxy_set_header X-Real-IP \$remote_addr;\\
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;\\
-                    proxy_set_header X-Forwarded-Proto \$scheme;\\
-                    proxy_cache_bypass \$http_upgrade;\\
-                }\\
-                \\
-                location $nginx_location/ws {\\
-                    proxy_pass http://127.0.0.1:8081/ws;\\
-                    proxy_http_version 1.1;\\
-                    proxy_set_header Upgrade \$http_upgrade;\\
-                    proxy_set_header Connection \"Upgrade\";\\
-                    proxy_set_header Host \$host;\\
-                    proxy_set_header X-Real-IP \$remote_addr;\\
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;\\
-                    proxy_set_header X-Forwarded-Proto \$scheme;\\
-                }\\
-              }" /etc/nginx/conf.d/location-tracker-main.conf
-            fi
-            
-            # Clean up stale feature branch configs
             sudo find /etc/nginx/conf.d -type f -name 'location-tracker-*.conf' ! -name "location-tracker-main.conf" -exec rm {} \;
-            
-            # Test nginx configuration
             echo "Testing nginx configuration..."
             if sudo nginx -t; then
               sudo systemctl reload nginx
@@ -254,7 +218,7 @@ jobs:
               sudo nginx -t
               exit 1
             fi
-            
+
       - name: Load and start Docker container
         if: matrix.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
@@ -266,15 +230,10 @@ jobs:
             branch="${{ github.event.inputs.branch }}"
             safe_branch="${{ steps.prepare.outputs.safe_branch }}"
             container_name="location-tracker-${safe_branch}"
-            
             echo "Loading and starting Docker container: $container_name"
-            
-            # Load Docker image
             if [ -f "/tmp/location-tracker-${safe_branch}.tar" ]; then
               echo "Loading Docker image from tar file..."
               docker load < /tmp/location-tracker-${safe_branch}.tar
-              
-              # Verify image was loaded
               if docker images | grep -q "location-tracker.*${safe_branch}"; then
                 echo "Docker image loaded successfully"
               else
@@ -286,8 +245,6 @@ jobs:
               ls -la /tmp/location-tracker-*.tar || echo "No tar files found"
               exit 1
             fi
-            
-            # Start the container (removed port 8444)
             echo "Starting Docker container..."
             docker run -d \
               --name $container_name \
@@ -305,12 +262,8 @@ jobs:
               -e DOMAIN="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}" \
               -e AUTO_TLS=false \
               location-tracker:${safe_branch}
-            
-            # Wait for container to start
             echo "Waiting for container to start..."
             sleep 20
-            
-            # Verify container is running
             if docker ps --format '{{.Names}}' | grep -q "^${container_name}$"; then
               echo "Container started successfully: $container_name"
               docker ps | grep $container_name
@@ -322,10 +275,8 @@ jobs:
               docker logs $container_name || echo "Failed to get logs"
               exit 1
             fi
-            
-            # Clean up tar file
             rm -f /tmp/location-tracker-${safe_branch}.tar
-            
+
       - name: Health check and final verification
         if: matrix.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
@@ -337,25 +288,16 @@ jobs:
             branch="${{ github.event.inputs.branch }}"
             safe_branch="${{ steps.prepare.outputs.safe_branch }}"
             container_name="location-tracker-${safe_branch}"
-            
             echo "=== Final Health Check ==="
-            
-            # Check container logs
             echo "Recent container logs:"
             docker logs --tail 20 $container_name
-            
-            # Test HTTP health endpoint
             echo "Testing health endpoint..."
             max_attempts=5
             attempt=1
-            
             while [ $attempt -le $max_attempts ]; do
               echo "HTTP health check attempt $attempt/$max_attempts..."
-              
               if curl -f -s http://localhost:8081/api/health; then
                 echo "HTTP health check PASSED"
-                
-                # Display success information
                 echo "=== Deployment Successful ==="
                 echo "Feature branch: $branch"
                 echo "Container: $container_name"
@@ -365,12 +307,9 @@ jobs:
                 else
                   echo "Public URL: http://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch"
                 fi
-                
-                # Show container status
                 echo "Container status:"
                 docker ps | head -1
                 docker ps | grep $container_name
-                
                 exit 0
               else
                 echo "HTTP health check failed (attempt $attempt/$max_attempts)"
@@ -379,11 +318,8 @@ jobs:
                   sleep 10
                 fi
               fi
-              
               attempt=$((attempt + 1))
             done
-            
-            # If we get here, all health checks failed
             echo "ERROR: All health checks failed"
             echo "Container status:"
             docker ps -a | grep $container_name
