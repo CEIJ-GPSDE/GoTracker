@@ -166,7 +166,6 @@ jobs:
             server {
                 listen 80;
                 server_name $domain;
-
                 location $nginx_location/ {
                     proxy_pass http://127.0.0.1:8081/;
                     proxy_http_version 1.1;
@@ -197,7 +196,6 @@ jobs:
             }
             # End feature branch: $safe_branch
             EOF
-            
             # Sync and verify HTTP block was written
             sync
             echo "HTTP configuration written, verifying..."
@@ -316,7 +314,6 @@ jobs:
               exit 1
             fi
             echo "Server name count verified: $server_count entries"
-            
             # Verify ports are listening
             echo "Checking listening ports..."
             if sudo netstat -tuln | grep -q ":80 "; then
@@ -374,7 +371,6 @@ jobs:
             safe_branch="${{ steps.prepare.outputs.safe_branch }}"
             container_name="location-tracker-${safe_branch}"
             echo "Loading and starting Docker container: $container_name"
-            
             if [ -f "/tmp/location-tracker-${safe_branch}.tar" ]; then
               echo "Loading Docker image from tar file..."
               docker load < /tmp/location-tracker-${safe_branch}.tar
@@ -388,9 +384,9 @@ jobs:
               echo "ERROR: Docker image tar file not found"
               ls -la /tmp/location-tracker-*.tar || echo "No tar files found"
               exit 1
-            fi
-            
+            fi         
             echo "Starting Docker container with extensive debugging..."
+
             docker run -d \
               --name $container_name \
               --restart unless-stopped \
@@ -493,7 +489,6 @@ jobs:
             
             echo "Waiting for container to start..."
             sleep 30
-            
             if docker ps --format '{{.Names}}' | grep -q "^${container_name}$"; then
               echo "Container started successfully: $container_name"
               docker ps | grep $container_name
@@ -529,7 +524,6 @@ jobs:
                 exit 1
               fi
             fi
-            
             rm -f /tmp/location-tracker-${safe_branch}.tar
 
       - name: Health check and final verification

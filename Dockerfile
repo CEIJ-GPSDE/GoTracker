@@ -18,7 +18,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-X main.Version=${VERSION}" -o a
 FROM alpine:latest
 
 # Install ca-certificates for HTTPS requests and postgresql-client for health checks
-RUN apk --no-cache add ca-certificates postgresql-client gettext
+RUN apk --no-cache add ca-certificates postgresql-client
 
 WORKDIR /root/
 

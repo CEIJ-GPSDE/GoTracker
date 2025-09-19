@@ -1,0 +1,132 @@
+name: Cleanup Feature Branch
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Feature branch to cleanup"
+        required: true
+        type: string
+      cleanup_on_EC2_1:
+        description: "Cleanup on EC2_1"
+        type: boolean
+        default: false
+      cleanup_on_EC2_2:
+        description: "Cleanup on EC2_2"
+        type: boolean
+        default: false
+      cleanup_on_EC2_3:
+        description: "Cleanup on EC2_3"
+        type: boolean
+        default: false
+      cleanup_on_EC2_4:
+        description: "Cleanup on EC2_4"
+        type: boolean
+        default: false
+
+jobs:
+  cleanup-feature:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - instance: EC2_1
+            cleanup: ${{ github.event.inputs.cleanup_on_EC2_1 }}
+          - instance: EC2_2
+            cleanup: ${{ github.event.inputs.cleanup_on_EC2_2 }}
+          - instance: EC2_3
+            cleanup: ${{ github.event.inputs.cleanup_on_EC2_3 }}
+          - instance: EC2_4
+            cleanup: ${{ github.event.inputs.cleanup_on_EC2_4 }}
+      fail-fast: false
+    steps:
+      - name: Skip unchecked instances
+        if: matrix.cleanup != 'true'
+        run: echo "Skipping ${{ matrix.instance }} - not selected for cleanup"
+        
+      - name: Set safe branch name
+        if: matrix.cleanup == 'true'
+        id: prepare
+        run: |
+          branch="${{ github.event.inputs.branch }}"
+          safe_branch=$(echo "$branch" | tr '/' '-' | tr '[:upper:]' '[:lower:]')
+          echo "safe_branch=$safe_branch" >> $GITHUB_OUTPUT
+          echo "Branch: $branch -> Safe: $safe_branch"
+          
+      - name: Cleanup feature branch deployment
+        if: matrix.cleanup == 'true'
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
+          username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
+          key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
+          script: |
+            branch="${{ github.event.inputs.branch }}"
+            safe_branch="${{ steps.prepare.outputs.safe_branch }}"
+            container_name="location-tracker-${safe_branch}"
+            nginx_location="/test/$branch"
+            
+            echo "=== Cleaning up feature branch: $branch ==="
+            echo "Container name: $container_name"
+            echo "Nginx location: $nginx_location"
+            
+            # Stop and remove container
+            if docker ps -a --format '{{.Names}}' | grep -q "^${container_name}$"; then
+              echo "Stopping and removing container: $container_name"
+              docker stop $container_name || echo "Container was not running"
+              docker rm $container_name || echo "Failed to remove container"
+            else
+              echo "No container found: $container_name"
+            fi
+            
+            # Remove Docker image
+            if docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "^location-tracker:${safe_branch}$"; then
+              echo "Removing Docker image: location-tracker:${safe_branch}"
+              docker rmi location-tracker:${safe_branch} || echo "Failed to remove image"
+            else
+              echo "No Docker image found: location-tracker:${safe_branch}"
+            fi
+            
+            # Remove nginx configuration
+            if [ -f "/etc/nginx/conf.d/location-tracker-${safe_branch}.conf" ]; then
+              echo "Removing nginx config file: /etc/nginx/conf.d/location-tracker-${safe_branch}.conf"
+              sudo rm -f /etc/nginx/conf.d/location-tracker-${safe_branch}.conf
+            fi
+            
+            # Remove feature branch locations from main nginx config
+            if [ -f "/etc/nginx/conf.d/location-tracker-main.conf" ]; then
+              echo "Removing feature branch locations from main nginx config..."
+              
+              # Create backup
+              sudo cp /etc/nginx/conf.d/location-tracker-main.conf /tmp/nginx-main-backup-cleanup-$safe_branch.conf
+              
+              # Remove the feature branch location blocks
+              sudo sed -i "/# Feature branch: $branch/,/^$/d" /etc/nginx/conf.d/location-tracker-main.conf
+              
+              # Test nginx configuration
+              if sudo nginx -t; then
+                sudo systemctl reload nginx
+                echo "Nginx configuration updated successfully"
+                rm -f /tmp/nginx-main-backup-cleanup-$safe_branch.conf
+              else
+                echo "ERROR: Nginx configuration test failed after cleanup"
+                echo "Restoring backup..."
+                sudo cp /tmp/nginx-main-backup-cleanup-$safe_branch.conf /etc/nginx/conf.d/location-tracker-main.conf
+                sudo systemctl reload nginx
+                exit 1
+              fi
+            else
+              echo "Main nginx config not found"
+            fi
+            
+            # Clean up any leftover files
+            rm -f /tmp/location-tracker-${safe_branch}.tar
+            rm -f /tmp/nginx-*-backup-${safe_branch}.conf
+            
+            echo "=== Cleanup completed for $branch ==="
+            
+            # Show remaining containers and images
+            echo "Remaining location-tracker containers:"
+            docker ps -a | grep location-tracker || echo "None"
+            echo "Remaining location-tracker images:"
+            docker images | grep location-tracker || echo "None"

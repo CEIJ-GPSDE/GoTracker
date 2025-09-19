@@ -2,11 +2,10 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"database/sql"
 	"encoding/json"
+	"flag"
 	"fmt"
-	"io"
 	"log"
 	"math/rand"
 	"net"
@@ -14,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -22,9 +22,9 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
-        _ "github.com/lib/pq"
+	_ "github.com/lib/pq"
 )
-// Configuration from environment variables
+
 type Config struct {
 	DBHost     string
 	DBName     string
@@ -33,24 +33,50 @@ type Config struct {
 	DBSSLMode  string
 	Port       string
 	UDPPort    string
-	LogFile    string
-	CertFile   string
-	KeyFile    string
+	AWSRegion  string
+	AWSMapName string
+	AWSApiKey  string
 }
 
 func loadConfig() *Config {
-	return &Config{
-		DBHost:     getEnv("DB_HOST", "localhost"),
-		DBName:     getEnv("DB_NAME", "locationtracker"),
-		DBUser:     getEnv("DB_USER", "postgres"),
-		DBPassword: getEnv("DB_PASSWORD", "password"),
-		DBSSLMode:  getEnv("DB_SSLMODE", "disable"),
-		Port:       getEnv("PORT", "80"),
-		UDPPort:    getEnv("UDP_PORT", "5051"),
-		LogFile:    getEnv("LOG_FILE", ""),
-		CertFile:   getEnv("CERT_FILE", "certs/server.crt"),
-		KeyFile:    getEnv("KEY_FILE", "certs/server.key"),
+
+	config := &Config{}
+
+	// Load from environment variables first
+	config.DBHost = getEnv("DB_HOST", "localhost")
+	config.DBName = getEnv("DB_NAME", "locationtracker")
+	config.DBUser = getEnv("DB_USER", "postgres")
+	config.DBPassword = getEnv("DB_PASSWORD", "password")
+	config.DBSSLMode = getEnv("DB_SSLMODE", "disable")
+	config.Port = getEnv("PORT", "8080")
+	config.UDPPort = getEnv("UDP_PORT", "5051")
+	config.AWSRegion = getEnv("AWS_REGION", "us-east-1")
+	config.AWSMapName = getEnv("AWS_MAP_NAME", "MyMap")
+	config.AWSApiKey = getEnv("AWS_API_KEY", "")
+
+	// Override with command line flags if provided
+	flag.StringVar(&config.DBHost, "db-host", config.DBHost, "Database host")
+	flag.StringVar(&config.DBName, "db-name", config.DBName, "Database name")
+	flag.StringVar(&config.DBUser, "db-user", config.DBUser, "Database user")
+	flag.StringVar(&config.DBPassword, "db-password", config.DBPassword, "Database password")
+	flag.StringVar(&config.DBSSLMode, "db-sslmode", config.DBSSLMode, "Database SSL mode")
+	flag.StringVar(&config.Port, "port", config.Port, "HTTP server port")
+	flag.StringVar(&config.UDPPort, "udp-port", config.UDPPort, "UDP listener port")
+	flag.StringVar(&config.AWSRegion, "aws-region", config.AWSRegion, "AWS Region")
+	flag.StringVar(&config.AWSMapName, "aws-map-name", config.AWSMapName, "Amazon Location map name")
+	flag.StringVar(&config.AWSApiKey, "aws-api-key", config.AWSApiKey, "Amazon Location Service API Key")
+
+	// Add version flag
+	version := flag.Bool("version", false, "Show version information")
+	flag.Parse()
+
+	if *version {
+		fmt.Println("Location Tracker v1.0.0")
+		fmt.Printf("Built with Go %s\n", "1.21+")
+		os.Exit(0)
 	}
+
+	return config
 }
 
 func getEnv(key, defaultValue string) string {
@@ -69,7 +95,7 @@ func NewDatabase(config *Config) (*Database, error) {
 	connStr := fmt.Sprintf(
 		"host=%s user=%s password=%s dbname=%s sslmode=%s",
 		config.DBHost, config.DBUser, config.DBPassword,
-		config.DBName, getEnv("DB_SSLMODE", "require"),
+		config.DBName, config.DBSSLMode,
 	)
 
 	db, err := sql.Open("postgres", connStr)
@@ -332,19 +358,19 @@ func (h *WebSocketHub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	// Send periodic pings
-
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
-		for range ticker.C {
-			conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				return
+		for {
+			select {
+			case <-ticker.C:
+				conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+				if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+					return
+				}
 			}
 		}
 	}()
-
-	// block main or wait for signals...
 }
 
 func (h *WebSocketHub) Broadcast(data interface{}) {
@@ -355,7 +381,7 @@ func (h *WebSocketHub) Broadcast(data interface{}) {
 	}
 }
 
-// UDP Sniffer
+// UDP Sniffer (keeping same implementation)
 type UDPSniffer struct {
 	db    *Database
 	wsHub *WebSocketHub
@@ -415,7 +441,7 @@ func (us *UDPSniffer) startListening() {
 	log.Printf("Started UDP listening on port %s", us.port)
 }
 
-func (us *UDPSniffer) handlePackets(_ context.Context) {
+func (us *UDPSniffer) handlePackets(ctx context.Context) {
 	if us.conn == nil {
 		return
 	}
@@ -445,60 +471,37 @@ func (us *UDPSniffer) handlePackets(_ context.Context) {
 }
 
 func (us *UDPSniffer) parsePacket(data []byte) *LocationPacket {
-    // Log raw packet for debugging
-    log.Printf("Raw UDP packet: %s", string(data))
 
-    // Convert to string and trim whitespace
-    parts := strings.TrimSpace(string(data))
-    if len(parts) < 10 { // Basic validation
-        log.Printf("Packet too short: %s", parts)
-        return nil
-    }
+	// Simple parsing - expecting format: "deviceID,latitude,longitude"
+	str := string(data)
+	parts := strings.Split(str, ",")
+	if len(parts) != 3 {
+		log.Printf("Invalid packet format: %s", str)
+		return nil
+	}
 
-    // Split by comma
-    fields := strings.Split(parts, ",")
-    if len(fields) != 3 {
-        log.Printf("Invalid packet format, expected 'deviceID,latitude,longitude', got %d fields: %v", len(fields), fields)
-        return nil
-    }
+	deviceID := strings.TrimSpace(parts[0])
+	latStr := strings.TrimSpace(parts[1])
+	lonStr := strings.TrimSpace(parts[2])
 
-    // Parse fields
-    deviceID := strings.TrimSpace(fields[0])
-    latStr := strings.TrimSpace(fields[1])
-    lngStr := strings.TrimSpace(fields[2])
+	latitude, err := strconv.ParseFloat(latStr, 64)
+	if err != nil {
+		log.Printf("Invalid latitude: %s (%v)", latStr, err)
+		return nil
+	}
 
-    // Parse latitude and longitude
-    lat, err := strconv.ParseFloat(latStr, 64)
-    if err != nil {
-        log.Printf("Failed to parse latitude '%s': %v", latStr, err)
-        return nil
-    }
-    lng, err := strconv.ParseFloat(lngStr, 64)
-    if err != nil {
-        log.Printf("Failed to parse longitude '%s': %v", lngStr, err)
-        return nil
-    }
+	longitude, err := strconv.ParseFloat(lonStr, 64)
+	if err != nil {
+		log.Printf("Invalid longitude: %s (%v)", lonStr, err)
+		return nil
+	}
 
-    // Validate coordinates
-    if lat < -90 || lat > 90 || lng < -180 || lng > 180 {
-        log.Printf("Invalid coordinates: lat=%f, lng=%f", lat, lng)
-        return nil
-    }
-
-    // Validate deviceID
-    if deviceID == "" {
-        log.Printf("Empty deviceID in packet: %s", parts)
-        return nil
-    }
-
-    log.Printf("Parsed packet: DeviceID=%s, Lat=%f, Lng=%f", deviceID, lat, lng)
-
-    return &LocationPacket{
-        DeviceID:  deviceID,
-        Latitude:  lat,
-        Longitude: lng,
-        Timestamp: time.Now(),
-    }
+	return &LocationPacket{
+		DeviceID:  deviceID,
+		Latitude:  latitude,
+		Longitude: longitude,
+		Timestamp: time.Now().UTC(),
+	}
 }
 
 
@@ -511,54 +514,52 @@ func (us *UDPSniffer) storeLocation(packet *LocationPacket) error {
 	return err
 }
 
-// API Server
 type APIServer struct {
 	db       *Database
 	wsHub    *WebSocketHub
-	server   *http.Server
 	leaderEl *LeaderElection
-	port     string
+	config   *Config
+	server   *http.Server
 }
 
-func NewAPIServer(db *Database, wsHub *WebSocketHub, leaderEl *LeaderElection, port string) *APIServer {
+func NewAPIServer(db *Database, wsHub *WebSocketHub, leaderEl *LeaderElection, config *Config) *APIServer {
 	return &APIServer{
 		db:       db,
 		wsHub:    wsHub,
 		leaderEl: leaderEl,
-		port:     port,
+		config:   config,
 		server: &http.Server{
-			Addr:         ":" + port,
+			Addr:         ":" + config.Port,
 			ReadTimeout:  15 * time.Second,
 			WriteTimeout: 15 * time.Second,
 		},
 	}
 }
 
+func (api *APIServer) createRouter() *mux.Router {
+	r := mux.NewRouter()
+
+	// API routes
+	r.HandleFunc("/api/health", api.healthHandler).Methods("GET")
+	r.HandleFunc("/api/stats", api.statsHandler).Methods("GET")
+	r.HandleFunc("/api/locations/latest", api.latestLocationHandler).Methods("GET")
+	r.HandleFunc("/api/locations/history", api.locationHistoryHandler).Methods("GET")
+	r.HandleFunc("/api/config", api.configHandler).Methods("GET")
+	r.HandleFunc("/ws", api.wsHub.HandleWebSocket)
+
+	// Static files
+	r.PathPrefix("/").Handler(http.FileServer(http.Dir("./static/")))
+
+	return r
+}
+
 func (api *APIServer) Run(ctx context.Context) {
-	r := mux.NewRouter()
-
-	// API routes
-	r.HandleFunc("/api/health", api.healthHandler).Methods("GET")
-	r.HandleFunc("/api/health/udp", api.udpHealthHandler).Methods("GET")
-	r.HandleFunc("/api/health/db", api.dbHealthHandler).Methods("GET")
-	r.HandleFunc("/api/stats", api.statsHandler).Methods("GET")
-	r.HandleFunc("/api/locations/latest", api.latestLocationHandler).Methods("GET")
-	r.HandleFunc("/api/locations/history", api.locationHistoryHandler).Methods("GET")
-	r.HandleFunc("/api/locations/device/{deviceId}", api.deviceLocationHistoryHandler).Methods("GET")
-	r.HandleFunc("/ws", api.wsHub.HandleWebSocket)
-
-	// Static files (serve built frontend if present)
-	r.PathPrefix("/").Handler(http.FileServer(http.Dir("./static/")))
-
-	// CORS middleware
-	r.Use(corsMiddleware)
-
-	api.server.Handler = r
+	api.server.Handler = api.createRouter()
 
 	go func() {
-		log.Printf("API server starting on port %s", api.server.Addr)
+		log.Printf("HTTP server starting on port %s", api.config.Port)
 		if err := api.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Printf("API server error: %v", err)
+			log.Printf("HTTP server error: %v", err)
 		}
 	}()
 
@@ -568,64 +569,8 @@ func (api *APIServer) Run(ctx context.Context) {
 	defer cancel()
 
 	if err := api.server.Shutdown(shutdownCtx); err != nil {
-		log.Printf("API server shutdown error: %v", err)
+		log.Printf("HTTP server shutdown error: %v", err)
 	}
-}
-
-func (api *APIServer) RunHTTPS(ctx context.Context, certFile, keyFile string) {
-	r := mux.NewRouter()
-
-	// API routes
-	r.HandleFunc("/api/health", api.healthHandler).Methods("GET")
-	r.HandleFunc("/api/health/udp", api.udpHealthHandler).Methods("GET")
-	r.HandleFunc("/api/health/db", api.dbHealthHandler).Methods("GET")
-	r.HandleFunc("/api/stats", api.statsHandler).Methods("GET")
-	r.HandleFunc("/api/locations/latest", api.latestLocationHandler).Methods("GET")
-	r.HandleFunc("/api/locations/history", api.locationHistoryHandler).Methods("GET")
-	r.HandleFunc("/api/locations/device/{deviceId}", api.deviceLocationHistoryHandler).Methods("GET")
-	r.HandleFunc("/ws", api.wsHub.HandleWebSocket)
-
-	r.PathPrefix("/").Handler(http.FileServer(http.Dir("./static/")))
-
-	r.Use(corsMiddleware)
-
-	api.server.Handler = r
-
-	// TLS config
-	api.server.TLSConfig = &tls.Config{
-		MinVersion: tls.VersionTLS12,
-	}
-
-	go func() {
-		log.Printf("HTTPS server starting on port %s", api.port)
-		if err := api.server.ListenAndServeTLS(certFile, keyFile); err != nil && err != http.ErrServerClosed {
-			log.Printf("HTTPS server error: %v", err)
-		}
-	}()
-
-	<-ctx.Done()
-
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	if err := api.server.Shutdown(shutdownCtx); err != nil {
-		log.Printf("HTTPS server shutdown error: %v", err)
-	}
-}
-
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
 }
 
 func (api *APIServer) healthHandler(w http.ResponseWriter, r *http.Request) {
@@ -634,38 +579,10 @@ func (api *APIServer) healthHandler(w http.ResponseWriter, r *http.Request) {
 		"status":      "healthy",
 		"timestamp":   time.Now(),
 		"instance_id": api.leaderEl.instanceID,
+		"version":     "1.0.0",
 	})
 }
 
-func (api *APIServer) udpHealthHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"is_leader":   api.leaderEl.IsLeader(),
-		"instance_id": api.leaderEl.instanceID,
-		"timestamp":   time.Now(),
-	})
-}
-
-func (api *APIServer) dbHealthHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	err := api.db.Ping()
-	if err != nil {
-		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"status": "unhealthy",
-			"error":  err.Error(),
-		})
-		return
-	}
-
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":    "healthy",
-		"timestamp": time.Now(),
-	})
-}
-
-// statsHandler returns live stats used by the frontend
 func (api *APIServer) statsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -673,26 +590,13 @@ func (api *APIServer) statsHandler(w http.ResponseWriter, r *http.Request) {
 	var activeDevices int
 	var lastUpdate sql.NullTime
 
-	err := api.db.QueryRow("SELECT COUNT(*) FROM locations").Scan(&totalLocations)
-	if err != nil {
-		log.Printf("Error counting locations: %v", err)
-	}
-
-	err = api.db.QueryRow("SELECT COUNT(DISTINCT device_id) FROM locations").Scan(&activeDevices)
-	if err != nil {
-		log.Printf("Error counting active devices: %v", err)
-	}
-
-	err = api.db.QueryRow("SELECT MAX(timestamp) FROM locations").Scan(&lastUpdate)
-	if err != nil {
-		log.Printf("Error getting last update: %v", err)
-	}
+	api.db.QueryRow("SELECT COUNT(*) FROM locations").Scan(&totalLocations)
+	api.db.QueryRow("SELECT COUNT(DISTINCT device_id) FROM locations").Scan(&activeDevices)
+	api.db.QueryRow("SELECT MAX(timestamp) FROM locations").Scan(&lastUpdate)
 
 	var lastUpdateStr string
 	if lastUpdate.Valid {
 		lastUpdateStr = lastUpdate.Time.Format(time.RFC3339)
-	} else {
-		lastUpdateStr = ""
 	}
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -700,6 +604,15 @@ func (api *APIServer) statsHandler(w http.ResponseWriter, r *http.Request) {
 		"total_locations":   totalLocations,
 		"active_devices":    activeDevices,
 		"last_update":       lastUpdateStr,
+	})
+}
+
+func (api *APIServer) configHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"region":  api.config.AWSRegion,
+		"mapName": api.config.AWSMapName,
+		"apiKey":  api.config.AWSApiKey,
 	})
 }
 
@@ -759,43 +672,6 @@ func (api *APIServer) locationHistoryHandler(w http.ResponseWriter, r *http.Requ
 	json.NewEncoder(w).Encode(locations)
 }
 
-func (api *APIServer) deviceLocationHistoryHandler(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	deviceId := vars["deviceId"]
-
-	limit := r.URL.Query().Get("limit")
-	if limit == "" {
-		limit = "50"
-	}
-
-	query := fmt.Sprintf(`
-		SELECT device_id, latitude, longitude, timestamp
-		FROM locations
-		WHERE device_id = $1
-		ORDER BY timestamp DESC
-		LIMIT %s
-	`, limit)
-
-	rows, err := api.db.Query(query, deviceId)
-	if err != nil {
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
-	defer rows.Close()
-
-	var locations []LocationPacket
-	for rows.Next() {
-		var location LocationPacket
-		if err := rows.Scan(&location.DeviceID, &location.Latitude, &location.Longitude, &location.Timestamp); err != nil {
-			continue
-		}
-		locations = append(locations, location)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(locations)
-}
-
 // Main Application
 type App struct {
 	config         *Config
@@ -809,17 +685,6 @@ type App struct {
 func NewApp() (*App, error) {
 	config := loadConfig()
 
-	// Setup logging to file if requested
-	if config.LogFile != "" {
-		f, err := os.OpenFile(config.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-		if err != nil {
-			log.Printf("Failed to open log file %s: %v", config.LogFile, err)
-		} else {
-			mw := io.MultiWriter(os.Stdout, f)
-			log.SetOutput(mw)
-		}
-	}
-
 	db, err := NewDatabase(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize database: %w", err)
@@ -832,7 +697,7 @@ func NewApp() (*App, error) {
 	wsHub := NewWebSocketHub()
 	leaderElection := NewLeaderElection(db)
 	udpSniffer := NewUDPSniffer(db, wsHub, config.UDPPort)
-	apiServer := NewAPIServer(db, wsHub, leaderElection, config.Port)
+	apiServer := NewAPIServer(db, wsHub, leaderElection, config)
 
 	return &App{
 		config:         config,
@@ -869,25 +734,16 @@ func (app *App) Run() error {
 		app.udpSniffer.Run(ctx, app.leaderElection)
 	}()
 
-	// Start API server (choose HTTPS if certs exist)
+	// Start API server
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		// if cert files exist, start HTTPS server
-		if _, err := os.Stat(app.config.CertFile); err == nil {
-			if _, errK := os.Stat(app.config.KeyFile); errK == nil {
-				log.Println("Certificates found, starting HTTPS server")
-				app.apiServer.RunHTTPS(ctx, app.config.CertFile, app.config.KeyFile)
-				return
-			}
-		}
-		log.Println("No certificates found, starting HTTP server")
 		app.apiServer.Run(ctx)
 	}()
 
 	// Wait for interrupt signal
 	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
 	<-stop
 
 	log.Println("Shutting down application...")
