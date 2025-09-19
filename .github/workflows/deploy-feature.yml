@@ -167,19 +167,7 @@ jobs:
             echo "Safe branch name: $safe_branch"
             echo "Nginx location: $nginx_location"
             
-            # Remove existing configuration for this feature branch if it exists
-            sudo rm -f /etc/nginx/conf.d/location-tracker-${safe_branch}.conf
-            
-            # Create a separate config file for this feature branch
-            sudo tee /etc/nginx/conf.d/location-tracker-${safe_branch}.conf > /dev/null <<EOF
-            # Feature branch: ${branch}
-            # This file adds locations to the main server blocks
-            
-            # Add to HTTP server block (modify existing main config)
-            EOF
-            
-            # Add location blocks to the existing main nginx configuration
-            # First, backup the current config
+            # Backup the current main config
             sudo cp /etc/nginx/conf.d/location-tracker-main.conf /tmp/nginx-main-backup-$safe_branch.conf
             
             # Check if main config exists
@@ -188,9 +176,11 @@ jobs:
               exit 1
             fi
             
+            # Remove any existing feature branch locations to avoid duplicates
+            sudo sed -i "/# Feature branch: $branch/,/location $nginx_location\/ws/ { d; }" /etc/nginx/conf.d/location-tracker-main.conf
+            
             # Add feature branch locations to HTTP server block
             if grep -q "listen 80;" /etc/nginx/conf.d/location-tracker-main.conf; then
-              # Find the HTTP server block and add our locations before the main location
               sudo sed -i "/listen 80;/,/server {/ {
                 /# Main application root/i\\
                 # Feature branch: $branch\\
@@ -216,7 +206,6 @@ jobs:
                     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;\\
                     proxy_set_header X-Forwarded-Proto \$scheme;\\
                 }\\
-
               }" /etc/nginx/conf.d/location-tracker-main.conf
             fi
             
@@ -247,7 +236,6 @@ jobs:
                     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;\\
                     proxy_set_header X-Forwarded-Proto \$scheme;\\
                 }\\
-
               }" /etc/nginx/conf.d/location-tracker-main.conf
             fi
             
@@ -264,6 +252,9 @@ jobs:
               exit 1
             fi
             
+            # Clean up any stale feature branch configs
+            sudo find /etc/nginx/conf.d -type f -name 'location-tracker-*.conf' ! -name "location-tracker-main.conf" -exec rm {} \;
+                  
       - name: Load and start Docker container
         if: matrix.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
