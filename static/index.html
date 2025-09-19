@@ -7,48 +7,32 @@
     <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
     <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; overflow-x: hidden; } /* prevent horizontal overflow */
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
         }
 
         .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 20px;
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 20px;
         }
 
-        .header {
-            text-align: center;
-            color: white;
-            margin-bottom: 30px;
-        }
-
-        .header h1 {
-            font-size: 2.5rem;
-            margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        }
-
-        .header p {
-            font-size: 1.1rem;
-            opacity: 0.9;
-        }
+        .header { text-align: center; color: white; margin-bottom: 20px; }
+        .header h1 { font-size: 2.5rem; margin-bottom: 10px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }
+        .header p { font-size: 1.1rem; opacity: 0.9; }
 
         .dashboard {
             display: grid;
             grid-template-columns: 1fr 350px;
             gap: 20px;
-            height: calc(100vh - 180px);
-            min-height: 600px;
+            height: calc(100vh - 160px);
+            min-height: 0;
         }
+        .dashboard > * { min-height: 0; }
 
         .map-container {
             background: white;
@@ -56,11 +40,17 @@
             overflow: hidden;
             box-shadow: 0 20px 40px rgba(0,0,0,0.1);
             position: relative;
+            display: flex;
+            flex-direction: column;
+            min-height: 0; /* allow grid child to shrink */
+            height: 100%;
         }
 
         #map {
             height: 100%;
             width: 100%;
+            min-height: 240px; /* won't shrink beyond this */
+            display: block;
         }
 
         .map-overlay {
@@ -107,320 +97,128 @@
         }
 
         .sidebar {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        min-height: 0; /* allow shrinking inside grid */
         }
 
         .card {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            transition: transform 0.3s ease;
+        background: rgba(255,255,255,0.95);
+        backdrop-filter: blur(10px);
+        border-radius: 15px;
+        padding: 25px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        transition: transform 0.3s ease;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        }
+        .card:hover { transform: translateY(-5px); }
+
+        .card h3 { color: #374151; margin-bottom: 15px; font-size: 1.2rem; display:flex; align-items:center; gap:10px; }
+        .card-icon { width:24px; height:24px; border-radius:6px; display:flex; align-items:center; justify-content:center; color:white; font-size:14px;
+        background: linear-gradient(135deg, #667eea, #764ba2);
         }
 
-        .card:hover {
-            transform: translateY(-5px);
-        }
+        .location-info { flex: 1; overflow-y: auto; min-height: 0; } /* important: min-height:0 so it doesn't force parent's height */
+        .location-item { padding:15px; border:1px solid #e5e7eb; border-radius:10px; margin-bottom:10px; background:white; transition: all .3s ease; }
+        .location-item:hover { transform: translateX(5px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        .location-item.latest { background: linear-gradient(135deg,#ecfdf5,#d1fae5); border-color:#22c55e; animation: highlight 3s ease-in-out; }
+        @keyframes highlight { 0%,100%{opacity:1;} 50%{opacity:0.8;} }
 
-        .card h3 {
-            color: #374151;
-            margin-bottom: 15px;
-            font-size: 1.2rem;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
+        .device-id { font-weight:600; color:#374151; margin-bottom:8px; }
+        .coordinates { font-family: 'Courier New', monospace; color:#6b7280; font-size:.9rem; margin-bottom:5px; }
+        .timestamp { font-size:.8rem; color:#9ca3af; }
 
-        .card-icon {
-            width: 24px;
-            height: 24px;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            border-radius: 6px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 14px;
-        }
+        .controls .control-group { margin-bottom: 15px; }
+        .control-group label { display:block; margin-bottom:5px; font-weight:500; color:#374151; }
+        .control-group input, .control-group select { width:100%; padding:10px; border:1px solid #d1d5db; border-radius:8px; font-size:14px; background:white; }
+        .control-group input:focus, .control-group select:focus { outline:none; border-color:#667eea; box-shadow:0 0 0 3px rgba(102,126,234,0.1); }
 
-        .location-info {
-            flex: 1;
-            overflow-y: auto;
-        }
+        .btn { background: linear-gradient(135deg,#667eea,#764ba2); color:white; border:none; padding:12px 20px; border-radius:8px; font-weight:500; width:100%; cursor:pointer; }
+        .btn:hover { transform: translateY(-2px); box-shadow:0 5px 15px rgba(102,126,234,0.4); }
 
-        .location-item {
-            padding: 15px;
-            border: 1px solid #e5e7eb;
-            border-radius: 10px;
-            margin-bottom: 10px;
-            background: white;
-            transition: all 0.3s ease;
-        }
+        .stats { padding:20px; }
+        .stat-item { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid #e5e7eb; }
+        .stat-item:last-child { border-bottom:none; }
+        .stat-label { color:#6b7280; font-size:.9rem; }
+        .stat-value { font-weight:600; color:#374151; }
 
-        .location-item:hover {
-            transform: translateX(5px);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-        }
+        .loading { display:flex; align-items:center; justify-content:center; padding:40px; color:#6b7280; }
+        .spinner { width:20px; height:20px; border:2px solid #e5e7eb; border-top:2px solid #667eea; border-radius:50%; animation:spin 1s linear infinite; margin-right:10px; }
+        @keyframes spin { 0%{transform:rotate(0);} 100%{transform:rotate(360deg);} }
 
-        .location-item.latest {
-            background: linear-gradient(135deg, #ecfdf5, #d1fae5);
-            border-color: #22c55e;
-            animation: highlight 3s ease-in-out;
-        }
+        .error { color:#ef4444; background:#fef2f2; padding:10px; border-radius:8px; border:1px solid #fecaca; margin-bottom:15px; }
 
-        @keyframes highlight {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.8; }
-        }
-
-        .device-id {
-            font-weight: 600;
-            color: #374151;
-            margin-bottom: 8px;
-        }
-
-        .coordinates {
-            font-family: 'Courier New', monospace;
-            color: #6b7280;
-            font-size: 0.9rem;
-            margin-bottom: 5px;
-        }
-
-        .timestamp {
-            font-size: 0.8rem;
-            color: #9ca3af;
-        }
-
-        .controls {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-radius: 15px;
-            padding: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-        }
-
-        .control-group {
-            margin-bottom: 15px;
-        }
-
-        .control-group label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: 500;
-            color: #374151;
-        }
-
-        .control-group select,
-        .control-group input {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #d1d5db;
-            border-radius: 8px;
-            font-size: 14px;
-            background: white;
-        }
-
-        .control-group select:focus,
-        .control-group input:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-
-        .btn {
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-            border: none;
-            padding: 12px 20px;
-            border-radius: 8px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            width: 100%;
-        }
-
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-        }
-
-        .stats {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-radius: 15px;
-            padding: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-        }
-
-        .stat-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px 0;
-            border-bottom: 1px solid #e5e7eb;
-        }
-
-        .stat-item:last-child {
-            border-bottom: none;
-        }
-
-        .stat-label {
-            color: #6b7280;
-            font-size: 0.9rem;
-        }
-
-        .stat-value {
-            font-weight: 600;
-            color: #374151;
-        }
-
-        .loading {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 40px;
-            color: #6b7280;
-        }
-
-        .spinner {
-            width: 20px;
-            height: 20px;
-            border: 2px solid #e5e7eb;
-            border-top: 2px solid #667eea;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-right: 10px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .error {
-            color: #ef4444;
-            background: #fef2f2;
-            padding: 10px;
-            border-radius: 8px;
-            border: 1px solid #fecaca;
-            margin-bottom: 15px;
-        }
-
+        /* Responsive rules */
         @media (max-width: 1024px) {
-            .dashboard {
-                grid-template-columns: 1fr;
-                grid-template-rows: 60vh auto;
-            }
-            
-            .sidebar {
-                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-                display: grid;
-                gap: 20px;
-            }
+        .dashboard { grid-template-columns: 1fr; grid-template-rows: 60vh auto; height: auto; }
+        .sidebar { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+        .map-container { height: 60vh; }
         }
 
         @media (max-width: 768px) {
-            .container {
-                padding: 10px;
-            }
-            
-            .header h1 {
-                font-size: 2rem;
-            }
-            
-            .dashboard {
-                height: auto;
-                min-height: auto;
-            }
-            
-            .map-container {
-                height: 50vh;
-                min-height: 300px;
-            }
+        .container { padding: 10px; }
+        .header h1 { font-size: 2rem; }
+        .dashboard { height: auto; }
+        .map-container { height: 50vh; min-height: 300px; }
+        }
+        @media (orientation: landscape) {
+            .dashboard { height: calc(100vh - 120px); }
+            .map-container { min-height: 40vh; }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>🌐 Real-time Location Tracker</h1>
-            <p>Monitoring device locations with live updates</p>
-        </div>
-
-        <div class="dashboard">
-            <div class="map-container">
-                <div class="map-overlay">
-                    <div id="connection-status" class="status disconnected">
-                        <div class="status-dot"></div>
-                        <span>Connecting...</span>
-                    </div>
-                </div>
-                <div id="map"></div>
-            </div>
-
-            <div class="sidebar">
-                <div class="card location-info">
-                    <h3>
-                        <div class="card-icon">📍</div>
-                        Latest Locations
-                    </h3>
-                    <div id="locations-list">
-                        <div class="loading">
-                            <div class="spinner"></div>
-                            Loading locations...
-                        </div>
-                    </div>
-                </div>
-
-                <div class="card controls">
-                    <h3>
-                        <div class="card-icon">⚙️</div>
-                        Controls
-                    </h3>
-                    <div class="control-group">
-                        <label for="device-filter">Filter by Device:</label>
-                        <select id="device-filter">
-                            <option value="">All Devices</option>
-                        </select>
-                    </div>
-                    <div class="control-group">
-                        <label for="history-limit">History Limit:</label>
-                        <input type="number" id="history-limit" value="50" min="10" max="500">
-                    </div>
-                    <button class="btn" onclick="locationTracker.refreshData()">
-                        Refresh Data
-                    </button>
-                </div>
-
-                <div class="card stats">
-                    <h3>
-                        <div class="card-icon">📊</div>
-                        Statistics
-                    </h3>
-                    <div class="stat-item">
-                        <span class="stat-label">Connected Clients:</span>
-                        <span class="stat-value" id="connected-clients">-</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Total Locations:</span>
-                        <span class="stat-value" id="total-locations">-</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Active Devices:</span>
-                        <span class="stat-value" id="active-devices">-</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Last Update:</span>
-                        <span class="stat-value" id="last-update">-</span>
-                    </div>
-                </div>
-            </div>
-        </div>
+<div class="container">
+    <div class="header">
+    <h1>🌍 Real-time Location Tracker</h1>
+    <p>Monitoring device locations with live updates</p>
     </div>
 
+    <div class="dashboard">
+    <div class="map-container">
+        <div class="map-overlay">
+        <div id="connection-status" class="status disconnected">
+            <div class="status-dot"></div>
+            <span>Connecting...</span>
+        </div>
+        </div>
+        <div id="map"></div>
+    </div>
+
+    <div class="sidebar">
+        <div class="card location-info">
+        <h3><div class="card-icon">📍</div>Latest Locations</h3>
+        <div id="locations-list">
+            <div class="loading"><div class="spinner"></div>Loading locations...</div>
+        </div>
+        </div>
+
+        <div class="card controls">
+        <h3><div class="card-icon">⚙️</div>Controls</h3>
+        <div class="control-group">
+            <label for="device-filter">Filter by Device:</label>
+            <select id="device-filter"><option value="">All Devices</option></select>
+        </div>
+        <div class="control-group">
+            <label for="history-limit">History Limit:</label>
+            <input type="number" id="history-limit" value="50" min="10" max="500">
+        </div>
+        <button class="btn" onclick="locationTracker.refreshData()">Refresh Data</button>
+        </div>
+
+        <div class="card stats">
+        <h3><div class="card-icon">📊</div>Statistics</h3>
+        <div class="stat-item"><span class="stat-label">Connected Clients:</span><span class="stat-value" id="connected-clients">-</span></div>
+        <div class="stat-item"><span class="stat-label">Total Locations:</span><span class="stat-value" id="total-locations">-</span></div>
+        <div class="stat-item"><span class="stat-label">Active Devices:</span><span class="stat-value" id="active-devices">-</span></div>
+        <div class="stat-item"><span class="stat-label">Last Update:</span><span class="stat-value" id="last-update">-</span></div>
+        </div>
+    </div>
+    </div>
+</div>
     <script>
     class LocationTracker {
         constructor() {
@@ -434,6 +232,10 @@
             this.selectedDevice = '';
             this.historyLimit = 50;
             
+            // --- Nueva línea: array para coordenadas de la ruta ---
+            this.routeCoords = [];
+            // ------------------------------------------------------
+
             // Configuration with template variable support
             this.config = {
                 basePath: '${BASE_PATH}' || '',
@@ -473,19 +275,79 @@
             this.map.addControl(new maplibregl.FullscreenControl(), 'top-right');
 
             this.map.on('load', () => {
+                // --- NUEVO: Inicializa la línea de ruta (vacía por defecto) al cargar ---
+                this.initializeRouteLine();
+                // Por si ya hay ubicaciones cargadas (como en el refresh inicial)
+                this.routeCoords = this.locations.map(loc => [loc.longitude, loc.latitude]);
+                this.updateRouteLine();
+                // -----------------------------------------------------------------------
                 console.log('Map loaded successfully');
             });
-
             this.map.on('error', (e) => {
                 console.error('Map error:', e);
             });
         }
+    // --- NUEVO: Crear la capa y source para la línea de ruta ---
+        initializeRouteLine() {
+            if (this.map.getSource('route')) {
+                this.map.removeLayer('route-line');
+                this.map.removeSource('route');
+            }
+            this.map.addSource('route', {
+                type: 'geojson',
+                data: {
+                    type: 'Feature',
+                    geometry: {
+                        type: 'LineString',
+                        coordinates: []
+                    }
+                }
+            });
+            this.map.addLayer({
+                id: 'route-line',
+                type: 'line',
+                source: 'route',
+                layout: {
+                    'line-cap': 'round',
+                    'line-join': 'round'
+                },
+                paint: {
+                    'line-color': '#3b82f6',
+                    'line-width': 4
+                }
+            });
+        }
+        // ----------------------------------------------------------
 
+        // --- NUEVO: Actualizar la geojson source con la nueva trayectoria ---
+        updateRouteLine() {
+            if (!this.map.getSource('route')) return;
+            this.map.getSource('route').setData({
+                type: 'Feature',
+                geometry: {
+                    type: 'LineString',
+                    coordinates: this.routeCoords
+                }
+            });
+        }
+        // -------------------------------------------------------------------
         setupEventListeners() {
             // Device filter
             document.getElementById('device-filter').addEventListener('change', (e) => {
                 this.selectedDevice = e.target.value;
                 this.filterAndDisplayLocations();
+                // --- NUEVO: Actualizar línea si cambias de dispositivo ---
+                if (this.selectedDevice) {
+                    // Filtra las coordenadas solo para el dispositivo seleccionado
+                    this.routeCoords = this.locations
+                        .filter(loc => loc.device_id === this.selectedDevice)
+                        .map(loc => [loc.longitude, loc.latitude]);
+                } else {
+                    // Muestra la ruta general (todos los dispositivos)
+                    this.routeCoords = this.locations.map(loc => [loc.longitude, loc.latitude]);
+                }
+                this.updateRouteLine();
+                // ---------------------------------------------------------
             });
 
             // History limit
@@ -565,7 +427,16 @@
                     this.updateDevicesList();
                     this.displayLocations();
                     this.updateStatistics();
-                    
+                    // --- NUEVO: reconstruye el arreglo de coordenadas para la línea ---
+                    if (this.selectedDevice) {
+                        this.routeCoords = this.locations
+                            .filter(loc => loc.device_id === this.selectedDevice)
+                            .map(loc => [loc.longitude, loc.latitude]);
+                    } else {
+                        this.routeCoords = this.locations.map(loc => [loc.longitude, loc.latitude]);
+                    }
+                    this.updateRouteLine();
+                    // -------------------------------------------------------------
                     if (this.locations.length > 0) {
                         this.centerMapOnLatestLocation();
                     }
@@ -595,10 +466,17 @@
             this.filterAndDisplayLocations();
             this.updateStatistics();
             
-            // Center map on new location
+            // --- NUEVO: Añade nuevo punto a la línea y actualiza trayecto ---
             if (this.selectedDevice === '' || this.selectedDevice === location.device_id) {
+                this.routeCoords.unshift([location.longitude, location.latitude]);
+                if (this.routeCoords.length > this.historyLimit) {
+                    this.routeCoords = this.routeCoords.slice(0, this.historyLimit);
+                }
+                this.updateRouteLine();
+                // Centra solo si corresponde
                 this.centerMapOnLocation(location);
             }
+            // ---------------------------------------------------------------
         }
 
         updateMapMarker(location) {
