@@ -59,6 +59,7 @@ jobs:
               sleep 2
               if sudo lsof -i :8080; then
                 echo "ERROR: Port 8080 still in use after cleanup"
+                sudo lsof -i :8080
                 exit 1
               fi
             else
@@ -69,6 +70,10 @@ jobs:
               echo "Removing orphaned location-tracker containers..."
               docker ps -a --filter "name=location-tracker" --format '{{.ID}}' | xargs -r docker rm -f || echo "Failed to remove some containers"
             fi
+            # Clean up stale Nginx configuration files
+            echo "Cleaning up stale Nginx configuration files..."
+            sudo find /etc/nginx/conf.d -type f -name 'location-tracker-*.conf' -exec rm -f {} \;
+            sudo find /etc/nginx -type f -name '*.conf' ! -name 'nginx.conf' -exec rm -f {} \;
             mkdir -p /home/ec2-user/certs
             mkdir -p /home/ec2-user/logs
             echo "Cleanup completed"
@@ -115,9 +120,6 @@ jobs:
           username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
-            # Clean up stale configuration files
-            sudo find /etc/nginx/conf.d -type f -name 'location-tracker-*.conf' ! -name 'location-tracker-main.conf' -exec rm {} \;
-            
             # Create main nginx configuration
             sudo tee /etc/nginx/conf.d/location-tracker-main.conf > /dev/null <<'EOF'
                 # Main application configuration
@@ -166,16 +168,6 @@ jobs:
                         proxy_set_header X-Forwarded-Proto $scheme;
                     }
                 }
-                
-                # Public IP or domain redirect from 8080
-                server {
-                    listen 8080;
-                    server_name _;  # Catch-all for IP-based or domain requests
-                    
-                    location / {
-                        return 301 https://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}$request_uri;
-                    }
-                }
             EOF
             
             # Add HTTPS server block if certificates exist
@@ -185,8 +177,7 @@ jobs:
               sudo tee -a /etc/nginx/conf.d/location-tracker-main.conf > /dev/null <<'EOF'
                 # HTTPS server block
                 server {
-                    listen 443 ssl;
-                    http2 on;
+                    listen 443 ssl http2;
                     server_name ${{ secrets[format('{0}_DOMAIN', matrix.instance)] }};
                     
                     ssl_certificate /etc/ssl/certs/location-tracker.crt;
@@ -234,10 +225,8 @@ jobs:
             if sudo systemctl is-active nginx; then
               echo "Nginx is running"
             else
-              echo "ERROR: Nginx is not running"
-              sudo systemctl status nginx --no-pager || echo "Failed to get Nginx status"
-              sudo journalctl -u nginx -n 50 --no-pager || echo "Failed to get Nginx logs"
-              exit 1
+              echo "Nginx is not running, attempting to start..."
+              sudo systemctl start nginx || { echo "ERROR: Failed to start Nginx"; sudo journalctl -u nginx -n 50 --no-pager; exit 1; }
             fi
             
             # Verify ports are listening
@@ -252,11 +241,17 @@ jobs:
             else
               echo "WARNING: Port 443 is not listening (SSL may not be configured)"
             fi
+            if sudo netstat -tuln | grep -q ":8080 "; then
+              echo "Port 8080 is listening (should be bound by Docker)"
+            else
+              echo "ERROR: Port 8080 is not listening (Docker container may not be running)"
+              exit 1
+            fi
             
             # Test Nginx configuration
             if sudo nginx -t; then
               echo "Nginx configuration test passed"
-              sudo systemctl reload nginx || { echo "ERROR: Failed to reload Nginx"; exit 1; }
+              sudo systemctl reload nginx || { echo "ERROR: Failed to reload Nginx"; sudo journalctl -u nginx -n 50 --no-pager; exit 1; }
               echo "Nginx configuration updated successfully"
             else
               echo "ERROR: Nginx configuration test failed"
@@ -295,7 +290,7 @@ jobs:
               -p 5051:5051 \
               -v /home/ec2-user/certs:/root/certs:ro \
               -v /home/ec2-user/logs:/var/log \
-              -e DB_HOST="${{ secrets[format('{0}_HOST', matrix.instance)] }}" \
+              -e DB_HOST="${{ secrets[format('{0}_DB_HOST', matrix.instance)] }}" \
               -e DB_NAME="${{ secrets[format('{0}_DB_NAME', matrix.instance)] }}" \
               -e DB_USER="${{ secrets[format('{0}_DB_USER', matrix.instance)] }}" \
               -e DB_PASSWORD="${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}" \
