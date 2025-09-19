@@ -87,21 +87,26 @@ jobs:
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           source: location-tracker-main.tar
           target: /tmp/
-        continue-on-error: false
-        debug: true
-        script: |
-          echo "Verifying uploaded Docker image tar file..."
-          if [ -f "/tmp/location-tracker-main.tar" ]; then
-            echo "Tar file found: /tmp/location-tracker-main.tar"
-            ls -la /tmp/location-tracker-main.tar
-            file /tmp/location-tracker-main.tar || echo "Failed to check file type"
-            tar -tvf /tmp/location-tracker-main.tar > /tmp/tar_contents.txt 2>&1 || echo "Failed to list tar contents"
-            head -n 10 /tmp/tar_contents.txt
-          else
-            echo "ERROR: Tar file not found at /tmp/location-tracker-main.tar"
-            ls -la /tmp/ || echo "No files in /tmp/"
-            exit 1
-          fi
+
+      - name: Verify uploaded Docker image
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
+          username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
+          key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
+          script: |
+            echo "Verifying uploaded Docker image tar file..." | tee -a /tmp/deploy.log
+            if [ -f "/tmp/location-tracker-main.tar" ]; then
+              echo "Tar file found: /tmp/location-tracker-main.tar" | tee -a /tmp/deploy.log
+              ls -la /tmp/location-tracker-main.tar | tee -a /tmp/deploy.log
+              file /tmp/location-tracker-main.tar | tee -a /tmp/deploy.log || echo "Failed to check file type" | tee -a /tmp/deploy.log
+              tar -tvf /tmp/location-tracker-main.tar > /tmp/tar_contents.txt 2>&1 || echo "Failed to list tar contents" | tee -a /tmp/deploy.log
+              head -n 10 /tmp/tar_contents.txt | tee -a /tmp/deploy.log
+            else
+              echo "ERROR: Tar file not found at /tmp/location-tracker-main.tar" | tee -a /tmp/deploy.log
+              ls -la /tmp/ | tee -a /tmp/deploy.log || echo "No files in /tmp/" | tee -a /tmp/deploy.log
+              exit 1
+            fi
 
       - name: Deploy SSL certificates
         uses: appleboy/ssh-action@v1.2.0
