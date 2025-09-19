@@ -167,7 +167,7 @@ jobs:
                     }
                 }
                 
-                # Public IP redirect from 8080
+                # Public IP or domain redirect from 8080
                 server {
                     listen 8080;
                     server_name _;  # Catch-all for IP-based or domain requests
@@ -229,12 +229,39 @@ jobs:
             EOF
             fi
             
-            # Test and reload nginx configuration
+            # Debug Nginx status and configuration
+            echo "Checking Nginx service status..."
+            if sudo systemctl is-active nginx; then
+              echo "Nginx is running"
+            else
+              echo "ERROR: Nginx is not running"
+              sudo systemctl status nginx --no-pager || echo "Failed to get Nginx status"
+              sudo journalctl -u nginx -n 50 --no-pager || echo "Failed to get Nginx logs"
+              exit 1
+            fi
+            
+            # Verify ports are listening
+            echo "Checking listening ports..."
+            if sudo netstat -tuln | grep -q ":80 "; then
+              echo "Port 80 is listening"
+            else
+              echo "WARNING: Port 80 is not listening"
+            fi
+            if [ -f /etc/ssl/certs/location-tracker.crt ] && sudo netstat -tuln | grep -q ":443 "; then
+              echo "Port 443 is listening"
+            else
+              echo "WARNING: Port 443 is not listening (SSL may not be configured)"
+            fi
+            
+            # Test Nginx configuration
             if sudo nginx -t; then
-              sudo systemctl reload nginx
+              echo "Nginx configuration test passed"
+              sudo systemctl reload nginx || { echo "ERROR: Failed to reload Nginx"; exit 1; }
               echo "Nginx configuration updated successfully"
             else
-              echo "Nginx configuration test failed"
+              echo "ERROR: Nginx configuration test failed"
+              cat /etc/nginx/conf.d/location-tracker-main.conf
+              sudo journalctl -u nginx -n 50 --no-pager || echo "Failed to get Nginx logs"
               exit 1
             fi
 
@@ -268,7 +295,7 @@ jobs:
               -p 5051:5051 \
               -v /home/ec2-user/certs:/root/certs:ro \
               -v /home/ec2-user/logs:/var/log \
-              -e DB_HOST="${{ secrets[format('{0}_DB_HOST', matrix.instance)] }}" \
+              -e DB_HOST="${{ secrets[format('{0}_HOST', matrix.instance)] }}" \
               -e DB_NAME="${{ secrets[format('{0}_DB_NAME', matrix.instance)] }}" \
               -e DB_USER="${{ secrets[format('{0}_DB_USER', matrix.instance)] }}" \
               -e DB_PASSWORD="${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}" \
