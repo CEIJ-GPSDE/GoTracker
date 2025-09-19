@@ -387,12 +387,13 @@ jobs:
               exit 1
             fi
             echo "Starting Docker container..."
+            # Note: Removed certificate volume mount and set AUTO_TLS=false to disable container HTTPS
+            # since nginx handles SSL termination
             docker run -d \
               --name $container_name \
               --restart unless-stopped \
               -p 8081:8080 \
               -p 5052:5051 \
-              -v /home/ec2-user/certs:/root/certs:ro \
               -e DB_HOST="${{ secrets[format('{0}_DB_HOST', matrix.instance)] }}" \
               -e DB_NAME="${{ secrets[format('{0}_DB_NAME', matrix.instance)] }}" \
               -e DB_USER="${{ secrets[format('{0}_DB_USER', matrix.instance)] }}" \
@@ -402,6 +403,7 @@ jobs:
               -e UDP_PORT=5051 \
               -e DOMAIN="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}" \
               -e AUTO_TLS=false \
+              -e DISABLE_TLS=true \
               location-tracker:${safe_branch}
             echo "Waiting for container to start..."
             sleep 30
