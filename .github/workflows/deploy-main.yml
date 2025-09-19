@@ -34,13 +34,13 @@ jobs:
       matrix:
         include:
           - instance: EC2_1
-            deploy: ${{ github.event_name == 'push' || github.event.inputs.deploy_to_EC2_1 == 'true' }}
+            deploy: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_to_EC2_1 == 'true') }}
           - instance: EC2_2
-            deploy: ${{ github.event_name == 'push' || github.event.inputs.deploy_to_EC2_2 == 'true' }}
+            deploy: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_to_EC2_2 == 'true') }}
           - instance: EC2_3
-            deploy: ${{ github.event_name == 'push' || github.event.inputs.deploy_to_EC2_3 == 'true' }}
+            deploy: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_to_EC2_3 == 'true') }}
           - instance: EC2_4
-            deploy: ${{ github.event_name == 'push' || github.event.inputs.deploy_to_EC2_4 == 'true' }}
+            deploy: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_to_EC2_4 == 'true') }}
       fail-fast: false
     steps:
       - name: Skip unchecked instances
