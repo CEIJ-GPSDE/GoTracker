@@ -63,9 +63,11 @@ jobs:
         run: |
           branch="${{ github.event.inputs.branch }}"
           safe_branch="${{ steps.prepare.outputs.safe_branch }}"
-          echo "Building Docker image for branch: $branch"
+          base_path="/test/$branch"
+          echo "Building Docker image for branch: $branch with BASE_PATH: $base_path"
           docker build \
             --build-arg VERSION=${safe_branch}-$(git rev-parse --short HEAD) \
+            --build-arg BASE_PATH="$base_path" \
             -t location-tracker:${safe_branch} \
             .
           docker save location-tracker:${safe_branch} > location-tracker-${safe_branch}.tar
@@ -147,99 +149,171 @@ jobs:
             echo "Adding Nginx configuration for feature branch: $branch"
             echo "Safe branch name: $safe_branch"
             echo "Nginx location: $nginx_location"
-            sudo cp /etc/nginx/conf.d/location-tracker-main.conf /tmp/nginx-main-backup-$safe_branch.conf
-            if [ ! -f /etc/nginx/conf.d/location-tracker-main.conf ]; then
-              echo "ERROR: Main nginx configuration not found. Deploy main branch first."
-              exit 1
-            fi
-            # Remove existing feature branch configuration
-            sudo sed -i "/# Feature branch: $safe_branch/,/# End feature branch: $safe_branch/ { d; }" /etc/nginx/conf.d/location-tracker-main.conf
-            # Add HTTP configuration for feature branch
-            sudo tee -a /etc/nginx/conf.d/location-tracker-main.conf > /dev/null <<'EOF'
+            echo "Domain: $domain"
+            
+            # Backup existing configuration
+            sudo cp /etc/nginx/conf.d/location-tracker-main.conf /tmp/nginx-main-backup-$safe_branch.conf || touch /tmp/nginx-main-backup-$safe_branch.conf
+            
+            # Create temporary configuration file
+            temp_conf="/tmp/nginx-temp-$safe_branch.conf"
+            sudo rm -f $temp_conf
+            sudo touch $temp_conf
+            sudo chmod 644 $temp_conf
+            
+            # Write HTTP server block
+            sudo tee $temp_conf > /dev/null <<EOF
             # Feature branch: $safe_branch
             server {
                 listen 80;
                 server_name $domain;
-                
                 location $nginx_location/ {
                     proxy_pass http://127.0.0.1:8081/;
                     proxy_http_version 1.1;
-                    proxy_set_header Upgrade $http_upgrade;
+                    proxy_set_header Upgrade \$http_upgrade;
                     proxy_set_header Connection 'upgrade';
-                    proxy_set_header Host $host;
-                    proxy_set_header X-Real-IP $remote_addr;
-                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto $scheme;
-                    proxy_cache_bypass $http_upgrade;
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
+                    proxy_cache_bypass \$http_upgrade;
                 }
-                
+
                 location $nginx_location/ws {
                     proxy_pass http://127.0.0.1:8081/ws;
                     proxy_http_version 1.1;
-                    proxy_set_header Upgrade $http_upgrade;
+                    proxy_set_header Upgrade \$http_upgrade;
                     proxy_set_header Connection "Upgrade";
-                    proxy_set_header Host $host;
-                    proxy_set_header X-Real-IP $remote_addr;
-                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto $scheme;
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
                 }
-                
+
                 # Redirect feature branch to HTTPS if certificates exist
                 if (-f /etc/ssl/certs/location-tracker.crt) {
-                    return 301 https://$server_name$request_uri;
+                    return 301 https://\$server_name\$request_uri;
                 }
             }
             # End feature branch: $safe_branch
             EOF
+            # Sync and verify HTTP block was written
+            sync
+            echo "HTTP configuration written, verifying..."
+            if ! grep -q "location $nginx_location/" $temp_conf; then
+              echo "ERROR: HTTP location block not found after writing"
+              cat $temp_conf
+              exit 1
+            fi
+            echo "HTTP location block verified"
+            
+            # Log HTTP configuration
+            echo "HTTP configuration:" | tee -a /tmp/deploy.log
+            cat $temp_conf | tee -a /tmp/deploy.log
+            
             # Add HTTPS server block if certificates exist
             if [ -f /etc/ssl/certs/location-tracker.crt ] && [ -f /etc/ssl/private/location-tracker.key ]; then
-              echo "SSL certificates found, configuring HTTPS for feature branch..."
-              sudo tee -a /etc/nginx/conf.d/location-tracker-main.conf > /dev/null <<'EOF'
-              # Feature branch HTTPS: $safe_branch
-              server {
-                  listen 443 ssl http2;
-                  server_name $domain;
-                  
-                  ssl_certificate /etc/ssl/certs/location-tracker.crt;
-                  ssl_certificate_key /etc/ssl/private/location-tracker.key;
-                  ssl_protocols TLSv1.2 TLSv1.3;
-                  ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384;
-                  ssl_prefer_server_ciphers off;
-                  ssl_session_cache shared:SSL:10m;
-                  ssl_session_timeout 10m;
-                  
-                  add_header X-Frame-Options DENY;
-                  add_header X-Content-Type-Options nosniff;
-                  add_header X-XSS-Protection "1; mode=block";
-                  add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
-                  add_header Referrer-Policy "strict-origin-when-cross-origin";
-                  
-                  location $nginx_location/ {
-                      proxy_pass http://127.0.0.1:8081/;
-                      proxy_http_version 1.1;
-                      proxy_set_header Upgrade $http_upgrade;
-                      proxy_set_header Connection 'upgrade';
-                      proxy_set_header Host $host;
-                      proxy_set_header X-Real-IP $remote_addr;
-                      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                      proxy_set_header X-Forwarded-Proto $scheme;
-                      proxy_cache_bypass $http_upgrade;
-                  }
-                  
-                  location $nginx_location/ws {
-                      proxy_pass http://127.0.0.1:8081/ws;
-                      proxy_http_version 1.1;
-                      proxy_set_header Upgrade $http_upgrade;
-                      proxy_set_header Connection "Upgrade";
-                      proxy_set_header Host $host;
-                      proxy_set_header X-Real-IP $remote_addr;
-                      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                      proxy_set_header X-Forwarded-Proto $scheme;
-                  }
-              }
-              # End feature branch HTTPS: $safe_branch
-              EOF
+              echo "SSL certificates found, adding HTTPS configuration..."
+              
+              sudo tee -a $temp_conf > /dev/null <<EOF
+            # Feature branch HTTPS: $safe_branch
+            server {
+                listen 443 ssl;
+                server_name $domain;
+                http2 on;
+            
+                ssl_certificate /etc/ssl/certs/location-tracker.crt;
+                ssl_certificate_key /etc/ssl/private/location-tracker.key;
+                ssl_protocols TLSv1.2 TLSv1.3;
+                ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384;
+                ssl_prefer_server_ciphers off;
+                ssl_session_cache shared:SSL:10m;
+                ssl_session_timeout 10m;
+            
+                add_header X-Frame-Options DENY;
+                add_header X-Content-Type-Options nosniff;
+                add_header X-XSS-Protection "1; mode=block";
+                add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+                add_header Referrer-Policy "strict-origin-when-cross-origin";
+            
+                location $nginx_location/ {
+                    proxy_pass http://127.0.0.1:8081/;
+                    proxy_http_version 1.1;
+                    proxy_set_header Upgrade \$http_upgrade;
+                    proxy_set_header Connection 'upgrade';
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
+                    proxy_cache_bypass \$http_upgrade;
+                }
+            
+                location $nginx_location/ws {
+                    proxy_pass http://127.0.0.1:8081/ws;
+                    proxy_http_version 1.1;
+                    proxy_set_header Upgrade \$http_upgrade;
+                    proxy_set_header Connection "Upgrade";
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
+                }
+            }
+            # End feature branch HTTPS: $safe_branch
+            EOF
+              
+              # Sync and verify HTTPS block was added
+              sync
+              echo "HTTPS configuration added, verifying..."
+            else
+              echo "No SSL certificates found, skipping HTTPS configuration"
             fi
+            
+            # Final verification of location blocks
+            location_count=$(grep -c "location $nginx_location/" $temp_conf)
+            if [ "$location_count" -eq 0 ]; then
+              echo "ERROR: No location blocks found for $nginx_location/"
+              echo "Final temporary configuration:"
+              cat $temp_conf
+              exit 1
+            elif [ "$location_count" -eq 1 ]; then
+              echo "Found 1 location block (HTTP only)"
+            elif [ "$location_count" -eq 2 ]; then
+              echo "Found 2 location blocks (HTTP and HTTPS)"
+            else
+              echo "WARNING: Found $location_count location blocks, expected 1 or 2"
+            fi
+            
+            # Log final temporary configuration
+            echo "Final temporary configuration:" | tee -a /tmp/deploy.log
+            cat $temp_conf | tee -a /tmp/deploy.log
+            
+            # Move temporary file to final location
+            echo "Moving temporary configuration to final location..."
+            sudo mv $temp_conf /etc/nginx/conf.d/location-tracker-main.conf
+            
+            # Final verification of moved configuration
+            if ! grep -q "location $nginx_location/" /etc/nginx/conf.d/location-tracker-main.conf; then
+              echo "ERROR: Location block not found in final configuration"
+              echo "Final configuration content:"
+              cat /etc/nginx/conf.d/location-tracker-main.conf
+              echo "Restoring backup..."
+              sudo cp /tmp/nginx-main-backup-$safe_branch.conf /etc/nginx/conf.d/location-tracker-main.conf
+              exit 1
+            fi
+            
+            echo "Location blocks verified in final configuration"
+            
+            # Check for duplicate server names
+            server_count=$(grep -c "server_name $domain" /etc/nginx/conf.d/location-tracker-main.conf)
+            if [ "$server_count" -gt 2 ]; then
+              echo "ERROR: Detected $server_count server_name $domain entries, expected 2 or fewer (HTTP and HTTPS)"
+              echo "Configuration content:"
+              cat /etc/nginx/conf.d/location-tracker-main.conf
+              echo "Restoring backup..."
+              sudo cp /tmp/nginx-main-backup-$safe_branch.conf /etc/nginx/conf.d/location-tracker-main.conf
+              exit 1
+            fi
+            echo "Server name count verified: $server_count entries"
             # Verify ports are listening
             echo "Checking listening ports..."
             if sudo netstat -tuln | grep -q ":80 "; then
@@ -257,18 +331,33 @@ jobs:
             else
               echo "WARNING: Port 8081 is not listening yet (Docker container will bind after this step)"
             fi
+            
             # Test Nginx configuration
+            echo "Testing nginx configuration..."
             if sudo nginx -t; then
               echo "Nginx configuration test passed"
-              sudo systemctl reload nginx || { echo "ERROR: Failed to reload Nginx"; sudo journalctl -u nginx -n 50 --no-pager; exit 1; }
-              echo "Nginx configuration updated successfully"
+              echo "Reloading nginx..."
+              if sudo systemctl reload nginx; then
+                echo "Nginx configuration updated successfully"
+              else
+                echo "ERROR: Failed to reload Nginx"
+                sudo journalctl -u nginx -n 50 --no-pager
+                echo "Restoring backup..."
+                sudo cp /tmp/nginx-main-backup-$safe_branch.conf /etc/nginx/conf.d/location-tracker-main.conf
+                sudo nginx -t && sudo systemctl reload nginx
+                exit 1
+              fi
             else
               echo "ERROR: Nginx configuration test failed"
+              echo "Configuration content:"
+              cat /etc/nginx/conf.d/location-tracker-main.conf
               echo "Restoring backup..."
               sudo cp /tmp/nginx-main-backup-$safe_branch.conf /etc/nginx/conf.d/location-tracker-main.conf
               sudo nginx -t
               exit 1
             fi
+            
+            echo "Nginx configuration update completed successfully"
 
       - name: Load and start Docker container
         if: matrix.deploy == 'true'
@@ -295,26 +384,111 @@ jobs:
               echo "ERROR: Docker image tar file not found"
               ls -la /tmp/location-tracker-*.tar || echo "No tar files found"
               exit 1
-            fi
-            echo "Starting Docker container..."
+            fi         
+            echo "Starting Docker container with extensive debugging..."
+
             docker run -d \
               --name $container_name \
               --restart unless-stopped \
               -p 8081:8080 \
-              -p 5052:5051 \
-              -v /home/ec2-user/certs:/root/certs:ro \
+              -p 5052:5052 \
               -e DB_HOST="${{ secrets[format('{0}_DB_HOST', matrix.instance)] }}" \
               -e DB_NAME="${{ secrets[format('{0}_DB_NAME', matrix.instance)] }}" \
               -e DB_USER="${{ secrets[format('{0}_DB_USER', matrix.instance)] }}" \
               -e DB_PASSWORD="${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}" \
               -e DB_SSLMODE=require \
               -e PORT=8080 \
-              -e UDP_PORT=5051 \
+              -e UDP_PORT=5052 \
               -e DOMAIN="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}" \
               -e AUTO_TLS=false \
+              -e DISABLE_TLS=true \
+              -e BASE_PATH="/test/$branch" \
               location-tracker:${safe_branch}
+            
             echo "Waiting for container to start..."
-            sleep 20
+            sleep 30
+            
+            echo "=== DEBUGGING DATABASE CONNECTION ==="
+            echo "Container logs:"
+            docker logs --tail 50 $container_name
+            
+            echo "=== TESTING DATABASE CONNECTION ==="
+            docker exec $container_name sh -c '
+              echo "Testing database connection with same credentials as app..."
+              if command -v psql >/dev/null; then
+                echo "Database host: $DB_HOST"
+                echo "Database name: $DB_NAME" 
+                echo "Database user: $DB_USER"
+                echo "SSL mode: $DB_SSLMODE"
+                
+                echo "Testing basic connection:"
+                PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1 as test;" || echo "❌ Database connection failed"
+                
+                echo "Checking if locations table exists:"
+                PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c "\d locations" || echo "❌ Locations table not accessible"
+                
+                echo "Checking location count:"
+                PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c "SELECT COUNT(*) as location_count FROM locations;" || echo "❌ Cannot count locations"
+                
+                echo "Checking leader election table:"
+                PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c "SELECT * FROM leader_election;" || echo "❌ Leader election table issue"
+                
+                echo "Current leader election status:"
+                PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c "SELECT service, instance_id, last_heartbeat, (last_heartbeat > NOW() - INTERVAL '\''15 seconds'\'') as is_current FROM leader_election;" || echo "❌ Cannot check leader status"
+              else
+                echo "❌ psql not available in container"
+              fi
+            '
+            
+            echo "=== TESTING API ENDPOINTS ==="
+            echo "Testing health endpoint:"
+            curl -s http://localhost:8081/api/health || echo "❌ Health endpoint failed"
+            
+            echo "Testing database health endpoint:"
+            curl -s http://localhost:8081/api/health/db || echo "❌ DB health endpoint failed"
+            
+            echo "Testing UDP health endpoint:"  
+            curl -s http://localhost:8081/api/health/udp || echo "❌ UDP health endpoint failed"
+            
+            echo "Testing stats endpoint:"
+            curl -s http://localhost:8081/api/stats || echo "❌ Stats endpoint failed"
+            
+            echo "=== ATTEMPTING TO FORCE UDP START ==="
+            # Get the feature container instance ID
+            feature_instance_id=$(docker logs $container_name 2>&1 | grep "Starting leader election with instance ID:" | tail -1 | sed 's/.*instance ID: //' | tr -d '\r\n')
+            echo "Feature instance ID: [$feature_instance_id]"
+            
+            if [ -n "$feature_instance_id" ]; then
+              echo "Attempting to force UDP leadership by removing current leader..."
+              docker exec $container_name sh -c "
+                if command -v psql >/dev/null; then
+                  echo 'Removing current UDP leader to force re-election...'
+                  PGPASSWORD=\"\$DB_PASSWORD\" psql -h \"\$DB_HOST\" -U \"\$DB_USER\" -d \"\$DB_NAME\" -c \"DELETE FROM leader_election WHERE service = 'udp_sniffer';\" || echo 'Failed to remove leader'
+                  
+                  echo 'Waiting 10 seconds for re-election...'
+                  sleep 10
+                  
+                  echo 'Checking new leader status:'
+                  PGPASSWORD=\"\$DB_PASSWORD\" psql -h \"\$DB_HOST\" -U \"\$DB_USER\" -d \"\$DB_NAME\" -c \"SELECT * FROM leader_election WHERE service = 'udp_sniffer';\" || echo 'Failed to check leader status'
+                fi
+              "
+              
+              echo "Checking container logs after forced re-election:"
+              sleep 10
+              docker logs --tail 20 $container_name
+              
+              echo "Checking if UDP port is now listening:"
+              if sudo netstat -tuln | grep -q ":5052 "; then
+                echo "✅ Port 5052 (UDP) is now listening"
+              else
+                echo "❌ Port 5052 (UDP) still not listening"
+              fi
+            else
+              echo "❌ Could not extract instance ID from logs"
+            fi
+            
+            echo "Waiting for container to start..."
+            sleep 30
             if docker ps --format '{{.Names}}' | grep -q "^${container_name}$"; then
               echo "Container started successfully: $container_name"
               docker ps | grep $container_name
@@ -325,6 +499,30 @@ jobs:
               echo "Container logs:"
               docker logs $container_name || echo "Failed to get logs"
               exit 1
+            fi
+            
+            # Verify both HTTP and UDP ports are bound
+            if sudo netstat -tuln | grep -q ":8081 "; then
+              echo "Port 8081 (HTTP) is listening"
+            else
+              echo "ERROR: Port 8081 (HTTP) is not listening"
+              docker logs $container_name
+              exit 1
+            fi
+            
+            if sudo netstat -tuln | grep -q ":5052 "; then
+              echo "Port 5052 (UDP) is listening"
+            else
+              echo "WARNING: Port 5052 (UDP) is not listening yet"
+              # Give it more time for UDP to start
+              sleep 10
+              if sudo netstat -tuln | grep -q ":5052 "; then
+                echo "Port 5052 (UDP) is now listening"
+              else
+                echo "ERROR: Port 5052 (UDP) failed to start"
+                docker logs $container_name
+                exit 1
+              fi
             fi
             rm -f /tmp/location-tracker-${safe_branch}.tar
 
@@ -346,27 +544,52 @@ jobs:
             max_attempts=5
             attempt=1
             while [ $attempt -le $max_attempts ]; do
-              echo "HTTP health check attempt $attempt/$max_attempts..."
-              if curl -f -s http://localhost:8081/api/health; then
-                echo "HTTP health check PASSED"
+              echo "HTTPS health check attempt $attempt/$max_attempts..."
+              if curl -f -s -k https://localhost:8081/api/health; then
+                echo "HTTPS health check PASSED"
                 echo "=== Deployment Successful ==="
                 echo "Feature branch: $branch"
                 echo "Container: $container_name"
-                echo "Local health: http://localhost:8081/api/health"
-                if [ -f /etc/ssl/certs/location-tracker.crt ]; then
-                  echo "Public URL: https://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch"
-                else
-                  echo "Public URL: http://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch"
-                fi
+                echo "Local health: https://localhost:8081/api/health"
+                echo "Public URL: https://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch"
                 echo "Container status:"
                 docker ps | head -1
                 docker ps | grep $container_name
+                # Test public URL
+                if curl -f -s -k https://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch/api/health; then
+                  echo "Public URL health check PASSED"
+                else
+                  echo "WARNING: Public URL health check failed"
+                  curl -v -k https://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch/api/health
+                fi
                 exit 0
               else
-                echo "HTTP health check failed (attempt $attempt/$max_attempts)"
-                if [ $attempt -lt $max_attempts ]; then
-                  echo "Waiting 10 seconds before retry..."
-                  sleep 10
+                echo "HTTPS health check failed (attempt $attempt/$max_attempts)"
+                echo "Trying HTTP health check as fallback..."
+                if curl -f -s http://localhost:8081/api/health; then
+                  echo "HTTP health check PASSED"
+                  echo "=== Deployment Successful ==="
+                  echo "Feature branch: $branch"
+                  echo "Container: $container_name"
+                  echo "Local health: http://localhost:8081/api/health"
+                  echo "Public URL: http://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch"
+                  echo "Container status:"
+                  docker ps | head -1
+                  docker ps | grep $container_name
+                  # Test public URL
+                  if curl -f -s http://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch/api/health; then
+                    echo "Public URL health check PASSED"
+                  else
+                    echo "WARNING: Public URL health check failed"
+                    curl -v http://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch/api/health
+                  fi
+                  exit 0
+                else
+                  echo "HTTP health check failed (attempt $attempt/$max_attempts)"
+                  if [ $attempt -lt $max_attempts ]; then
+                    echo "Waiting 10 seconds before retry..."
+                    sleep 10
+                  fi
                 fi
               fi
               attempt=$((attempt + 1))

@@ -24,10 +24,38 @@ WORKDIR /root/
 
 # Copy the binary from builder stage
 COPY --from=builder /app/app .
-COPY --from=builder /app/static ./static/
+COPY --from=builder /app/static ./static-template/
 
 # Create directory for certificates (optional)
-RUN mkdir -p certs
+RUN mkdir -p certs static
+
+# Set build-time arguments
+ARG BASE_PATH=""
+ENV BASE_PATH=${BASE_PATH}
+
+# Create entrypoint script that processes templates
+RUN cat > /root/entrypoint.sh << 'EOF'
+#!/bin/sh
+echo "Processing static file templates with BASE_PATH: ${BASE_PATH}"
+
+# Copy template files to static directory
+cp -r /root/static-template/* /root/static/
+
+# Process index.html template if it exists
+if [ -f "/root/static/index.html" ]; then
+    # Replace template variables in index.html
+    envsubst '${BASE_PATH}' < /root/static/index.html > /root/static/index.html.tmp
+    mv /root/static/index.html.tmp /root/static/index.html
+    echo "Processed index.html with BASE_PATH: ${BASE_PATH}"
+else
+    echo "Warning: index.html not found in static directory"
+fi
+
+# Start the application
+exec ./app
+EOF
+
+RUN chmod +x /root/entrypoint.sh
 
 # Expose ports
 EXPOSE 8080 8443 5051
@@ -36,5 +64,5 @@ EXPOSE 8080 8443 5051
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-8080}/api/health || exit 1
 
-# Run the application
-CMD ["./app"]
+# Use entrypoint script
+ENTRYPOINT ["/root/entrypoint.sh"]
