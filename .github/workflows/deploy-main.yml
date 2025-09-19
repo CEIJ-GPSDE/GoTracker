@@ -32,26 +32,46 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        include:
-          - instance: EC2_1
-            deploy: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_to_EC2_1 == 'true') }}
-          - instance: EC2_2
-            deploy: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_to_EC2_2 == 'true') }}
-          - instance: EC2_3
-            deploy: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_to_EC2_3 == 'true') }}
-          - instance: EC2_4
-            deploy: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_to_EC2_4 == 'true') }}
+        instance: [EC2_1, EC2_2, EC2_3, EC2_4]
       fail-fast: false
     steps:
+      - name: Determine deployment
+        id: should_deploy
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "deploy=true" >> $GITHUB_OUTPUT
+            echo "Deploying ${{ matrix.instance }} (triggered by push)"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            case "${{ matrix.instance }}" in
+              "EC2_1")
+                deploy="${{ github.event.inputs.deploy_to_EC2_1 }}"
+                ;;
+              "EC2_2")
+                deploy="${{ github.event.inputs.deploy_to_EC2_2 }}"
+                ;;
+              "EC2_3")
+                deploy="${{ github.event.inputs.deploy_to_EC2_3 }}"
+                ;;
+              "EC2_4")
+                deploy="${{ github.event.inputs.deploy_to_EC2_4 }}"
+                ;;
+            esac
+            echo "deploy=$deploy" >> $GITHUB_OUTPUT
+            echo "Deploying ${{ matrix.instance }}: $deploy (manual trigger)"
+          else
+            echo "deploy=false" >> $GITHUB_OUTPUT
+            echo "Unknown event type, skipping deployment"
+          fi
+
       - name: Skip unchecked instances
-        if: matrix.deploy != 'true'
+        if: steps.should_deploy.outputs.deploy != 'true'
         run: echo "Skipping ${{ matrix.instance }} - not selected for deployment"
 
       - uses: actions/checkout@v4
-        if: matrix.deploy == 'true'
+        if: steps.should_deploy.outputs.deploy == 'true'
 
       - name: Build Docker image
-        if: matrix.deploy == 'true'
+        if: steps.should_deploy.outputs.deploy == 'true'
         run: |
           echo "Building Docker image for main branch"
           echo "Triggered by: ${{ github.event_name }}"
@@ -69,7 +89,7 @@ jobs:
           ls -la location-tracker-main.tar
 
       - name: Stop existing container and clean old deployments
-        if: matrix.deploy == 'true'
+        if: steps.should_deploy.outputs.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
@@ -124,7 +144,7 @@ jobs:
             echo "Cleanup completed"
 
       - name: Upload Docker image
-        if: matrix.deploy == 'true'
+        if: steps.should_deploy.outputs.deploy == 'true'
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
@@ -134,7 +154,7 @@ jobs:
           target: /tmp/
 
       - name: Verify uploaded Docker image
-        if: matrix.deploy == 'true'
+        if: steps.should_deploy.outputs.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
@@ -155,7 +175,7 @@ jobs:
             fi
 
       - name: Deploy SSL certificates
-        if: matrix.deploy == 'true'
+        if: steps.should_deploy.outputs.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
@@ -182,7 +202,7 @@ jobs:
             echo "SSL certificates deployed successfully"
 
       - name: Setup Nginx configuration
-        if: matrix.deploy == 'true'
+        if: steps.should_deploy.outputs.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
@@ -205,7 +225,7 @@ jobs:
                         proxy_set_header Host $host;
                         proxy_set_header X-Real-IP $remote_addr;
                         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                        proxy_set_header X-Forwarded-Proto $scheme;
+                        proxy_Set_header X-Forwarded-Proto $scheme;
                         proxy_cache_bypass $http_upgrade;
                     }
                     
@@ -234,7 +254,7 @@ jobs:
                         proxy_set_header Host $host;
                         proxy_set_header X-Real-IP $remote_addr;
                         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                        proxy_set_header X-Forwarded-Proto $scheme;
+                        proxy_Set_header X-Forwarded-Proto $scheme;
                     }
                 }
             EOF
@@ -268,9 +288,9 @@ jobs:
                         proxy_http_version 1.1;
                         proxy_set_header Upgrade $http_upgrade;
                         proxy_set_header Connection 'upgrade';
-                        proxy_set_header Host $host;
+                        proxy_Set_header Host $host;
                         proxy_set_header X-Real-IP $remote_addr;
-                        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                        proxy_Set_header X-Forwarded-For $proxy_add_x_forwarded_for;
                         proxy_set_header X-Forwarded-Proto $scheme;
                         proxy_cache_bypass $http_upgrade;
                     }
@@ -278,12 +298,12 @@ jobs:
                     location /ws {
                         proxy_pass http://127.0.0.1:8080;
                         proxy_http_version 1.1;
-                        proxy_set_header Upgrade $http_upgrade;
-                        proxy_set_header Connection "Upgrade";
-                        proxy_set_header Host $host;
-                        proxy_set_header X-Real-IP $remote_addr;
-                        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                        proxy_set_header X-Forwarded-Proto $scheme;
+                        proxy_Set_header Upgrade $http_upgrade;
+                        proxy_Set_header Connection "Upgrade";
+                        proxy_Set_header Host $host;
+                        proxy_Set_header X-Real-IP $remote_addr;
+                        proxy_Set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                        proxy_Set_header X-Forwarded-Proto $scheme;
                     }
                 }
             EOF
@@ -329,7 +349,7 @@ jobs:
             fi
 
       - name: Load and start Docker container
-        if: matrix.deploy == 'true'
+        if: steps.should_deploy.outputs.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
@@ -385,7 +405,7 @@ jobs:
             echo "Environment variables for container:" | tee -a /tmp/deploy.log
             echo "DB_HOST=${{ secrets[format('{0}_DB_HOST', matrix.instance)] }}" | tee -a /tmp/deploy.log
             echo "DB_NAME=${{ secrets[format('{0}_DB_NAME', matrix.instance)] }}" | tee -a /tmp/deploy.log
-            echo "DB_USER=${{ secrets[format('{0}_DB_USER', matrix.instance)] }}" | tee -a /tmp/deploy.log
+            echo "DB_USER=${{ secrets[format('{0}_USER', matrix.instance)] }}" | tee -a /tmp/deploy.log
             echo "DB_SSLMODE=require" | tee -a /tmp/deploy.log
             echo "PORT=8080" | tee -a /tmp/deploy.log
             echo "UDP_PORT=5051" | tee -a /tmp/deploy.log
@@ -438,7 +458,7 @@ jobs:
             rm -f /tmp/location-tracker-main.tar /tmp/docker_load.log /tmp/docker_run.log /tmp/docker_logs.log
 
       - name: Test container and database connection
-        if: matrix.deploy == 'true'
+        if: steps.should_deploy.outputs.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
@@ -461,7 +481,7 @@ jobs:
             ' || echo "Database test failed"
 
       - name: Health check and final verification
-        if: matrix.deploy == 'true'
+        if: steps.should_deploy.outputs.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
