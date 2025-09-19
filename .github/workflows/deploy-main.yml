@@ -14,6 +14,7 @@ jobs:
       fail-fast: false
     steps:
       - uses: actions/checkout@v4
+      
       - name: Build main
         run: |
           go mod tidy
@@ -21,11 +22,13 @@ jobs:
           mkdir -p build/${safe_branch}/static
           go build -ldflags="-X main.Version=main-$(git rev-parse --short HEAD)" -o build/${safe_branch}/app-${safe_branch} main.go
           cp static/index.html build/${safe_branch}/static/index.html
+          
       - name: Prepare deploy folder
         run: |
           safe_branch="main"
           mkdir -p deploy/${safe_branch}
           mv build/${safe_branch}/* deploy/${safe_branch}/
+          
       - name: Stop existing service and clean old binaries
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -43,37 +46,40 @@ jobs:
             echo "Creating app directory structure..."
             mkdir -p /home/ec2-user/app/${safe_branch}/static
             mkdir -p /home/ec2-user/app/${safe_branch}/certs
+            
       - name: Upload files via rsync over SSH
         run: |
+          safe_branch="main"
+          
           # Create SSH key file
           echo "${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}" > /tmp/deploy_key
           chmod 600 /tmp/deploy_key
           
           # Use rsync to transfer files
           rsync -avz -e "ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
-            deploy/main/ \
-            ${{ secrets[format('{0}_USER', matrix.instance)] }}@${{ secrets[format('{0}_HOST', matrix.instance)] }}:/home/ec2-user/app/main/
+            deploy/${safe_branch}/ \
+            ${{ secrets[format('{0}_USER', matrix.instance)] }}@${{ secrets[format('{0}_HOST', matrix.instance)] }}:/home/ec2-user/app/${safe_branch}/
           
           # Cleanup
           rm -f /tmp/deploy_key
           
           echo "Files transferred successfully"
-      - name: Verify file upload for main
+          
+      - name: Set executable permissions and verify upload
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
           username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
-            echo "=== Checking uploaded files for main ==="
-            echo "Directory contents:"
-            ls -la /home/ec2-user/app/main/
+            safe_branch="main"
+            echo "=== Checking uploaded files ==="
+            ls -la /home/ec2-user/app/${safe_branch}/
             
-            echo "Looking for binary file:"
-            find /home/ec2-user/app/main/ -name "app-*" -type f
+            # Set executable permissions on binary
+            chmod +x /home/ec2-user/app/${safe_branch}/app-${safe_branch}
+            echo "Executable permissions set"
             
-            echo "Setting executable permissions on all binaries..."
-            find /home/ec2-user/app/main/ -name "app-*" -type f -exec chmod +x {} \;
       - name: Deploy SSL certificates
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -81,14 +87,19 @@ jobs:
           username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
-            # Create certificates directory
+            # Create certificates directories
             sudo mkdir -p /etc/ssl/certs /etc/ssl/private
+            mkdir -p /home/ec2-user/app/main/certs
             
             # Deploy SSL certificate (if provided)
             if [ -n "${{ secrets[format('{0}_SSL_CERT', matrix.instance)] }}" ]; then
               echo "Deploying SSL certificate..."
               echo '${{ secrets[format('{0}_SSL_CERT', matrix.instance)] }}' | sudo tee /etc/ssl/certs/location-tracker.crt > /dev/null
               sudo chmod 644 /etc/ssl/certs/location-tracker.crt
+              
+              # Also copy to app directory
+              echo '${{ secrets[format('{0}_SSL_CERT', matrix.instance)] }}' > /home/ec2-user/app/main/certs/server.crt
+              chmod 644 /home/ec2-user/app/main/certs/server.crt
             fi
             
             # Deploy SSL private key (if provided)
@@ -97,21 +108,15 @@ jobs:
               echo '${{ secrets[format('{0}_SSL_KEY', matrix.instance)] }}' | sudo tee /etc/ssl/private/location-tracker.key > /dev/null
               sudo chmod 600 /etc/ssl/private/location-tracker.key
               sudo chown root:root /etc/ssl/private/location-tracker.key
-            fi
-            
-            # Also create app-level certificates for Go application
-            mkdir -p /home/ec2-user/app/main/certs
-            if [ -n "${{ secrets[format('{0}_SSL_CERT', matrix.instance)] }}" ]; then
-              echo '${{ secrets[format('{0}_SSL_CERT', matrix.instance)] }}' > /home/ec2-user/app/main/certs/server.crt
-              chmod 644 /home/ec2-user/app/main/certs/server.crt
-            fi
-            if [ -n "${{ secrets[format('{0}_SSL_KEY', matrix.instance)] }}" ]; then
+              
+              # Also copy to app directory
               echo '${{ secrets[format('{0}_SSL_KEY', matrix.instance)] }}' > /home/ec2-user/app/main/certs/server.key
               chmod 600 /home/ec2-user/app/main/certs/server.key
             fi
             
             echo "SSL certificates deployed successfully"
-      - name: Setup Nginx configuration for main
+            
+      - name: Setup Nginx configuration
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
@@ -119,34 +124,29 @@ jobs:
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
             # Create main nginx configuration
-            sudo bash -c "cat > /etc/nginx/conf.d/location-tracker-main.conf <<EOF
+            sudo tee /etc/nginx/conf.d/location-tracker-main.conf > /dev/null <<EOF
             server {
                 listen 80;
                 server_name ${{ secrets[format('{0}_DOMAIN', matrix.instance)] }};
                 
-                # Redirect HTTP to HTTPS only if SSL certificates exist
                 location / {
-                    if (-f /etc/ssl/certs/location-tracker.crt) {
-                        return 301 https://\\\$server_name\\\$request_uri;
-                    }
-                    # Fallback to HTTP proxy if no SSL
                     proxy_pass http://127.0.0.1:8080;
                     proxy_http_version 1.1;
-                    proxy_set_header Upgrade \\\$http_upgrade;
+                    proxy_set_header Upgrade \$http_upgrade;
                     proxy_set_header Connection 'upgrade';
-                    proxy_set_header Host \\\$host;
-                    proxy_set_header X-Real-IP \\\$remote_addr;
-                    proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \\\$scheme;
-                    proxy_cache_bypass \\\$http_upgrade;
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
+                    proxy_cache_bypass \$http_upgrade;
                 }
             }
-            EOF"
+            EOF
             
-            # Add HTTPS server block only if certificates exist
+            # Add HTTPS server block if certificates exist
             if [ -f /etc/ssl/certs/location-tracker.crt ] && [ -f /etc/ssl/private/location-tracker.key ]; then
               echo "SSL certificates found, configuring HTTPS..."
-              sudo bash -c "cat >> /etc/nginx/conf.d/location-tracker-main.conf <<EOF
+              sudo tee -a /etc/nginx/conf.d/location-tracker-main.conf > /dev/null <<EOF
             
             server {
                 listen 443 ssl http2;
@@ -164,41 +164,43 @@ jobs:
                 # Security headers
                 add_header X-Frame-Options DENY;
                 add_header X-Content-Type-Options nosniff;
-                add_header X-XSS-Protection \"1; mode=block\";
-                add_header Strict-Transport-Security \"max-age=31536000; includeSubDomains\";
-                add_header Referrer-Policy \"strict-origin-when-cross-origin\";
+                add_header X-XSS-Protection "1; mode=block";
+                add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+                add_header Referrer-Policy "strict-origin-when-cross-origin";
                 
-                # Main application
                 location / {
                     proxy_pass http://127.0.0.1:8080;
                     proxy_http_version 1.1;
-                    proxy_set_header Upgrade \\\$http_upgrade;
+                    proxy_set_header Upgrade \$http_upgrade;
                     proxy_set_header Connection 'upgrade';
-                    proxy_set_header Host \\\$host;
-                    proxy_set_header X-Real-IP \\\$remote_addr;
-                    proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \\\$scheme;
-                    proxy_cache_bypass \\\$http_upgrade;
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
+                    proxy_cache_bypass \$http_upgrade;
                 }
                 
                 # WebSocket support
                 location /ws {
                     proxy_pass http://127.0.0.1:8080;
                     proxy_http_version 1.1;
-                    proxy_set_header Upgrade \\\$http_upgrade;
-                    proxy_set_header Connection \"Upgrade\";
-                    proxy_set_header Host \\\$host;
-                    proxy_set_header X-Real-IP \\\$remote_addr;
-                    proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \\\$scheme;
+                    proxy_set_header Upgrade \$http_upgrade;
+                    proxy_set_header Connection "Upgrade";
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
                 }
             }
-            EOF"
-            else
-              echo "No SSL certificates found, HTTPS server block not configured"
+            EOF
+            
+              # Update HTTP server to redirect to HTTPS
+              sudo sed -i '/location \/ {/,/}/c\
+                # Redirect HTTP to HTTPS\
+                return 301 https://$server_name$request_uri;' /etc/nginx/conf.d/location-tracker-main.conf
             fi
             
-            # Test nginx configuration
+            # Test and reload nginx configuration
             if sudo nginx -t; then
               sudo systemctl reload nginx
               echo "Nginx configuration updated successfully"
@@ -206,44 +208,8 @@ jobs:
               echo "Nginx configuration test failed"
               exit 1
             fi
-      - name: Verify uploaded binary and database connection
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
-          username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
-          key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
-          script: |
-            echo "=== Final verification for main ==="
-            ls -la /home/ec2-user/app/main/
             
-            # Check if binary exists and is executable
-            binary_path="/home/ec2-user/app/main/app-main"
-            if [ -f "$binary_path" ]; then
-              echo "âœ… Binary found at: $binary_path"
-              chmod +x "$binary_path"
-              ls -la "$binary_path"
-            else
-              echo "âŒ Binary NOT found at expected path: $binary_path"
-              echo "Contents of directory:"
-              find /home/ec2-user/app/main/ -type f
-              exit 1
-            fi
-            
-            # Test database connection
-            export DB_HOST="${{ secrets[format('{0}_DB_HOST', matrix.instance)] }}"
-            export DB_NAME="${{ secrets[format('{0}_DB_NAME', matrix.instance)] }}"
-            export DB_USER="${{ secrets[format('{0}_DB_USER', matrix.instance)] }}"
-            export DB_PASSWORD="${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}"
-            export DB_SSLMODE="require"
-            export PORT="8080"
-            export HTTPS_PORT="8443"
-            
-            echo "Testing database connection..."
-            psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1" || echo "Database connection failed: $?"
-            
-            echo "Testing binary version..."
-            "$binary_path" --version || echo "Failed to run binary: $?"
-      - name: Update and restart service
+      - name: Test binary and database connection
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
@@ -251,11 +217,50 @@ jobs:
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
             safe_branch="main"
-            sudo bash -c "cat > /etc/systemd/system/location-tracker@\${safe_branch}.service <<EOF
+            binary_path="/home/ec2-user/app/${safe_branch}/app-${safe_branch}"
+            
+            echo "=== Final verification ==="
+            if [ -f "$binary_path" ]; then
+              echo "Binary found: $binary_path"
+              ls -la "$binary_path"
+            else
+              echo "ERROR: Binary NOT found at: $binary_path"
+              echo "Directory contents:"
+              ls -la /home/ec2-user/app/${safe_branch}/
+              exit 1
+            fi
+            
+            # Test database connection
+            echo "Testing database connection..."
+            if command -v psql >/dev/null; then
+              PGPASSWORD="${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}" \
+              psql -h "${{ secrets[format('{0}_DB_HOST', matrix.instance)] }}" \
+                   -U "${{ secrets[format('{0}_DB_USER', matrix.instance)] }}" \
+                   -d "${{ secrets[format('{0}_DB_NAME', matrix.instance)] }}" \
+                   -c "SELECT 1" || echo "Database connection test failed"
+            else
+              echo "psql not available, skipping database test"
+            fi
+            
+            # Test binary version
+            echo "Testing binary version..."
+            "$binary_path" --version || echo "Binary version test failed"
+            
+      - name: Create and start systemd service
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
+          username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
+          key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
+          script: |
+            safe_branch="main"
+            
+            # Create systemd service file
+            sudo tee /etc/systemd/system/location-tracker@${safe_branch}.service > /dev/null <<EOF
             [Unit]
             Description=Location Tracker (%i)
             After=network.target
-
+            
             [Service]
             ExecStart=/home/ec2-user/app/%i/app-%i
             Restart=always
@@ -280,40 +285,41 @@ jobs:
             ProtectHome=true
             ReadWritePaths=/home/ec2-user/app/%i /var/log
             PrivateTmp=true
-
+            
             [Install]
             WantedBy=multi-user.target
-            EOF"
+            EOF
             
             # Create log file with proper permissions
             sudo touch /var/log/location-tracker-${safe_branch}.log
             sudo chown ec2-user:ec2-user /var/log/location-tracker-${safe_branch}.log
             
-            sudo chmod 644 /etc/systemd/system/location-tracker@${safe_branch}.service
+            # Reload systemd and start service
             sudo systemctl daemon-reload
-            sudo systemctl restart location-tracker@${safe_branch}
             sudo systemctl enable location-tracker@${safe_branch}
+            sudo systemctl restart location-tracker@${safe_branch}
             
             # Wait for service to start
-            sleep 10
+            sleep 15
             
-            # Verify service status and logs
+            # Verify service status
             echo "=== Service Status ==="
             sudo systemctl status location-tracker@${safe_branch} --no-pager -l
-            
-            echo "=== Service Environment ==="
-            sudo systemctl show location-tracker@${safe_branch} --property=Environment
             
             echo "=== Recent Logs ==="
             sudo journalctl -u location-tracker@${safe_branch} --no-pager -l -n 20
             
-            # Check if service is running
+            # Final health check
             if sudo systemctl is-active location-tracker@${safe_branch} >/dev/null; then
-              echo "âœ… Service is running successfully"
+              echo "Service is running successfully"
               # Test HTTP endpoint
-              curl -f http://localhost:8080/api/health || echo "âŒ HTTP health check failed"
+              if curl -f http://localhost:8080/api/health; then
+                echo "Health check passed"
+              else
+                echo "WARNING: Health check failed"
+              fi
             else
-              echo "âŒ Service failed to start"
+              echo "ERROR: Service failed to start"
               sudo journalctl -u location-tracker@${safe_branch} --no-pager -l -n 50
               exit 1
             fi
