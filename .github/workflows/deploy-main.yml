@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        instance: [EC2_1, EC2_2, EC3, EC4]
+        instance: [EC2_1, EC2_2, EC2_3, EC2_4]
       fail-fast: false
     steps:
       - uses: actions/checkout@v4
@@ -269,6 +269,10 @@ jobs:
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
             echo "Loading and starting Docker container: location-tracker-main"
+            # Check system resources
+            echo "Checking system resources..."
+            free -h || echo "Failed to check memory"
+            df -h / || echo "Failed to check disk space"
             # Verify tar file exists
             if [ -f "/tmp/location-tracker-main.tar" ]; then
               echo "Docker image tar file found: /tmp/location-tracker-main.tar"
@@ -280,7 +284,7 @@ jobs:
             fi
             # Load Docker image
             echo "Loading Docker image from tar file..."
-            if docker load < /tmp/location-tracker-main.tar; then
+            if docker load < /tmp/location-tracker-main.tar 2>&1; then
               echo "Docker image loaded successfully"
               docker images | grep location-tracker || echo "No location-tracker images found"
             else
@@ -297,6 +301,16 @@ jobs:
             else
               echo "Port 8080 is free"
             fi
+            # Log environment variables (excluding sensitive data)
+            echo "Environment variables for container:"
+            echo "DB_HOST=${{ secrets[format('{0}_DB_HOST', matrix.instance)] }}"
+            echo "DB_NAME=${{ secrets[format('{0}_DB_NAME', matrix.instance)] }}"
+            echo "DB_USER=${{ secrets[format('{0}_DB_USER', matrix.instance)] }}"
+            echo "DB_SSLMODE=require"
+            echo "PORT=8080"
+            echo "UDP_PORT=5051"
+            echo "DOMAIN=${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}"
+            echo "AUTO_TLS=false"
             # Start Docker container
             echo "Starting Docker container..."
             if docker run -d \
@@ -315,7 +329,7 @@ jobs:
               -e UDP_PORT=5051 \
               -e DOMAIN="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}" \
               -e AUTO_TLS=false \
-              location-tracker:main; then
+              location-tracker:main 2>&1; then
               echo "Docker container started successfully"
             else
               echo "ERROR: Failed to start Docker container"
@@ -330,8 +344,10 @@ jobs:
               echo "ERROR: Container failed to start"
               echo "Container status:"
               docker ps -a | grep location-tracker-main || echo "Container not found"
+              echo "Container exit code:"
+              docker inspect location-tracker-main --format '{{.State.ExitCode}}' || echo "Failed to get exit code"
               echo "Container logs:"
-              docker logs location-tracker-main || echo "Failed to get logs"
+              docker logs location-tracker-main 2>&1 || echo "Failed to get logs"
               exit 1
             fi
             rm -f /tmp/location-tracker-main.tar
