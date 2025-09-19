@@ -34,7 +34,7 @@ ARG BASE_PATH=""
 ENV BASE_PATH=${BASE_PATH}
 
 # Create entrypoint script that processes templates
-RUN cat > /root/entrypoint.sh << 'EOF'
+RUN cat << 'EOF' > /root/entrypoint.sh
 #!/bin/sh
 echo "Processing static file templates with BASE_PATH: ${BASE_PATH}"
 
