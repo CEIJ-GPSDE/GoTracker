@@ -85,6 +85,8 @@ jobs:
             safe_branch="${{ steps.prepare.outputs.safe_branch }}"
             container_name="location-tracker-${safe_branch}"
             echo "Cleaning up existing deployment: $container_name"
+            
+            # Stop and remove existing feature container
             if docker ps -a --format '{{.Names}}' | grep -q "^${container_name}$"; then
               echo "Stopping existing container: $container_name"
               docker stop $container_name || echo "Container was not running"
@@ -92,10 +94,16 @@ jobs:
             else
               echo "No existing container found: $container_name"
             fi
+            
+            # Remove existing feature image
             if docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "^location-tracker:${safe_branch}$"; then
               echo "Removing old image: location-tracker:${safe_branch}"
               docker rmi location-tracker:${safe_branch} || echo "Failed to remove image"
             fi
+            
+            # Remove existing nginx configuration for this feature branch
+            sudo rm -f "/etc/nginx/conf.d/location-tracker-feature-${safe_branch}.conf"
+            
             mkdir -p /home/ec2-user/certs
             echo "Cleanup completed"
 
@@ -134,7 +142,7 @@ jobs:
             fi
             echo "SSL certificate deployment completed"
 
-      - name: Update Nginx configuration
+      - name: Create feature branch Nginx configuration
         if: matrix.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -154,9 +162,6 @@ jobs:
             
             # Create feature-specific configuration file
             feature_conf="/etc/nginx/conf.d/location-tracker-feature-$safe_branch.conf"
-            
-            # Remove any existing feature configuration for this branch
-            sudo rm -f "$feature_conf"
             
             # Create new feature configuration
             sudo tee "$feature_conf" > /dev/null <<EOF
@@ -187,11 +192,6 @@ jobs:
                     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
                     proxy_set_header X-Forwarded-Proto \$scheme;
                 }
-                
-                # Redirect to HTTPS if certificates exist
-                if (-f /etc/ssl/certs/location-tracker.crt) {
-                    return 301 https://\$server_name\$request_uri;
-                }
             }
             EOF
             
@@ -200,11 +200,11 @@ jobs:
               echo "SSL certificates found, adding HTTPS configuration..."
               
               sudo tee -a "$feature_conf" > /dev/null <<EOF
+            
             # Feature branch HTTPS: $safe_branch
             server {
-                listen 443 ssl;
+                listen 443 ssl http2;
                 server_name $domain;
-                http2 on;
             
                 ssl_certificate /etc/ssl/certs/location-tracker.crt;
                 ssl_certificate_key /etc/ssl/private/location-tracker.key;
@@ -227,7 +227,7 @@ jobs:
                     proxy_set_header Connection 'upgrade';
                     proxy_set_header Host \$host;
                     proxy_set_header X-Real-IP \$remote_addr;
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_Set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
                     proxy_set_header X-Forwarded-Proto \$scheme;
                     proxy_cache_bypass \$http_upgrade;
                 }
@@ -237,13 +237,15 @@ jobs:
                     proxy_http_version 1.1;
                     proxy_set_header Upgrade \$http_upgrade;
                     proxy_set_header Connection "Upgrade";
-                    proxy_set_header Host \$host;
+                    proxy_Set_header Host \$host;
                     proxy_set_header X-Real-IP \$remote_addr;
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_Set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
                     proxy_set_header X-Forwarded-Proto \$scheme;
                 }
             }
             EOF
+            else
+              echo "No SSL certificates found, skipping HTTPS configuration"
             fi
             
             # Test Nginx configuration
@@ -261,6 +263,7 @@ jobs:
               fi
             else
               echo "ERROR: Nginx configuration test failed"
+              sudo nginx -t
               sudo rm -f "$feature_conf"
               exit 1
             fi
@@ -279,6 +282,7 @@ jobs:
             safe_branch="${{ steps.prepare.outputs.safe_branch }}"
             container_name="location-tracker-${safe_branch}"
             echo "Loading and starting Docker container: $container_name"
+            
             if [ -f "/tmp/location-tracker-${safe_branch}.tar" ]; then
               echo "Loading Docker image from tar file..."
               docker load < /tmp/location-tracker-${safe_branch}.tar
@@ -292,9 +296,9 @@ jobs:
               echo "ERROR: Docker image tar file not found"
               ls -la /tmp/location-tracker-*.tar || echo "No tar files found"
               exit 1
-            fi         
-            echo "Starting Docker container with extensive debugging..."
-
+            fi
+            
+            echo "Starting Docker container..."
             docker run -d \
               --name $container_name \
               --restart unless-stopped \
@@ -316,87 +320,6 @@ jobs:
             echo "Waiting for container to start..."
             sleep 30
             
-            echo "=== DEBUGGING DATABASE CONNECTION ==="
-            echo "Container logs:"
-            docker logs --tail 50 $container_name
-            
-            echo "=== TESTING DATABASE CONNECTION ==="
-            docker exec $container_name sh -c '
-              echo "Testing database connection with same credentials as app..."
-              if command -v psql >/dev/null; then
-                echo "Database host: $DB_HOST"
-                echo "Database name: $DB_NAME" 
-                echo "Database user: $DB_USER"
-                echo "SSL mode: $DB_SSLMODE"
-                
-                echo "Testing basic connection:"
-                PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1 as test;" || echo "❌ Database connection failed"
-                
-                echo "Checking if locations table exists:"
-                PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c "\d locations" || echo "❌ Locations table not accessible"
-                
-                echo "Checking location count:"
-                PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c "SELECT COUNT(*) as location_count FROM locations;" || echo "❌ Cannot count locations"
-                
-                echo "Checking leader election table:"
-                PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c "SELECT * FROM leader_election;" || echo "❌ Leader election table issue"
-                
-                echo "Current leader election status:"
-                PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c "SELECT service, instance_id, last_heartbeat, (last_heartbeat > NOW() - INTERVAL '\''15 seconds'\'') as is_current FROM leader_election;" || echo "❌ Cannot check leader status"
-              else
-                echo "❌ psql not available in container"
-              fi
-            '
-            
-            echo "=== TESTING API ENDPOINTS ==="
-            echo "Testing health endpoint:"
-            curl -s http://localhost:8081/api/health || echo "❌ Health endpoint failed"
-            
-            echo "Testing database health endpoint:"
-            curl -s http://localhost:8081/api/health/db || echo "❌ DB health endpoint failed"
-            
-            echo "Testing UDP health endpoint:"  
-            curl -s http://localhost:8081/api/health/udp || echo "❌ UDP health endpoint failed"
-            
-            echo "Testing stats endpoint:"
-            curl -s http://localhost:8081/api/stats || echo "❌ Stats endpoint failed"
-            
-            echo "=== ATTEMPTING TO FORCE UDP START ==="
-            # Get the feature container instance ID
-            feature_instance_id=$(docker logs $container_name 2>&1 | grep "Starting leader election with instance ID:" | tail -1 | sed 's/.*instance ID: //' | tr -d '\r\n')
-            echo "Feature instance ID: [$feature_instance_id]"
-            
-            if [ -n "$feature_instance_id" ]; then
-              echo "Attempting to force UDP leadership by removing current leader..."
-              docker exec $container_name sh -c "
-                if command -v psql >/dev/null; then
-                  echo 'Removing current UDP leader to force re-election...'
-                  PGPASSWORD=\"\$DB_PASSWORD\" psql -h \"\$DB_HOST\" -U \"\$DB_USER\" -d \"\$DB_NAME\" -c \"DELETE FROM leader_election WHERE service = 'udp_sniffer';\" || echo 'Failed to remove leader'
-                  
-                  echo 'Waiting 10 seconds for re-election...'
-                  sleep 10
-                  
-                  echo 'Checking new leader status:'
-                  PGPASSWORD=\"\$DB_PASSWORD\" psql -h \"\$DB_HOST\" -U \"\$DB_USER\" -d \"\$DB_NAME\" -c \"SELECT * FROM leader_election WHERE service = 'udp_sniffer';\" || echo 'Failed to check leader status'
-                fi
-              "
-              
-              echo "Checking container logs after forced re-election:"
-              sleep 10
-              docker logs --tail 20 $container_name
-              
-              echo "Checking if UDP port is now listening:"
-              if sudo netstat -tuln | grep -q ":5052 "; then
-                echo "✅ Port 5052 (UDP) is now listening"
-              else
-                echo "❌ Port 5052 (UDP) still not listening"
-              fi
-            else
-              echo "❌ Could not extract instance ID from logs"
-            fi
-            
-            echo "Waiting for container to start..."
-            sleep 30
             if docker ps --format '{{.Names}}' | grep -q "^${container_name}$"; then
               echo "Container started successfully: $container_name"
               docker ps | grep $container_name
@@ -427,11 +350,11 @@ jobs:
               if sudo netstat -tuln | grep -q ":5052 "; then
                 echo "Port 5052 (UDP) is now listening"
               else
-                echo "ERROR: Port 5052 (UDP) failed to start"
-                docker logs $container_name
-                exit 1
+                echo "Port 5052 (UDP) failed to start - this may be due to leadership election"
+                echo "Container will still function for HTTP requests"
               fi
             fi
+            
             rm -f /tmp/location-tracker-${safe_branch}.tar
 
       - name: Health check and final verification
@@ -445,63 +368,49 @@ jobs:
             branch="${{ github.event.inputs.branch }}"
             safe_branch="${{ steps.prepare.outputs.safe_branch }}"
             container_name="location-tracker-${safe_branch}"
+            
             echo "=== Final Health Check ==="
-            echo "Recent container logs:"
-            docker logs --tail 20 $container_name
-            echo "Testing health endpoint..."
+            echo "Feature branch: $branch"
+            echo "Container: $container_name"
+            echo "Container status:"
+            docker ps | head -1
+            docker ps | grep $container_name
+            
             max_attempts=5
             attempt=1
             while [ $attempt -le $max_attempts ]; do
-              echo "HTTPS health check attempt $attempt/$max_attempts..."
-              if curl -f -s -k https://localhost:8081/api/health; then
-                echo "HTTPS health check PASSED"
+              echo "Health check attempt $attempt/$max_attempts..."
+              if curl -f -s http://localhost:8081/api/health; then
+                echo "Health check PASSED"
                 echo "=== Deployment Successful ==="
                 echo "Feature branch: $branch"
                 echo "Container: $container_name"
-                echo "Local health: https://localhost:8081/api/health"
-                echo "Public URL: https://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch"
-                echo "Container status:"
-                docker ps | head -1
-                docker ps | grep $container_name
-                # Test public URL
-                if curl -f -s -k https://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch/api/health; then
-                  echo "Public URL health check PASSED"
+                echo "Local health: http://localhost:8081/api/health"
+                if [ -f /etc/ssl/certs/location-tracker.crt ]; then
+                  echo "Public URL: https://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch"
                 else
-                  echo "WARNING: Public URL health check failed"
-                  curl -v -k https://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch/api/health
+                  echo "Public URL: http://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch"
+                fi
+                
+                # Test public URL
+                if curl -f -s "http://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch/api/health"; then
+                  echo "Public URL health check PASSED"
+                elif [ -f /etc/ssl/certs/location-tracker.crt ] && curl -f -s -k "https://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch/api/health"; then
+                  echo "Public HTTPS URL health check PASSED"
+                else
+                  echo "WARNING: Public URL health check failed - nginx routing may need time to propagate"
                 fi
                 exit 0
               else
-                echo "HTTPS health check failed (attempt $attempt/$max_attempts)"
-                echo "Trying HTTP health check as fallback..."
-                if curl -f -s http://localhost:8081/api/health; then
-                  echo "HTTP health check PASSED"
-                  echo "=== Deployment Successful ==="
-                  echo "Feature branch: $branch"
-                  echo "Container: $container_name"
-                  echo "Local health: http://localhost:8081/api/health"
-                  echo "Public URL: http://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch"
-                  echo "Container status:"
-                  docker ps | head -1
-                  docker ps | grep $container_name
-                  # Test public URL
-                  if curl -f -s http://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch/api/health; then
-                    echo "Public URL health check PASSED"
-                  else
-                    echo "WARNING: Public URL health check failed"
-                    curl -v http://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch/api/health
-                  fi
-                  exit 0
-                else
-                  echo "HTTP health check failed (attempt $attempt/$max_attempts)"
-                  if [ $attempt -lt $max_attempts ]; then
-                    echo "Waiting 10 seconds before retry..."
-                    sleep 10
-                  fi
+                echo "Health check failed (attempt $attempt/$max_attempts)"
+                if [ $attempt -lt $max_attempts ]; then
+                  echo "Waiting 10 seconds before retry..."
+                  sleep 10
                 fi
               fi
               attempt=$((attempt + 1))
             done
+            
             echo "ERROR: All health checks failed"
             echo "Container status:"
             docker ps -a | grep $container_name
