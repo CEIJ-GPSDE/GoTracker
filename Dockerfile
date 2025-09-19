@@ -34,26 +34,24 @@ ARG BASE_PATH=""
 ENV BASE_PATH=${BASE_PATH}
 
 # Create entrypoint script that processes templates
-RUN cat << 'EOF' > /root/entrypoint.sh
-#!/bin/sh
-echo "Processing static file templates with BASE_PATH: ${BASE_PATH}"
-
-# Copy template files to static directory
-cp -r /root/static-template/* /root/static/
-
-# Process index.html template if it exists
-if [ -f "/root/static/index.html" ]; then
-    # Replace template variables in index.html
-    envsubst '${BASE_PATH}' < /root/static/index.html > /root/static/index.html.tmp
-    mv /root/static/index.html.tmp /root/static/index.html
-    echo "Processed index.html with BASE_PATH: ${BASE_PATH}"
-else
-    echo "Warning: index.html not found in static directory"
-fi
-
-# Start the application
-exec ./app
-EOF
+RUN echo '#!/bin/sh' > /root/entrypoint.sh && \
+    echo 'echo "Processing static file templates with BASE_PATH: ${BASE_PATH}"' >> /root/entrypoint.sh && \
+    echo '' >> /root/entrypoint.sh && \
+    echo '# Copy template files to static directory' >> /root/entrypoint.sh && \
+    echo 'cp -r /root/static-template/* /root/static/' >> /root/entrypoint.sh && \
+    echo '' >> /root/entrypoint.sh && \
+    echo '# Process index.html template if it exists' >> /root/entrypoint.sh && \
+    echo 'if [ -f "/root/static/index.html" ]; then' >> /root/entrypoint.sh && \
+    echo '    # Replace template variables in index.html' >> /root/entrypoint.sh && \
+    echo '    envsubst '\''${BASE_PATH}'\'' < /root/static/index.html > /root/static/index.html.tmp' >> /root/entrypoint.sh && \
+    echo '    mv /root/static/index.html.tmp /root/static/index.html' >> /root/entrypoint.sh && \
+    echo '    echo "Processed index.html with BASE_PATH: ${BASE_PATH}"' >> /root/entrypoint.sh && \
+    echo 'else' >> /root/entrypoint.sh && \
+    echo '    echo "Warning: index.html not found in static directory"' >> /root/entrypoint.sh && \
+    echo 'fi' >> /root/entrypoint.sh && \
+    echo '' >> /root/entrypoint.sh && \
+    echo '# Start the application' >> /root/entrypoint.sh && \
+    echo 'exec ./app' >> /root/entrypoint.sh
 
 RUN chmod +x /root/entrypoint.sh
 
