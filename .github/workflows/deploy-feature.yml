@@ -63,9 +63,11 @@ jobs:
         run: |
           branch="${{ github.event.inputs.branch }}"
           safe_branch="${{ steps.prepare.outputs.safe_branch }}"
-          echo "Building Docker image for branch: $branch"
+          base_path="/test/$branch"
+          echo "Building Docker image for branch: $branch with BASE_PATH: $base_path"
           docker build \
             --build-arg VERSION=${safe_branch}-$(git rev-parse --short HEAD) \
+            --build-arg BASE_PATH="$base_path" \
             -t location-tracker:${safe_branch} \
             .
           docker save location-tracker:${safe_branch} > location-tracker-${safe_branch}.tar
@@ -404,6 +406,7 @@ jobs:
               -e DOMAIN="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}" \
               -e AUTO_TLS=false \
               -e DISABLE_TLS=true \
+              -e BASE_PATH="/test/$branch" \
               location-tracker:${safe_branch}
             
             echo "Waiting for container to start..."

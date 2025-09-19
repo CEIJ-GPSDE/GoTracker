@@ -20,6 +20,7 @@ jobs:
           echo "Building Docker image for main branch"
           docker build \
             --build-arg VERSION=main-$(git rev-parse --short HEAD) \
+            --build-arg BASE_PATH= \
             -t location-tracker:main \
             .
           docker save location-tracker:main > location-tracker-main.tar
