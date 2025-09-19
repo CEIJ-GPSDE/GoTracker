@@ -152,6 +152,19 @@ jobs:
                     proxy_set_header X-Forwarded-Proto $scheme;
                 }
             }
+            
+            # Public IP redirect from 8080
+            server {
+                listen 8080;
+                server_name _;  # Catch-all for IP-based requests
+                
+                location / {
+                    if (-f /etc/ssl/certs/location-tracker.crt) {
+                        return 301 https://$host$request_uri;
+                    }
+                    return 301 http://$host$request_uri;
+                }
+            }
             EOF
             
             # Add HTTPS server block if certificates exist
@@ -159,55 +172,59 @@ jobs:
               echo "SSL certificates found, configuring HTTPS..."
               
               sudo tee -a /etc/nginx/conf.d/location-tracker-main.conf > /dev/null <<'EOF'
-            # HTTPS server block
-            server {
-                listen 443 ssl;
-                http2 on;
-                server_name ${{ secrets[format('{0}_DOMAIN', matrix.instance)] }};
-                
-                ssl_certificate /etc/ssl/certs/location-tracker.crt;
-                ssl_certificate_key /etc/ssl/private/location-tracker.key;
-                ssl_protocols TLSv1.2 TLSv1.3;
-                ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384;
-                ssl_prefer_server_ciphers off;
-                ssl_session_cache shared:SSL:10m;
-                ssl_session_timeout 10m;
-                
-                add_header X-Frame-Options DENY;
-                add_header X-Content-Type-Options nosniff;
-                add_header X-XSS-Protection "1; mode=block";
-                add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
-                add_header Referrer-Policy "strict-origin-when-cross-origin";
-                
-                location / {
-                    proxy_pass http://127.0.0.1:8080;
-                    proxy_http_version 1.1;
-                    proxy_set_header Upgrade $http_upgrade;
-                    proxy_set_header Connection 'upgrade';
-                    proxy_set_header Host $host;
-                    proxy_set_header X-Real-IP $remote_addr;
-                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto $scheme;
-                    proxy_cache_bypass $http_upgrade;
-                }
-                
-                location /ws {
-                    proxy_pass http://127.0.0.1:8080;
-                    proxy_http_version 1.1;
-                    proxy_set_header Upgrade $http_upgrade;
-                    proxy_set_header Connection "Upgrade";
-                    proxy_set_header Host $host;
-                    proxy_set_header X-Real-IP $remote_addr;
-                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto $scheme;
-                }
-            }
-            EOF
-            
+              # HTTPS server block
+              server {
+                  listen 443 ssl;
+                  http2 on;
+                  server_name ${{ secrets[format('{0}_DOMAIN', matrix.instance)] }};
+                  
+                  ssl_certificate /etc/ssl/certs/location-tracker.crt;
+                  ssl_certificate_key /etc/ssl/private/location-tracker.key;
+                  ssl_protocols TLSv1.2 TLSv1.3;
+                  ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384;
+                  ssl_prefer_server_ciphers off;
+                  ssl_session_cache shared:SSL:10m;
+                  ssl_session_timeout 10m;
+                  
+                  add_header X-Frame-Options DENY;
+                  add_header X-Content-Type-Options nosniff;
+                  add_header X-XSS-Protection "1; mode=block";
+                  add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+                  add_header Referrer-Policy "strict-origin-when-cross-origin";
+                  
+                  location / {
+                      proxy_pass http://127.0.0.1:8080;
+                      proxy_http_version 1.1;
+                      proxy_set_header Upgrade $http_upgrade;
+                      proxy_set_header Connection 'upgrade';
+                      proxy_set_header Host $host;
+                      proxy_set_header X-Real-IP $remote_addr;
+                      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                      proxy_set_header X-Forwarded-Proto $scheme;
+                      proxy_cache_bypass $http_upgrade;
+                  }
+                  
+                  location /ws {
+                      proxy_pass http://127.0.0.1:8080;
+                      proxy_http_version 1.1;
+                      proxy_set_header Upgrade $http_upgrade;
+                      proxy_set_header Connection "Upgrade";
+                      proxy_set_header Host $host;
+                      proxy_set_header X-Real-IP $remote_addr;
+                      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                      proxy_set_header X-Forwarded-Proto $scheme;
+                  }
+              }
+              EOF
+              
+              # Update HTTP server to redirect to HTTPS, preserving feature branch locations
               sudo sed -i '/# Main application root/,/}/c\
+                # Redirect main app to HTTPS\
                 location = / {\
                     return 301 https://$server_name$request_uri;\
                 }\
+                \
+                # Redirect main app paths to HTTPS (but not /test/)\
                 location ~ ^/(?!test/) {\
                     return 301 https://$server_name$request_uri;\
                 }' /etc/nginx/conf.d/location-tracker-main.conf
@@ -220,7 +237,7 @@ jobs:
             else
               echo "Nginx configuration test failed"
               exit 1
-            fi    
+            fi
             
       - name: Load and start Docker container
         uses: appleboy/ssh-action@v1.2.0
@@ -249,13 +266,12 @@ jobs:
               exit 1
             fi
             
-            # Start the container
+            # Start the container (removed port 8443)
             echo "Starting Docker container..."
             docker run -d \
               --name location-tracker-main \
               --restart unless-stopped \
               -p 8080:8080 \
-              -p 8443:8443 \
               -p 5051:5051 \
               -v /home/ec2-user/certs:/root/certs:ro \
               -v /home/ec2-user/logs:/var/log \
@@ -265,7 +281,6 @@ jobs:
               -e DB_PASSWORD="${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}" \
               -e DB_SSLMODE=require \
               -e PORT=8080 \
-              -e HTTPS_PORT=8443 \
               -e UDP_PORT=5051 \
               -e DOMAIN="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}" \
               -e AUTO_TLS=false \
@@ -302,7 +317,7 @@ jobs:
             
             # Check container status
             echo "Container status:"
-            docker ps | head -1  # Header
+            docker ps | head -1
             docker ps | grep location-tracker-main
             
             # Show recent container logs
@@ -327,21 +342,38 @@ jobs:
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
             echo "=== Final Health Check ==="
-
+            
             # Check container status
             echo "Container status:"
             docker ps | head -1
             docker ps | grep location-tracker-main
-
+            
             # Test HTTP health endpoint
             max_attempts=5
             attempt=1
-
+            
             while [ $attempt -le $max_attempts ]; do
               echo "HTTP health check attempt $attempt/$max_attempts..."
+              
               if curl -f -s http://localhost:8080/api/health; then
                 echo "HTTP health check PASSED"
-                break
+                
+                # Display success information
+                echo "=== Deployment Successful ==="
+                echo "Container: location-tracker-main"
+                echo "Local health: http://localhost:8080/api/health"
+                if [ -f /etc/ssl/certs/location-tracker.crt ]; then
+                  echo "Public URL: https://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}"
+                else
+                  echo "Public URL: http://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}"
+                fi
+                
+                # Show container status
+                echo "Container status:"
+                docker ps | head -1
+                docker ps | grep location-tracker-main
+                
+                exit 0
               else
                 echo "HTTP health check failed (attempt $attempt/$max_attempts)"
                 if [ $attempt -lt $max_attempts ]; then
@@ -349,49 +381,14 @@ jobs:
                   sleep 10
                 fi
               fi
+              
               attempt=$((attempt + 1))
             done
-
-            # Test HTTPS health endpoint if certificates exist
-            if [ -f /etc/ssl/certs/location-tracker.crt ]; then
-              attempt=1
-              while [ $attempt -le $max_attempts ]; do
-                echo "HTTPS health check attempt $attempt/$max_attempts..."
-                if curl -f -s --insecure https://localhost:8443/api/health; then
-                  echo "HTTPS health check PASSED"
-                  break
-                else
-                  echo "HTTPS health check failed (attempt $attempt/$max_attempts)"
-                  if [ $attempt -lt $max_attempts ]; then
-                    echo "Waiting 10 seconds before retry..."
-                    sleep 10
-                  fi
-                fi
-                attempt=$((attempt + 1))
-              done
-            fi
-
-            if [ $attempt -gt $max_attempts ]; then
-              echo "ERROR: All health checks failed"
-              echo "Container status:"
-              docker ps -a | grep location-tracker-main
-              echo "Recent container logs:"
-              docker logs --tail 50 location-tracker-main
-              exit 1
-            fi
-
-            # Display success information
-            echo "=== Deployment Successful ==="
-            echo "Container: location-tracker-main"
-            echo "Local HTTP health: http://localhost:8080/api/health"
-            if [ -f /etc/ssl/certs/location-tracker.crt ]; then
-              echo "Local HTTPS health: https://localhost:8443/api/health"
-              echo "Public URL: https://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}"
-            else
-              echo "Public URL: http://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}"
-            fi
-
-            # Show container status
+            
+            # If we get here, all health checks failed
+            echo "ERROR: All health checks failed"
             echo "Container status:"
-            docker ps | head -1
-            docker ps | grep location-tracker-main
+            docker ps -a | grep location-tracker-main
+            echo "Recent container logs:"
+            docker logs --tail 50 location-tracker-main
+            exit 1

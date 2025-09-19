@@ -164,6 +164,8 @@ jobs:
             nginx_location="/test/$branch"
             
             echo "Adding Nginx configuration for feature branch: $branch"
+            echo "Safe branch name: $safe_branch"
+            echo "Nginx location: $nginx_location"
             
             # Backup the current main config
             sudo cp /etc/nginx/conf.d/location-tracker-main.conf /tmp/nginx-main-backup-$safe_branch.conf
@@ -174,7 +176,7 @@ jobs:
               exit 1
             fi
             
-            # Remove any existing feature branch locations
+            # Remove any existing feature branch locations to avoid duplicates
             sudo sed -i "/# Feature branch: $branch/,/location $nginx_location\/ws/ { d; }" /etc/nginx/conf.d/location-tracker-main.conf
             
             # Add feature branch locations to HTTP server block
@@ -207,7 +209,7 @@ jobs:
               }" /etc/nginx/conf.d/location-tracker-main.conf
             fi
             
-            # Add feature branch locations to HTTPS server block
+            # Add feature branch locations to HTTPS server block if it exists
             if grep -q "listen 443 ssl" /etc/nginx/conf.d/location-tracker-main.conf; then
               sudo sed -i "/listen 443 ssl/,/server {/ {
                 /# Main application root/i\\
@@ -238,19 +240,21 @@ jobs:
             fi
             
             # Clean up stale feature branch configs
-            sudo find /etc/nginx/conf.d -type f -name 'location-tracker-*.conf' ! -name 'location-tracker-main.conf' -exec rm {} \;
+            sudo find /etc/nginx/conf.d -type f -name 'location-tracker-*.conf' ! -name "location-tracker-main.conf" -exec rm {} \;
             
             # Test nginx configuration
+            echo "Testing nginx configuration..."
             if sudo nginx -t; then
               sudo systemctl reload nginx
               echo "Nginx configuration updated successfully"
             else
               echo "ERROR: Nginx configuration test failed"
+              echo "Restoring backup..."
               sudo cp /tmp/nginx-main-backup-$safe_branch.conf /etc/nginx/conf.d/location-tracker-main.conf
               sudo nginx -t
               exit 1
             fi
-
+            
       - name: Load and start Docker container
         if: matrix.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
@@ -283,13 +287,12 @@ jobs:
               exit 1
             fi
             
-            # Start the container
+            # Start the container (removed port 8444)
             echo "Starting Docker container..."
             docker run -d \
               --name $container_name \
               --restart unless-stopped \
               -p 8081:8080 \
-              -p 8444:8443 \
               -p 5052:5051 \
               -v /home/ec2-user/certs:/root/certs:ro \
               -e DB_HOST="${{ secrets[format('{0}_DB_HOST', matrix.instance)] }}" \
@@ -298,7 +301,6 @@ jobs:
               -e DB_PASSWORD="${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}" \
               -e DB_SSLMODE=require \
               -e PORT=8080 \
-              -e HTTPS_PORT=8443 \
               -e UDP_PORT=5051 \
               -e DOMAIN="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}" \
               -e AUTO_TLS=false \
@@ -342,17 +344,16 @@ jobs:
             echo "Recent container logs:"
             docker logs --tail 20 $container_name
             
-            # Test health endpoint
+            # Test HTTP health endpoint
             echo "Testing health endpoint..."
             max_attempts=5
             attempt=1
             
             while [ $attempt -le $max_attempts ]; do
-              echo "Health check attempt $attempt/$max_attempts..."
+              echo "HTTP health check attempt $attempt/$max_attempts..."
               
               if curl -f -s http://localhost:8081/api/health; then
-                echo ""
-                echo "Health check PASSED"
+                echo "HTTP health check PASSED"
                 
                 # Display success information
                 echo "=== Deployment Successful ==="
@@ -367,12 +368,12 @@ jobs:
                 
                 # Show container status
                 echo "Container status:"
-                docker ps | head -1  # Header
+                docker ps | head -1
                 docker ps | grep $container_name
                 
                 exit 0
               else
-                echo "Health check failed (attempt $attempt/$max_attempts)"
+                echo "HTTP health check failed (attempt $attempt/$max_attempts)"
                 if [ $attempt -lt $max_attempts ]; then
                   echo "Waiting 10 seconds before retry..."
                   sleep 10
