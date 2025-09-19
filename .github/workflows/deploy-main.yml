@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        instance: [EC2_1, EC2_2, EC2_3, EC2_4]
+        instance: [EC2_1, EC2_2, EC3, EC2_4]
       fail-fast: false
     steps:
       - uses: actions/checkout@v4
@@ -104,8 +104,24 @@ jobs:
                     listen 80;
                     server_name ${{ secrets[format('{0}_DOMAIN', matrix.instance)] }};
                     
-                    # Main application root
-                    location / {
+                    # Exact match for root
+                    location = / {
+                        proxy_pass http://127.0.0.1:8080;
+                        proxy_http_version 1.1;
+                        proxy_set_header Upgrade $http_upgrade;
+                        proxy_set_header Connection 'upgrade';
+                        proxy_set_header Host $host;
+                        proxy_set_header X-Real-IP $remote_addr;
+                        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                        proxy_set_header X-Forwarded-Proto $scheme;
+                        proxy_cache_bypass $http_upgrade;
+                    }
+                    
+                    # Redirect non-/test/ paths to HTTPS if certificates exist
+                    location ~ ^/(?!test/) {
+                        if (-f /etc/ssl/certs/location-tracker.crt) {
+                            return 301 https://$server_name$request_uri;
+                        }
                         proxy_pass http://127.0.0.1:8080;
                         proxy_http_version 1.1;
                         proxy_set_header Upgrade $http_upgrade;
@@ -193,10 +209,6 @@ jobs:
                     }
                 }
             EOF
-              
-              # Update HTTP server to redirect to HTTPS, preserving feature branch locations
-              sudo sed -i 's|location /|location = /|g' /etc/nginx/conf.d/location-tracker-main.conf
-              sudo sed -i '/location = \//a location ~ ^/(?!test/) { return 301 https://$server_name$request_uri; }' /etc/nginx/conf.d/location-tracker-main.conf
             fi
             
             # Test and reload nginx configuration
