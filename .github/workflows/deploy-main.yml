@@ -266,7 +266,8 @@ jobs:
               sudo tee -a /etc/nginx/conf.d/location-tracker-main.conf > /dev/null <<'EOF'
                 # HTTPS server block
                 server {
-                    listen 443 ssl http2;
+                    listen 443 ssl;
+                    http2 on;
                     server_name ${{ secrets[format('{0}_DOMAIN', matrix.instance)] }};
                     
                     ssl_certificate /etc/ssl/certs/location-tracker.crt;
@@ -356,10 +357,13 @@ jobs:
           username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
+            set -e  # Exit on any error
+            echo "=== STARTING DOCKER CONTAINER DEPLOYMENT ===" | tee -a /tmp/deploy.log
             echo "Loading and starting Docker container: location-tracker-main" | tee -a /tmp/deploy.log
             echo "Deployment method: ${{ github.event_name }}" | tee -a /tmp/deploy.log
+            
             # Check Docker service
-            echo "Checking Docker service status..." | tee -a /tmp/deploy.log
+            echo "=== STEP 1: Checking Docker service status ===" | tee -a /tmp/deploy.log
             if sudo systemctl is-active docker; then
               echo "Docker service is running" | tee -a /tmp/deploy.log
             else
@@ -367,11 +371,14 @@ jobs:
               sudo systemctl status docker --no-pager | tee -a /tmp/deploy.log
               exit 1
             fi
+            
             # Check system resources
-            echo "Checking system resources..." | tee -a /tmp/deploy.log
+            echo "=== STEP 2: Checking system resources ===" | tee -a /tmp/deploy.log
             free -h | tee -a /tmp/deploy.log || echo "Failed to check memory" | tee -a /tmp/deploy.log
             df -h / | tee -a /tmp/deploy.log || echo "Failed to check disk space" | tee -a /tmp/deploy.log
+            
             # Verify tar file exists
+            echo "=== STEP 3: Verifying Docker image tar file ===" | tee -a /tmp/deploy.log
             if [ -f "/tmp/location-tracker-main.tar" ]; then
               echo "Docker image tar file found: /tmp/location-tracker-main.tar" | tee -a /tmp/deploy.log
               ls -la /tmp/location-tracker-main.tar | tee -a /tmp/deploy.log
@@ -381,8 +388,9 @@ jobs:
               ls -la /tmp/ | tee -a /tmp/deploy.log || echo "No files in /tmp/" | tee -a /tmp/deploy.log
               exit 1
             fi
+            
             # Load Docker image
-            echo "Loading Docker image from tar file..." | tee -a /tmp/deploy.log
+            echo "=== STEP 4: Loading Docker image ===" | tee -a /tmp/deploy.log
             if docker load < /tmp/location-tracker-main.tar 2>&1 | tee -a /tmp/docker_load.log; then
               echo "Docker image loaded successfully" | tee -a /tmp/deploy.log
               docker images | grep location-tracker | tee -a /tmp/deploy.log || echo "No location-tracker images found" | tee -a /tmp/deploy.log
@@ -391,8 +399,9 @@ jobs:
               cat /tmp/docker_load.log | tee -a /tmp/deploy.log
               exit 1
             fi
+            
             # Verify port 8080 is free before starting container
-            echo "Checking port 8080 before starting container..." | tee -a /tmp/deploy.log
+            echo "=== STEP 5: Checking port availability ===" | tee -a /tmp/deploy.log
             if sudo lsof -i :8080; then
               echo "ERROR: Port 8080 is in use before starting container" | tee -a /tmp/deploy.log
               sudo lsof -i :8080 | tee -a /tmp/deploy.log
@@ -401,19 +410,21 @@ jobs:
             else
               echo "Port 8080 is free" | tee -a /tmp/deploy.log
             fi
+            
             # Log environment variables (excluding sensitive data)
-            echo "Environment variables for container:" | tee -a /tmp/deploy.log
+            echo "=== STEP 6: Environment variables ===" | tee -a /tmp/deploy.log
             echo "DB_HOST=${{ secrets[format('{0}_DB_HOST', matrix.instance)] }}" | tee -a /tmp/deploy.log
             echo "DB_NAME=${{ secrets[format('{0}_DB_NAME', matrix.instance)] }}" | tee -a /tmp/deploy.log
-            echo "DB_USER=${{ secrets[format('{0}_USER', matrix.instance)] }}" | tee -a /tmp/deploy.log
+            echo "DB_USER=${{ secrets[format('{0}_DB_USER', matrix.instance)] }}" | tee -a /tmp/deploy.log
             echo "DB_SSLMODE=require" | tee -a /tmp/deploy.log
             echo "PORT=8080" | tee -a /tmp/deploy.log
             echo "UDP_PORT=5051" | tee -a /tmp/deploy.log
             echo "DOMAIN=${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}" | tee -a /tmp/deploy.log
             echo "AUTO_TLS=false" | tee -a /tmp/deploy.log
+            
             # Start Docker container
-            echo "Starting Docker container..." | tee -a /tmp/deploy.log
-            if docker run -d \
+            echo "=== STEP 7: Starting Docker container ===" | tee -a /tmp/deploy.log
+            docker run -d \
               --name location-tracker-main \
               --restart unless-stopped \
               -p 8080:8080 \
@@ -429,15 +440,20 @@ jobs:
               -e UDP_PORT=5051 \
               -e DOMAIN="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}" \
               -e AUTO_TLS=false \
-              location-tracker:main 2>&1 | tee -a /tmp/docker_run.log; then
-              echo "Docker container started successfully" | tee -a /tmp/deploy.log
+              location-tracker:main 2>&1 | tee -a /tmp/docker_run.log
+            
+            if [ $? -eq 0 ]; then
+              echo "Docker run command completed successfully" | tee -a /tmp/deploy.log
             else
-              echo "ERROR: Failed to start Docker container" | tee -a /tmp/deploy.log
+              echo "ERROR: Docker run command failed with exit code $?" | tee -a /tmp/deploy.log
               cat /tmp/docker_run.log | tee -a /tmp/deploy.log
               exit 1
             fi
-            echo "Waiting for container to start..." | tee -a /tmp/deploy.log
+            
+            echo "=== STEP 8: Waiting for container to start ===" | tee -a /tmp/deploy.log
             sleep 20
+            
+            echo "=== STEP 9: Verifying container is running ===" | tee -a /tmp/deploy.log
             if docker ps --format '{{.Names}}' | grep -q "^location-tracker-main$"; then
               echo "Container running: location-tracker-main" | tee -a /tmp/deploy.log
               docker ps | grep location-tracker-main | tee -a /tmp/deploy.log
@@ -452,10 +468,11 @@ jobs:
               cat /tmp/docker_logs.log | tee -a /tmp/deploy.log
               exit 1
             fi
-            # Log deployment output for debugging
-            echo "Deployment log contents:" | tee -a /tmp/deploy.log
-            cat /tmp/deploy.log
-            rm -f /tmp/location-tracker-main.tar /tmp/docker_load.log /tmp/docker_run.log /tmp/docker_logs.log
+            
+            echo "=== STEP 10: Cleanup temporary files ===" | tee -a /tmp/deploy.log
+            rm -f /tmp/location-tracker-main.tar /tmp/docker_load.log /tmp/docker_run.log /tmp/docker_logs.log || echo "Failed to clean some temp files" | tee -a /tmp/deploy.log
+            
+            echo "=== DOCKER CONTAINER DEPLOYMENT COMPLETED SUCCESSFULLY ===" | tee -a /tmp/deploy.log
 
       - name: Test container and database connection
         if: steps.should_deploy.outputs.deploy == 'true'
