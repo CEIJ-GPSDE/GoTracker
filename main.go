@@ -17,8 +17,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-        "strings"
-
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
@@ -503,7 +501,6 @@ func (us *UDPSniffer) parsePacket(data []byte) *LocationPacket {
 		Timestamp: time.Now().UTC(),
 	}
 }
-
 
 func (us *UDPSniffer) storeLocation(packet *LocationPacket) error {
 	query := `
