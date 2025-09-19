@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        instance: [EC2_1, EC2_2, EC2_3, EC2_4]
+        instance: [EC2_1, EC2_2, EC3, EC4]
       fail-fast: false
     steps:
       - uses: actions/checkout@v4
@@ -60,6 +60,7 @@ jobs:
               if sudo lsof -i :8080; then
                 echo "ERROR: Port 8080 still in use after cleanup"
                 sudo lsof -i :8080
+                sudo netstat -tuln | grep :8080 || echo "No process listening on port 8080"
                 exit 1
               fi
             else
@@ -268,22 +269,37 @@ jobs:
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
             echo "Loading and starting Docker container: location-tracker-main"
+            # Verify tar file exists
             if [ -f "/tmp/location-tracker-main.tar" ]; then
-              echo "Loading Docker image from tar file..."
-              docker load < /tmp/location-tracker-main.tar
-              if docker images | grep -q "location-tracker.*main"; then
-                echo "Docker image loaded successfully"
-              else
-                echo "ERROR: Docker image failed to load"
-                exit 1
-              fi
+              echo "Docker image tar file found: /tmp/location-tracker-main.tar"
+              ls -la /tmp/location-tracker-main.tar
             else
               echo "ERROR: Docker image tar file not found"
-              ls -la /tmp/location-tracker-*.tar || echo "No tar files found"
+              ls -la /tmp/ || echo "No files in /tmp/"
               exit 1
             fi
+            # Load Docker image
+            echo "Loading Docker image from tar file..."
+            if docker load < /tmp/location-tracker-main.tar; then
+              echo "Docker image loaded successfully"
+              docker images | grep location-tracker || echo "No location-tracker images found"
+            else
+              echo "ERROR: Failed to load Docker image"
+              exit 1
+            fi
+            # Verify port 8080 is free before starting container
+            echo "Checking port 8080 before starting container..."
+            if sudo lsof -i :8080; then
+              echo "ERROR: Port 8080 is in use before starting container"
+              sudo lsof -i :8080
+              sudo netstat -tuln | grep :8080 || echo "No process listening on port 8080"
+              exit 1
+            else
+              echo "Port 8080 is free"
+            fi
+            # Start Docker container
             echo "Starting Docker container..."
-            docker run -d \
+            if docker run -d \
               --name location-tracker-main \
               --restart unless-stopped \
               -p 8080:8080 \
@@ -299,11 +315,16 @@ jobs:
               -e UDP_PORT=5051 \
               -e DOMAIN="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}" \
               -e AUTO_TLS=false \
-              location-tracker:main
+              location-tracker:main; then
+              echo "Docker container started successfully"
+            else
+              echo "ERROR: Failed to start Docker container"
+              exit 1
+            fi
             echo "Waiting for container to start..."
             sleep 20
             if docker ps --format '{{.Names}}' | grep -q "^location-tracker-main$"; then
-              echo "Container started successfully: location-tracker-main"
+              echo "Container running: location-tracker-main"
               docker ps | grep location-tracker-main
             else
               echo "ERROR: Container failed to start"
