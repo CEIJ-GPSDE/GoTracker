@@ -388,7 +388,7 @@ jobs:
               exit 1
             fi
             
-            echo "Starting Docker container..."
+            echo "Starting Docker container with extensive debugging..."
             docker run -d \
               --name $container_name \
               --restart unless-stopped \
@@ -409,28 +409,83 @@ jobs:
             echo "Waiting for container to start..."
             sleep 30
             
-            # Get the container's instance ID from logs
-            container_instance_id=$(docker logs $container_name 2>&1 | grep "Starting leader election with instance ID:" | tail -1 | sed 's/.*instance ID: //')
-            echo "Feature container instance ID: $container_instance_id"
+            echo "=== DEBUGGING DATABASE CONNECTION ==="
+            echo "Container logs:"
+            docker logs --tail 50 $container_name
             
-            if [ -n "$container_instance_id" ]; then
-              echo "Forcing feature branch to become UDP leader..."
-              # Use docker exec to run psql inside the container to update leader election
+            echo "=== TESTING DATABASE CONNECTION ==="
+            docker exec $container_name sh -c '
+              echo "Testing database connection with same credentials as app..."
+              if command -v psql >/dev/null; then
+                echo "Database host: $DB_HOST"
+                echo "Database name: $DB_NAME" 
+                echo "Database user: $DB_USER"
+                echo "SSL mode: $DB_SSLMODE"
+                
+                echo "Testing basic connection:"
+                PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1 as test;" || echo "❌ Database connection failed"
+                
+                echo "Checking if locations table exists:"
+                PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c "\d locations" || echo "❌ Locations table not accessible"
+                
+                echo "Checking location count:"
+                PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c "SELECT COUNT(*) as location_count FROM locations;" || echo "❌ Cannot count locations"
+                
+                echo "Checking leader election table:"
+                PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c "SELECT * FROM leader_election;" || echo "❌ Leader election table issue"
+                
+                echo "Current leader election status:"
+                PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c "SELECT service, instance_id, last_heartbeat, (last_heartbeat > NOW() - INTERVAL '\''15 seconds'\'') as is_current FROM leader_election;" || echo "❌ Cannot check leader status"
+              else
+                echo "❌ psql not available in container"
+              fi
+            '
+            
+            echo "=== TESTING API ENDPOINTS ==="
+            echo "Testing health endpoint:"
+            curl -s http://localhost:8081/api/health || echo "❌ Health endpoint failed"
+            
+            echo "Testing database health endpoint:"
+            curl -s http://localhost:8081/api/health/db || echo "❌ DB health endpoint failed"
+            
+            echo "Testing UDP health endpoint:"  
+            curl -s http://localhost:8081/api/health/udp || echo "❌ UDP health endpoint failed"
+            
+            echo "Testing stats endpoint:"
+            curl -s http://localhost:8081/api/stats || echo "❌ Stats endpoint failed"
+            
+            echo "=== ATTEMPTING TO FORCE UDP START ==="
+            # Get the feature container instance ID
+            feature_instance_id=$(docker logs $container_name 2>&1 | grep "Starting leader election with instance ID:" | tail -1 | sed 's/.*instance ID: //' | tr -d '\r\n')
+            echo "Feature instance ID: [$feature_instance_id]"
+            
+            if [ -n "$feature_instance_id" ]; then
+              echo "Attempting to force UDP leadership by removing current leader..."
               docker exec $container_name sh -c "
                 if command -v psql >/dev/null; then
-                  echo 'Updating leader election in database...'
-                  PGPASSWORD=\"\$DB_PASSWORD\" psql -h \"\$DB_HOST\" -U \"\$DB_USER\" -d \"\$DB_NAME\" -c \"
-                    INSERT INTO leader_election (service, instance_id, last_heartbeat)
-                    VALUES ('udp_sniffer_feature', '$container_instance_id', NOW())
-                    ON CONFLICT (service) DO UPDATE SET
-                      instance_id = '$container_instance_id',
-                      last_heartbeat = NOW();
-                  \"
-                  echo 'Leader election updated for feature branch'
-                else
-                  echo 'psql not available, skipping leader election override'
+                  echo 'Removing current UDP leader to force re-election...'
+                  PGPASSWORD=\"\$DB_PASSWORD\" psql -h \"\$DB_HOST\" -U \"\$DB_USER\" -d \"\$DB_NAME\" -c \"DELETE FROM leader_election WHERE service = 'udp_sniffer';\" || echo 'Failed to remove leader'
+                  
+                  echo 'Waiting 10 seconds for re-election...'
+                  sleep 10
+                  
+                  echo 'Checking new leader status:'
+                  PGPASSWORD=\"\$DB_PASSWORD\" psql -h \"\$DB_HOST\" -U \"\$DB_USER\" -d \"\$DB_NAME\" -c \"SELECT * FROM leader_election WHERE service = 'udp_sniffer';\" || echo 'Failed to check leader status'
                 fi
-              " || echo "Failed to update leader election, but container may still work"
+              "
+              
+              echo "Checking container logs after forced re-election:"
+              sleep 10
+              docker logs --tail 20 $container_name
+              
+              echo "Checking if UDP port is now listening:"
+              if sudo netstat -tuln | grep -q ":5052 "; then
+                echo "✅ Port 5052 (UDP) is now listening"
+              else
+                echo "❌ Port 5052 (UDP) still not listening"
+              fi
+            else
+              echo "❌ Could not extract instance ID from logs"
             fi
             
             echo "Waiting for container to start..."
