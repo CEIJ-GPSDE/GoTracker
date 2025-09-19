@@ -388,9 +388,7 @@ jobs:
               exit 1
             fi
             
-            echo "Starting Docker container with unique UDP port..."
-            # Use different UDP port (5052) to avoid conflict with main app (5051)
-            # Add LEADER_ELECTION_KEY to prevent conflicts between main and feature instances
+            echo "Starting Docker container..."
             docker run -d \
               --name $container_name \
               --restart unless-stopped \
@@ -406,8 +404,34 @@ jobs:
               -e DOMAIN="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}" \
               -e AUTO_TLS=false \
               -e DISABLE_TLS=true \
-              -e LEADER_ELECTION_KEY="feature-${safe_branch}" \
               location-tracker:${safe_branch}
+            
+            echo "Waiting for container to start..."
+            sleep 30
+            
+            # Get the container's instance ID from logs
+            container_instance_id=$(docker logs $container_name 2>&1 | grep "Starting leader election with instance ID:" | tail -1 | sed 's/.*instance ID: //')
+            echo "Feature container instance ID: $container_instance_id"
+            
+            if [ -n "$container_instance_id" ]; then
+              echo "Forcing feature branch to become UDP leader..."
+              # Use docker exec to run psql inside the container to update leader election
+              docker exec $container_name sh -c "
+                if command -v psql >/dev/null; then
+                  echo 'Updating leader election in database...'
+                  PGPASSWORD=\"\$DB_PASSWORD\" psql -h \"\$DB_HOST\" -U \"\$DB_USER\" -d \"\$DB_NAME\" -c \"
+                    INSERT INTO leader_election (service, instance_id, last_heartbeat)
+                    VALUES ('udp_sniffer_feature', '$container_instance_id', NOW())
+                    ON CONFLICT (service) DO UPDATE SET
+                      instance_id = '$container_instance_id',
+                      last_heartbeat = NOW();
+                  \"
+                  echo 'Leader election updated for feature branch'
+                else
+                  echo 'psql not available, skipping leader election override'
+                fi
+              " || echo "Failed to update leader election, but container may still work"
+            fi
             
             echo "Waiting for container to start..."
             sleep 30
