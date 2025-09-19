@@ -146,26 +146,25 @@ jobs:
             safe_branch="${{ steps.prepare.outputs.safe_branch }}"
             domain="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}"
             nginx_location="/test/$branch"
-            echo "Adding Nginx configuration for feature branch: $branch"
+            
+            echo "Creating separate Nginx configuration for feature branch: $branch"
             echo "Safe branch name: $safe_branch"
             echo "Nginx location: $nginx_location"
             echo "Domain: $domain"
             
-            # Backup existing configuration
-            sudo cp /etc/nginx/conf.d/location-tracker-main.conf /tmp/nginx-main-backup-$safe_branch.conf || touch /tmp/nginx-main-backup-$safe_branch.conf
+            # Create feature-specific configuration file
+            feature_conf="/etc/nginx/conf.d/location-tracker-feature-$safe_branch.conf"
             
-            # Create temporary configuration file
-            temp_conf="/tmp/nginx-temp-$safe_branch.conf"
-            sudo rm -f $temp_conf
-            sudo touch $temp_conf
-            sudo chmod 644 $temp_conf
+            # Remove any existing feature configuration for this branch
+            sudo rm -f "$feature_conf"
             
-            # Write HTTP server block
-            sudo tee $temp_conf > /dev/null <<EOF
+            # Create new feature configuration
+            sudo tee "$feature_conf" > /dev/null <<EOF
             # Feature branch: $safe_branch
             server {
                 listen 80;
                 server_name $domain;
+                
                 location $nginx_location/ {
                     proxy_pass http://127.0.0.1:8081/;
                     proxy_http_version 1.1;
@@ -188,33 +187,19 @@ jobs:
                     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
                     proxy_set_header X-Forwarded-Proto \$scheme;
                 }
-
-                # Redirect feature branch to HTTPS if certificates exist
+                
+                # Redirect to HTTPS if certificates exist
                 if (-f /etc/ssl/certs/location-tracker.crt) {
                     return 301 https://\$server_name\$request_uri;
                 }
             }
-            # End feature branch: $safe_branch
             EOF
-            # Sync and verify HTTP block was written
-            sync
-            echo "HTTP configuration written, verifying..."
-            if ! grep -q "location $nginx_location/" $temp_conf; then
-              echo "ERROR: HTTP location block not found after writing"
-              cat $temp_conf
-              exit 1
-            fi
-            echo "HTTP location block verified"
-            
-            # Log HTTP configuration
-            echo "HTTP configuration:" | tee -a /tmp/deploy.log
-            cat $temp_conf | tee -a /tmp/deploy.log
             
             # Add HTTPS server block if certificates exist
             if [ -f /etc/ssl/certs/location-tracker.crt ] && [ -f /etc/ssl/private/location-tracker.key ]; then
               echo "SSL certificates found, adding HTTPS configuration..."
               
-              sudo tee -a $temp_conf > /dev/null <<EOF
+              sudo tee -a "$feature_conf" > /dev/null <<EOF
             # Feature branch HTTPS: $safe_branch
             server {
                 listen 443 ssl;
@@ -243,7 +228,7 @@ jobs:
                     proxy_set_header Host \$host;
                     proxy_set_header X-Real-IP \$remote_addr;
                     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \$scheme;
+                    proxy_Set_header X-Forwarded-Proto \$scheme;
                     proxy_cache_bypass \$http_upgrade;
                 }
             
@@ -258,78 +243,7 @@ jobs:
                     proxy_set_header X-Forwarded-Proto \$scheme;
                 }
             }
-            # End feature branch HTTPS: $safe_branch
             EOF
-              
-              # Sync and verify HTTPS block was added
-              sync
-              echo "HTTPS configuration added, verifying..."
-            else
-              echo "No SSL certificates found, skipping HTTPS configuration"
-            fi
-            
-            # Final verification of location blocks
-            location_count=$(grep -c "location $nginx_location/" $temp_conf)
-            if [ "$location_count" -eq 0 ]; then
-              echo "ERROR: No location blocks found for $nginx_location/"
-              echo "Final temporary configuration:"
-              cat $temp_conf
-              exit 1
-            elif [ "$location_count" -eq 1 ]; then
-              echo "Found 1 location block (HTTP only)"
-            elif [ "$location_count" -eq 2 ]; then
-              echo "Found 2 location blocks (HTTP and HTTPS)"
-            else
-              echo "WARNING: Found $location_count location blocks, expected 1 or 2"
-            fi
-            
-            # Log final temporary configuration
-            echo "Final temporary configuration:" | tee -a /tmp/deploy.log
-            cat $temp_conf | tee -a /tmp/deploy.log
-            
-            # Move temporary file to final location
-            echo "Moving temporary configuration to final location..."
-            sudo mv $temp_conf /etc/nginx/conf.d/location-tracker-main.conf
-            
-            # Final verification of moved configuration
-            if ! grep -q "location $nginx_location/" /etc/nginx/conf.d/location-tracker-main.conf; then
-              echo "ERROR: Location block not found in final configuration"
-              echo "Final configuration content:"
-              cat /etc/nginx/conf.d/location-tracker-main.conf
-              echo "Restoring backup..."
-              sudo cp /tmp/nginx-main-backup-$safe_branch.conf /etc/nginx/conf.d/location-tracker-main.conf
-              exit 1
-            fi
-            
-            echo "Location blocks verified in final configuration"
-            
-            # Check for duplicate server names
-            server_count=$(grep -c "server_name $domain" /etc/nginx/conf.d/location-tracker-main.conf)
-            if [ "$server_count" -gt 2 ]; then
-              echo "ERROR: Detected $server_count server_name $domain entries, expected 2 or fewer (HTTP and HTTPS)"
-              echo "Configuration content:"
-              cat /etc/nginx/conf.d/location-tracker-main.conf
-              echo "Restoring backup..."
-              sudo cp /tmp/nginx-main-backup-$safe_branch.conf /etc/nginx/conf.d/location-tracker-main.conf
-              exit 1
-            fi
-            echo "Server name count verified: $server_count entries"
-            # Verify ports are listening
-            echo "Checking listening ports..."
-            if sudo netstat -tuln | grep -q ":80 "; then
-              echo "Port 80 is listening"
-            else
-              echo "WARNING: Port 80 is not listening"
-            fi
-            if [ -f /etc/ssl/certs/location-tracker.crt ] && sudo netstat -tuln | grep -q ":443 "; then
-              echo "Port 443 is listening"
-            else
-              echo "WARNING: Port 443 is not listening (SSL may not be configured)"
-            fi
-            if sudo netstat -tuln | grep -q ":8081 "; then
-              echo "Port 8081 is listening (should be bound by Docker)"
-            else
-              echo "WARNING: Port 8081 is not listening yet (Docker container will bind after this step)"
             fi
             
             # Test Nginx configuration
@@ -342,22 +256,16 @@ jobs:
               else
                 echo "ERROR: Failed to reload Nginx"
                 sudo journalctl -u nginx -n 50 --no-pager
-                echo "Restoring backup..."
-                sudo cp /tmp/nginx-main-backup-$safe_branch.conf /etc/nginx/conf.d/location-tracker-main.conf
-                sudo nginx -t && sudo systemctl reload nginx
+                sudo rm -f "$feature_conf"
                 exit 1
               fi
             else
               echo "ERROR: Nginx configuration test failed"
-              echo "Configuration content:"
-              cat /etc/nginx/conf.d/location-tracker-main.conf
-              echo "Restoring backup..."
-              sudo cp /tmp/nginx-main-backup-$safe_branch.conf /etc/nginx/conf.d/location-tracker-main.conf
-              sudo nginx -t
+              sudo rm -f "$feature_conf"
               exit 1
             fi
             
-            echo "Nginx configuration update completed successfully"
+            echo "Feature branch Nginx configuration completed successfully"
 
       - name: Load and start Docker container
         if: matrix.deploy == 'true'
