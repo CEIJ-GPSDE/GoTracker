@@ -15,71 +15,65 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Build main
+      - name: Build Docker image
         run: |
-          go mod tidy
-          safe_branch="main"
-          mkdir -p build/${safe_branch}/static
-          go build -ldflags="-X main.Version=main-$(git rev-parse --short HEAD)" -o build/${safe_branch}/app-${safe_branch} main.go
-          cp static/index.html build/${safe_branch}/static/index.html
+          echo "Building Docker image for main branch"
           
-      - name: Prepare deploy folder
-        run: |
-          safe_branch="main"
-          mkdir -p deploy/${safe_branch}
-          mv build/${safe_branch}/* deploy/${safe_branch}/
+          # Build the Docker image
+          docker build \
+            --build-arg VERSION=main-$(git rev-parse --short HEAD) \
+            -t location-tracker:main \
+            .
           
-      - name: Stop existing service and clean old binaries
+          # Save image to tar file for transfer
+          docker save location-tracker:main > location-tracker-main.tar
+          
+          echo "Docker image saved: location-tracker-main.tar"
+          ls -la location-tracker-main.tar
+          
+      - name: Stop existing container and clean old deployments
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
           username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
-            safe_branch="main"
-            echo "Stopping existing service..."
-            sudo systemctl stop location-tracker@${safe_branch} || echo "Service was not running"
+            echo "Cleaning up existing main deployment..."
             
-            echo "Cleaning old binaries..."
-            rm -f /home/ec2-user/app/${safe_branch}/app-${safe_branch}* || echo "No old binaries to remove"
+            # Stop and remove existing systemd service (migration cleanup)
+            if systemctl is-active --quiet location-tracker@main 2>/dev/null; then
+              echo "Stopping old systemd service..."
+              sudo systemctl stop location-tracker@main || echo "Service was not running"
+              sudo systemctl disable location-tracker@main || echo "Service was not enabled"
+            fi
             
-            echo "Creating app directory structure..."
-            mkdir -p /home/ec2-user/app/${safe_branch}/static
-            mkdir -p /home/ec2-user/app/${safe_branch}/certs
+            # Stop and remove existing container
+            if docker ps -a --format '{{.Names}}' | grep -q "^location-tracker-main$"; then
+              echo "Stopping existing container: location-tracker-main"
+              docker stop location-tracker-main || echo "Container was not running"
+              docker rm location-tracker-main || echo "Failed to remove container"
+            fi
             
-      - name: Upload files via rsync over SSH
-        run: |
-          safe_branch="main"
-          
-          # Create SSH key file
-          echo "${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}" > /tmp/deploy_key
-          chmod 600 /tmp/deploy_key
-          
-          # Use rsync to transfer files
-          rsync -avz -e "ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
-            deploy/${safe_branch}/ \
-            ${{ secrets[format('{0}_USER', matrix.instance)] }}@${{ secrets[format('{0}_HOST', matrix.instance)] }}:/home/ec2-user/app/${safe_branch}/
-          
-          # Cleanup
-          rm -f /tmp/deploy_key
-          
-          echo "Files transferred successfully"
-          
-      - name: Set executable permissions and verify upload
-        uses: appleboy/ssh-action@v1.2.0
+            # Remove old image
+            if docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "^location-tracker:main$"; then
+              echo "Removing old image: location-tracker:main"
+              docker rmi location-tracker:main || echo "Failed to remove image"
+            fi
+            
+            # Create directory for SSL certificates and logs
+            mkdir -p /home/ec2-user/certs
+            mkdir -p /home/ec2-user/logs
+            echo "Cleanup completed"
+            
+      - name: Upload Docker image
+        uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
           username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
-          script: |
-            safe_branch="main"
-            echo "=== Checking uploaded files ==="
-            ls -la /home/ec2-user/app/${safe_branch}/
-            
-            # Set executable permissions on binary
-            chmod +x /home/ec2-user/app/${safe_branch}/app-${safe_branch}
-            echo "Executable permissions set"
-            
+          source: "location-tracker-main.tar"
+          target: "/tmp/"
+          
       - name: Deploy SSL certificates
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -89,7 +83,7 @@ jobs:
           script: |
             # Create certificates directories
             sudo mkdir -p /etc/ssl/certs /etc/ssl/private
-            mkdir -p /home/ec2-user/app/main/certs
+            mkdir -p /home/ec2-user/certs
             
             # Deploy SSL certificate (if provided)
             if [ -n "${{ secrets[format('{0}_SSL_CERT', matrix.instance)] }}" ]; then
@@ -97,9 +91,9 @@ jobs:
               echo '${{ secrets[format('{0}_SSL_CERT', matrix.instance)] }}' | sudo tee /etc/ssl/certs/location-tracker.crt > /dev/null
               sudo chmod 644 /etc/ssl/certs/location-tracker.crt
               
-              # Also copy to app directory
-              echo '${{ secrets[format('{0}_SSL_CERT', matrix.instance)] }}' > /home/ec2-user/app/main/certs/server.crt
-              chmod 644 /home/ec2-user/app/main/certs/server.crt
+              # Also copy to app directory for Docker
+              echo '${{ secrets[format('{0}_SSL_CERT', matrix.instance)] }}' > /home/ec2-user/certs/server.crt
+              chmod 644 /home/ec2-user/certs/server.crt
             fi
             
             # Deploy SSL private key (if provided)
@@ -109,9 +103,9 @@ jobs:
               sudo chmod 600 /etc/ssl/private/location-tracker.key
               sudo chown root:root /etc/ssl/private/location-tracker.key
               
-              # Also copy to app directory
-              echo '${{ secrets[format('{0}_SSL_KEY', matrix.instance)] }}' > /home/ec2-user/app/main/certs/server.key
-              chmod 600 /home/ec2-user/app/main/certs/server.key
+              # Also copy to app directory for Docker
+              echo '${{ secrets[format('{0}_SSL_KEY', matrix.instance)] }}' > /home/ec2-user/certs/server.key
+              chmod 600 /home/ec2-user/certs/server.key
             fi
             
             echo "SSL certificates deployed successfully"
@@ -139,6 +133,18 @@ jobs:
                     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
                     proxy_set_header X-Forwarded-Proto \$scheme;
                     proxy_cache_bypass \$http_upgrade;
+                }
+                
+                # WebSocket support
+                location /ws {
+                    proxy_pass http://127.0.0.1:8080;
+                    proxy_http_version 1.1;
+                    proxy_set_header Upgrade \$http_upgrade;
+                    proxy_set_header Connection "Upgrade";
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
                 }
             }
             EOF
@@ -209,117 +215,150 @@ jobs:
               exit 1
             fi
             
-      - name: Test binary and database connection
+      - name: Load and start Docker container
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
           username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
-            safe_branch="main"
-            binary_path="/home/ec2-user/app/${safe_branch}/app-${safe_branch}"
+            echo "Loading and starting Docker container: location-tracker-main"
             
-            echo "=== Final verification ==="
-            if [ -f "$binary_path" ]; then
-              echo "Binary found: $binary_path"
-              ls -la "$binary_path"
-            else
-              echo "ERROR: Binary NOT found at: $binary_path"
-              echo "Directory contents:"
-              ls -la /home/ec2-user/app/${safe_branch}/
-              exit 1
-            fi
-            
-            # Test database connection
-            echo "Testing database connection..."
-            if command -v psql >/dev/null; then
-              PGPASSWORD="${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}" \
-              psql -h "${{ secrets[format('{0}_DB_HOST', matrix.instance)] }}" \
-                   -U "${{ secrets[format('{0}_DB_USER', matrix.instance)] }}" \
-                   -d "${{ secrets[format('{0}_DB_NAME', matrix.instance)] }}" \
-                   -c "SELECT 1" || echo "Database connection test failed"
-            else
-              echo "psql not available, skipping database test"
-            fi
-            
-            # Test binary version
-            echo "Testing binary version..."
-            "$binary_path" --version || echo "Binary version test failed"
-            
-      - name: Create and start systemd service
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
-          username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
-          key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
-          script: |
-            safe_branch="main"
-            
-            # Create systemd service file
-            sudo tee /etc/systemd/system/location-tracker@${safe_branch}.service > /dev/null <<EOF
-            [Unit]
-            Description=Location Tracker (%i)
-            After=network.target
-            
-            [Service]
-            ExecStart=/home/ec2-user/app/%i/app-%i
-            Restart=always
-            RestartSec=10
-            User=ec2-user
-            WorkingDirectory=/home/ec2-user/app/%i
-            Environment=DB_HOST=${{ secrets[format('{0}_DB_HOST', matrix.instance)] }}
-            Environment=DB_NAME=${{ secrets[format('{0}_DB_NAME', matrix.instance)] }}
-            Environment=DB_USER=${{ secrets[format('{0}_DB_USER', matrix.instance)] }}
-            Environment=DB_PASSWORD=${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}
-            Environment=DB_SSLMODE=require
-            Environment=PORT=8080
-            Environment=HTTPS_PORT=8443
-            Environment=DOMAIN=${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}
-            Environment=AUTO_TLS=false
-            Environment=UDP_PORT=5051
-            Environment=LOG_FILE=/var/log/location-tracker-%i.log
-            
-            # Security settings
-            NoNewPrivileges=true
-            ProtectSystem=strict
-            ProtectHome=true
-            ReadWritePaths=/home/ec2-user/app/%i /var/log
-            PrivateTmp=true
-            
-            [Install]
-            WantedBy=multi-user.target
-            EOF
-            
-            # Create log file with proper permissions
-            sudo touch /var/log/location-tracker-${safe_branch}.log
-            sudo chown ec2-user:ec2-user /var/log/location-tracker-${safe_branch}.log
-            
-            # Reload systemd and start service
-            sudo systemctl daemon-reload
-            sudo systemctl enable location-tracker@${safe_branch}
-            sudo systemctl restart location-tracker@${safe_branch}
-            
-            # Wait for service to start
-            sleep 15
-            
-            # Verify service status
-            echo "=== Service Status ==="
-            sudo systemctl status location-tracker@${safe_branch} --no-pager -l
-            
-            echo "=== Recent Logs ==="
-            sudo journalctl -u location-tracker@${safe_branch} --no-pager -l -n 20
-            
-            # Final health check
-            if sudo systemctl is-active location-tracker@${safe_branch} >/dev/null; then
-              echo "Service is running successfully"
-              # Test HTTP endpoint
-              if curl -f http://localhost:8080/api/health; then
-                echo "Health check passed"
+            # Load Docker image
+            if [ -f "/tmp/location-tracker-main.tar" ]; then
+              echo "Loading Docker image from tar file..."
+              docker load < /tmp/location-tracker-main.tar
+              
+              # Verify image was loaded
+              if docker images | grep -q "location-tracker.*main"; then
+                echo "Docker image loaded successfully"
               else
-                echo "WARNING: Health check failed"
+                echo "ERROR: Docker image failed to load"
+                exit 1
               fi
             else
-              echo "ERROR: Service failed to start"
-              sudo journalctl -u location-tracker@${safe_branch} --no-pager -l -n 50
+              echo "ERROR: Docker image tar file not found"
+              ls -la /tmp/location-tracker-*.tar || echo "No tar files found"
               exit 1
             fi
+            
+            # Start the container
+            echo "Starting Docker container..."
+            docker run -d \
+              --name location-tracker-main \
+              --restart unless-stopped \
+              -p 8080:8080 \
+              -p 8443:8443 \
+              -p 5051:5051 \
+              -v /home/ec2-user/certs:/root/certs:ro \
+              -v /home/ec2-user/logs:/var/log \
+              -e DB_HOST="${{ secrets[format('{0}_DB_HOST', matrix.instance)] }}" \
+              -e DB_NAME="${{ secrets[format('{0}_DB_NAME', matrix.instance)] }}" \
+              -e DB_USER="${{ secrets[format('{0}_DB_USER', matrix.instance)] }}" \
+              -e DB_PASSWORD="${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}" \
+              -e DB_SSLMODE=require \
+              -e PORT=8080 \
+              -e HTTPS_PORT=8443 \
+              -e UDP_PORT=5051 \
+              -e DOMAIN="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}" \
+              -e AUTO_TLS=false \
+              location-tracker:main
+            
+            # Wait for container to start
+            echo "Waiting for container to start..."
+            sleep 20
+            
+            # Verify container is running
+            if docker ps --format '{{.Names}}' | grep -q "^location-tracker-main$"; then
+              echo "Container started successfully: location-tracker-main"
+              docker ps | grep location-tracker-main
+            else
+              echo "ERROR: Container failed to start"
+              echo "Container status:"
+              docker ps -a | grep location-tracker-main || echo "Container not found"
+              echo "Container logs:"
+              docker logs location-tracker-main || echo "Failed to get logs"
+              exit 1
+            fi
+            
+            # Clean up tar file
+            rm -f /tmp/location-tracker-main.tar
+            
+      - name: Test container and database connection
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
+          username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
+          key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
+          script: |
+            echo "=== Final verification ==="
+            
+            # Check container status
+            echo "Container status:"
+            docker ps | head -1  # Header
+            docker ps | grep location-tracker-main
+            
+            # Show recent container logs
+            echo "Recent container logs:"
+            docker logs --tail 20 location-tracker-main
+            
+            # Test database connection using container
+            echo "Testing database connection..."
+            docker exec location-tracker-main sh -c '
+              if command -v psql >/dev/null; then
+                PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1" || echo "Database connection test failed"
+              else
+                echo "psql not available in container, skipping database test"
+              fi
+            ' || echo "Database test failed"
+            
+      - name: Health check and final verification
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
+          username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
+          key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
+          script: |
+            echo "=== Final Health Check ==="
+            
+            # Test health endpoint
+            max_attempts=5
+            attempt=1
+            
+            while [ $attempt -le $max_attempts ]; do
+              echo "Health check attempt $attempt/$max_attempts..."
+              
+              if curl -f -s http://localhost:8080/api/health; then
+                echo ""
+                echo "Health check PASSED"
+                
+                # Display success information
+                echo "=== Deployment Successful ==="
+                echo "Container: location-tracker-main"
+                echo "Local health: http://localhost:8080/api/health"
+                echo "Public URL: http://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}"
+                
+                # Show container status
+                echo "Container status:"
+                docker ps | head -1  # Header
+                docker ps | grep location-tracker-main
+                
+                exit 0
+              else
+                echo "Health check failed (attempt $attempt/$max_attempts)"
+                if [ $attempt -lt $max_attempts ]; then
+                  echo "Waiting 10 seconds before retry..."
+                  sleep 10
+                fi
+              fi
+              
+              attempt=$((attempt + 1))
+            done
+            
+            # If we get here, all health checks failed
+            echo "ERROR: All health checks failed"
+            echo "Container status:"
+            docker ps -a | grep location-tracker-main
+            echo "Recent container logs:"
+            docker logs --tail 50 location-tracker-main
+            exit 1
