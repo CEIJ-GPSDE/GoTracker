@@ -163,52 +163,104 @@ jobs:
             safe_branch="${{ steps.prepare.outputs.safe_branch }}"
             nginx_location="/test/$branch"
             
-            echo "Creating Nginx configuration for feature branch: $branch"
+            echo "Adding Nginx configuration for feature branch: $branch"
             echo "Safe branch name: $safe_branch"
             echo "Nginx location: $nginx_location"
             
-            # Remove existing configuration if it exists
+            # Remove existing configuration for this feature branch if it exists
             sudo rm -f /etc/nginx/conf.d/location-tracker-${safe_branch}.conf
             
-            # Create new nginx configuration for this feature branch
+            # Create a separate config file for this feature branch
             sudo tee /etc/nginx/conf.d/location-tracker-${safe_branch}.conf > /dev/null <<EOF
             # Feature branch: ${branch}
-            server {
-                listen 80;
-                server_name ${{ secrets[format('{0}_DOMAIN', matrix.instance)] }};
-                
-                location ${nginx_location} {
-                    proxy_pass http://127.0.0.1:8081;
-                    proxy_http_version 1.1;
-                    proxy_set_header Upgrade \$http_upgrade;
-                    proxy_set_header Connection 'upgrade';
-                    proxy_set_header Host \$host;
-                    proxy_set_header X-Real-IP \$remote_addr;
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \$scheme;
-                    proxy_cache_bypass \$http_upgrade;
-                }
-                
-                location ${nginx_location}/ws {
-                    proxy_pass http://127.0.0.1:8081;
-                    proxy_http_version 1.1;
-                    proxy_set_header Upgrade \$http_upgrade;
-                    proxy_set_header Connection "Upgrade";
-                    proxy_set_header Host \$host;
-                    proxy_set_header X-Real-IP \$remote_addr;
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \$scheme;
-                }
-            }
+            # This file adds locations to the main server blocks
+            
+            # Add to HTTP server block (modify existing main config)
             EOF
             
+            # Add location blocks to the existing main nginx configuration
+            # First, backup the current config
+            sudo cp /etc/nginx/conf.d/location-tracker-main.conf /tmp/nginx-main-backup-$safe_branch.conf
+            
+            # Check if main config exists
+            if [ ! -f /etc/nginx/conf.d/location-tracker-main.conf ]; then
+              echo "ERROR: Main nginx configuration not found. Deploy main branch first."
+              exit 1
+            fi
+            
+            # Add feature branch locations to HTTP server block
+            if grep -q "listen 80;" /etc/nginx/conf.d/location-tracker-main.conf; then
+              # Find the HTTP server block and add our locations before the main location
+              sudo sed -i "/listen 80;/,/server {/ {
+                /# Main application root/i\\
+                # Feature branch: $branch\\
+                location $nginx_location/ {\\
+                    proxy_pass http://127.0.0.1:8081/;\\
+                    proxy_http_version 1.1;\\
+                    proxy_set_header Upgrade \$http_upgrade;\\
+                    proxy_set_header Connection 'upgrade';\\
+                    proxy_set_header Host \$host;\\
+                    proxy_set_header X-Real-IP \$remote_addr;\\
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;\\
+                    proxy_set_header X-Forwarded-Proto \$scheme;\\
+                    proxy_cache_bypass \$http_upgrade;\\
+                }\\
+                \\
+                location $nginx_location/ws {\\
+                    proxy_pass http://127.0.0.1:8081/ws;\\
+                    proxy_http_version 1.1;\\
+                    proxy_set_header Upgrade \$http_upgrade;\\
+                    proxy_set_header Connection \"Upgrade\";\\
+                    proxy_set_header Host \$host;\\
+                    proxy_set_header X-Real-IP \$remote_addr;\\
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;\\
+                    proxy_set_header X-Forwarded-Proto \$scheme;\\
+                }\\
+
+              }" /etc/nginx/conf.d/location-tracker-main.conf
+            fi
+            
+            # Add feature branch locations to HTTPS server block if it exists
+            if grep -q "listen 443 ssl" /etc/nginx/conf.d/location-tracker-main.conf; then
+              sudo sed -i "/listen 443 ssl/,/server {/ {
+                /# Main application root/i\\
+                # Feature branch: $branch\\
+                location $nginx_location/ {\\
+                    proxy_pass http://127.0.0.1:8081/;\\
+                    proxy_http_version 1.1;\\
+                    proxy_set_header Upgrade \$http_upgrade;\\
+                    proxy_set_header Connection 'upgrade';\\
+                    proxy_set_header Host \$host;\\
+                    proxy_set_header X-Real-IP \$remote_addr;\\
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;\\
+                    proxy_set_header X-Forwarded-Proto \$scheme;\\
+                    proxy_cache_bypass \$http_upgrade;\\
+                }\\
+                \\
+                location $nginx_location/ws {\\
+                    proxy_pass http://127.0.0.1:8081/ws;\\
+                    proxy_http_version 1.1;\\
+                    proxy_set_header Upgrade \$http_upgrade;\\
+                    proxy_set_header Connection \"Upgrade\";\\
+                    proxy_set_header Host \$host;\\
+                    proxy_set_header X-Real-IP \$remote_addr;\\
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;\\
+                    proxy_set_header X-Forwarded-Proto \$scheme;\\
+                }\\
+
+              }" /etc/nginx/conf.d/location-tracker-main.conf
+            fi
+            
             # Test nginx configuration
+            echo "Testing nginx configuration..."
             if sudo nginx -t; then
               sudo systemctl reload nginx
               echo "Nginx configuration updated successfully"
             else
               echo "ERROR: Nginx configuration test failed"
-              cat /etc/nginx/conf.d/location-tracker-${safe_branch}.conf
+              echo "Restoring backup..."
+              sudo cp /tmp/nginx-main-backup-$safe_branch.conf /etc/nginx/conf.d/location-tracker-main.conf
+              sudo nginx -t
               exit 1
             fi
             
@@ -320,7 +372,11 @@ jobs:
                 echo "Feature branch: $branch"
                 echo "Container: $container_name"
                 echo "Local health: http://localhost:8081/api/health"
-                echo "Public URL: http://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch"
+                if [ -f /etc/ssl/certs/location-tracker.crt ]; then
+                  echo "Public URL: https://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch"
+                else
+                  echo "Public URL: http://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch"
+                fi
                 
                 # Show container status
                 echo "Container status:"
