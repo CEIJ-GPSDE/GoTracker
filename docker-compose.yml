@@ -1,0 +1,108 @@
+version: '3.8'
+
+services:
+  # Main branch (production-like)
+  location-tracker-main:
+    build:
+      context: .
+      args:
+        VERSION: main-local
+    container_name: location-tracker-main
+    restart: unless-stopped
+    ports:
+      - "8080:8080"   # HTTP
+      - "8443:8443"   # HTTPS
+      - "5051:5051"   # UDP
+    volumes:
+      - ./certs:/root/certs:ro
+      - ./logs:/var/log
+    environment:
+      - DB_HOST=${DB_HOST:-localhost}
+      - DB_NAME=${DB_NAME:-locationtracker}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-password}
+      - DB_SSLMODE=${DB_SSLMODE:-disable}
+      - PORT=8080
+      - HTTPS_PORT=8443
+      - UDP_PORT=5051
+      - DOMAIN=${DOMAIN:-localhost}
+      - AUTO_TLS=false
+    depends_on:
+      - postgres
+    networks:
+      - location-tracker
+
+  # Feature branch example
+  location-tracker-feature:
+    build:
+      context: .
+      args:
+        VERSION: feature-local
+    container_name: location-tracker-feature
+    restart: unless-stopped
+    ports:
+      - "8081:8080"   # HTTP
+      - "8444:8443"   # HTTPS
+      - "5052:5051"   # UDP
+    volumes:
+      - ./certs:/root/certs:ro
+      - ./logs:/var/log
+    environment:
+      - DB_HOST=${DB_HOST:-localhost}
+      - DB_NAME=${DB_NAME:-locationtracker}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-password}
+      - DB_SSLMODE=${DB_SSLMODE:-disable}
+      - PORT=8080
+      - HTTPS_PORT=8443
+      - UDP_PORT=5051
+      - DOMAIN=${DOMAIN:-localhost}
+      - AUTO_TLS=false
+    depends_on:
+      - postgres
+    networks:
+      - location-tracker
+    profiles:
+      - feature
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: location-tracker-db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=${DB_NAME:-locationtracker}
+      - POSTGRES_USER=${DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - location-tracker
+
+  # Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: location-tracker-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/ssl/certs:ro
+    depends_on:
+      - location-tracker-main
+    networks:
+      - location-tracker
+    profiles:
+      - nginx
+
+volumes:
+  postgres_data:
+  
+networks:
+  location-tracker:
+    driver: bridge

@@ -43,16 +43,21 @@ jobs:
             echo "Creating app directory structure..."
             mkdir -p /home/ec2-user/app/${safe_branch}/static
             mkdir -p /home/ec2-user/app/${safe_branch}/certs
-      - name: Upload to EC2
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
-          username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
-          key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
-          source: "deploy/main/*"
-          target: "/home/ec2-user/app/main/"
-          strip_components: 2
-          overwrite: true
+      - name: Upload files via rsync over SSH
+        run: |
+          # Create SSH key file
+          echo "${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}" > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+          
+          # Use rsync to transfer files
+          rsync -avz -e "ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
+            deploy/main/ \
+            ${{ secrets[format('{0}_USER', matrix.instance)] }}@${{ secrets[format('{0}_HOST', matrix.instance)] }}:/home/ec2-user/app/main/
+          
+          # Cleanup
+          rm -f /tmp/deploy_key
+          
+          echo "Files transferred successfully"
       - name: Verify file upload for main
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -214,11 +219,11 @@ jobs:
             # Check if binary exists and is executable
             binary_path="/home/ec2-user/app/main/app-main"
             if [ -f "$binary_path" ]; then
-              echo "✅ Binary found at: $binary_path"
+              echo "âœ… Binary found at: $binary_path"
               chmod +x "$binary_path"
               ls -la "$binary_path"
             else
-              echo "❌ Binary NOT found at expected path: $binary_path"
+              echo "âŒ Binary NOT found at expected path: $binary_path"
               echo "Contents of directory:"
               find /home/ec2-user/app/main/ -type f
               exit 1
@@ -304,11 +309,11 @@ jobs:
             
             # Check if service is running
             if sudo systemctl is-active location-tracker@${safe_branch} >/dev/null; then
-              echo "✅ Service is running successfully"
+              echo "âœ… Service is running successfully"
               # Test HTTP endpoint
-              curl -f http://localhost:8080/api/health || echo "❌ HTTP health check failed"
+              curl -f http://localhost:8080/api/health || echo "âŒ HTTP health check failed"
             else
-              echo "❌ Service failed to start"
+              echo "âŒ Service failed to start"
               sudo journalctl -u location-tracker@${safe_branch} --no-pager -l -n 50
               exit 1
             fi
