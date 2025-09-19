@@ -156,40 +156,40 @@ jobs:
             sudo sed -i "/# Feature branch: $safe_branch/,/# End feature branch: $safe_branch/ { d; }" /etc/nginx/conf.d/location-tracker-main.conf
             # Add HTTP configuration for feature branch
             sudo tee -a /etc/nginx/conf.d/location-tracker-main.conf > /dev/null <<'EOF'
-# Feature branch: SAFE_BRANCH
-server {
-    listen 80;
-    server_name DOMAIN;
+            # Feature branch: SAFE_BRANCH
+            server {
+                listen 80;
+                server_name DOMAIN;
 
-    location NGINX_LOCATION/ {
-        proxy_pass http://127.0.0.1:8081/;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-    }
+                location NGINX_LOCATION/ {
+                    proxy_pass http://127.0.0.1:8081/;
+                    proxy_http_version 1.1;
+                    proxy_set_header Upgrade $http_upgrade;
+                    proxy_set_header Connection 'upgrade';
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
+                    proxy_cache_bypass $http_upgrade;
+                }
 
-    location NGINX_LOCATION/ws {
-        proxy_pass http://127.0.0.1:8081/ws;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "Upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
+                location NGINX_LOCATION/ws {
+                    proxy_pass http://127.0.0.1:8081/ws;
+                    proxy_http_version 1.1;
+                    proxy_set_header Upgrade $http_upgrade;
+                    proxy_set_header Connection "Upgrade";
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
+                }
 
-    # Redirect feature branch to HTTPS if certificates exist
-    if (-f /etc/ssl/certs/location-tracker.crt) {
-        return 301 https://$server_name$request_uri;
-    }
-}
-# End feature branch: SAFE_BRANCH
+                # Redirect feature branch to HTTPS if certificates exist
+                if (-f /etc/ssl/certs/location-tracker.crt) {
+                    return 301 https://$server_name$request_uri;
+                }
+            }
+            # End feature branch: SAFE_BRANCH
 EOF
             # Replace placeholders with actual values
             sudo sed -i "s|SAFE_BRANCH|$safe_branch|g" /etc/nginx/conf.d/location-tracker-main.conf
