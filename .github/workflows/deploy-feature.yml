@@ -147,16 +147,14 @@ jobs:
             echo "Adding Nginx configuration for feature branch: $branch"
             echo "Safe branch name: $safe_branch"
             echo "Nginx location: $nginx_location"
-            sudo cp /etc/nginx/conf.d/location-tracker-main.conf /tmp/nginx-main-backup-$safe_branch.conf
-            if [ ! -f /etc/nginx/conf.d/location-tracker-main.conf ]; then
-              echo "ERROR: Main nginx configuration not found. Deploy main branch first."
-              exit 1
-            fi
-            # Remove all existing feature branch configurations to avoid conflicts
-            sudo sed -i "/# Feature branch:/,/# End feature branch:/ { d; }" /etc/nginx/conf.d/location-tracker-main.conf
-            sudo sed -i "/# Feature branch HTTPS:/,/# End feature branch HTTPS:/ { d; }" /etc/nginx/conf.d/location-tracker-main.conf
-            # Add HTTP configuration for feature branch
-            sudo tee -a /etc/nginx/conf.d/location-tracker-main.conf | tee -a /tmp/deploy.log <<'EOF'
+            # Backup existing configuration
+            sudo cp /etc/nginx/conf.d/location-tracker-main.conf /tmp/nginx-main-backup-$safe_branch.conf || touch /tmp/nginx-main-backup-$safe_branch.conf
+            # Create temporary configuration file
+            temp_conf="/tmp/nginx-temp-$safe_branch.conf"
+            sudo touch $temp_conf
+            sudo chmod 644 $temp_conf
+            # Write HTTP server block
+            sudo tee $temp_conf | tee -a /tmp/deploy.log <<'EOF'
             # Feature branch: SAFE_BRANCH
             server {
                 listen 80;
@@ -192,14 +190,17 @@ jobs:
             }
             # End feature branch: SAFE_BRANCH
             EOF
-            # Replace placeholders with actual values
-            sudo sed -i "s|SAFE_BRANCH|$safe_branch|g" /etc/nginx/conf.d/location-tracker-main.conf
-            sudo sed -i "s|DOMAIN|$domain|g" /etc/nginx/conf.d/location-tracker-main.conf
-            sudo sed -i "s|NGINX_LOCATION|$nginx_location|g" /etc/nginx/conf.d/location-tracker-main.conf
+            # Replace placeholders in temporary file
+            sudo sed -i "s|SAFE_BRANCH|$safe_branch|g" $temp_conf
+            sudo sed -i "s|DOMAIN|$domain|g" $temp_conf
+            sudo sed -i "s|NGINX_LOCATION|$nginx_location|g" $temp_conf
+            # Log temporary configuration after replacements
+            echo "Temporary configuration after replacements:"
+            cat $temp_conf >> /tmp/deploy.log
             # Add HTTPS server block if certificates exist
             if [ -f /etc/ssl/certs/location-tracker.crt ] && [ -f /etc/ssl/private/location-tracker.key ]; then
               echo "SSL certificates found, configuring HTTPS for feature branch..."
-              sudo tee -a /etc/nginx/conf.d/location-tracker-main.conf | tee -a /tmp/deploy.log <<'EOF'
+              sudo tee -a $temp_conf | tee -a /tmp/deploy.log <<'EOF'
             # Feature branch HTTPS: SAFE_BRANCH
             server {
                 listen 443 ssl;
@@ -245,27 +246,40 @@ jobs:
             }
             # End feature branch HTTPS: SAFE_BRANCH
             EOF
-              # Replace placeholders with actual values
-              sudo sed -i "s|SAFE_BRANCH|$safe_branch|g" /etc/nginx/conf.d/location-tracker-main.conf
-              sudo sed -i "s|DOMAIN|$domain|g" /etc/nginx/conf.d/location-tracker-main.conf
-              sudo sed -i "s|NGINX_LOCATION|$nginx_location|g" /etc/nginx/conf.d/location-tracker-main.conf
+              # Replace placeholders in temporary file
+              sudo sed -i "s|SAFE_BRANCH|$safe_branch|g" $temp_conf
+              sudo sed -i "s|DOMAIN|$domain|g" $temp_conf
+              sudo sed -i "s|NGINX_LOCATION|$nginx_location|g" $temp_conf
+              # Log temporary configuration after HTTPS replacements
+              echo "Temporary configuration after HTTPS replacements:"
+              cat $temp_conf >> /tmp/deploy.log
+            fi
+            # Verify location block in temporary file
+            if grep -q "location $nginx_location/" $temp_conf; then
+              echo "Location block $nginx_location/ found in temporary configuration"
+            else
+              echo "ERROR: Location block $nginx_location/ not found in temporary configuration"
+              cat $temp_conf
+              exit 1
+            fi
+            # Overwrite main configuration with temporary file
+            sudo mv $temp_conf /etc/nginx/conf.d/location-tracker-main.conf
+            # Log final configuration
+            echo "Final Nginx configuration:"
+            cat /etc/nginx/conf.d/location-tracker-main.conf >> /tmp/deploy.log
+            # Verify location block in final configuration
+            if grep -q "location $nginx_location/" /etc/nginx/conf.d/location-tracker-main.conf; then
+              echo "Location block $nginx_location/ found in final configuration"
+            else
+              echo "ERROR: Location block $nginx_location/ not found in final configuration"
+              cat /etc/nginx/conf.d/location-tracker-main.conf
+              sudo cp /tmp/nginx-main-backup-$safe_branch.conf /etc/nginx/conf.d/location-tracker-main.conf
+              exit 1
             fi
             # Check for duplicate server names
             server_count=$(grep -c "server_name $domain" /etc/nginx/conf.d/location-tracker-main.conf)
             if [ "$server_count" -gt 2 ]; then
               echo "ERROR: Detected $server_count server_name $domain entries, expected 2 or fewer (HTTP and HTTPS)"
-              cat /etc/nginx/conf.d/location-tracker-main.conf
-              sudo cp /tmp/nginx-main-backup-$safe_branch.conf /etc/nginx/conf.d/location-tracker-main.conf
-              exit 1
-            fi
-            # Debug: Log final Nginx configuration
-            echo "Final Nginx configuration:"
-            cat /etc/nginx/conf.d/location-tracker-main.conf
-            # Verify location block
-            if grep -q "location $nginx_location/" /etc/nginx/conf.d/location-tracker-main.conf; then
-              echo "Location block $nginx_location/ found in configuration"
-            else
-              echo "ERROR: Location block $nginx_location/ not found in configuration"
               cat /etc/nginx/conf.d/location-tracker-main.conf
               sudo cp /tmp/nginx-main-backup-$safe_branch.conf /etc/nginx/conf.d/location-tracker-main.conf
               exit 1
@@ -298,6 +312,13 @@ jobs:
               sudo cp /tmp/nginx-main-backup-$safe_branch.conf /etc/nginx/conf.d/location-tracker-main.conf
               sudo nginx -t
               exit 1
+            fi
+            # Test location block accessibility
+            echo "Testing location block accessibility..."
+            if curl -s -o /dev/null -I http://localhost$nginx_location/api/health; then
+              echo "Local HTTP test for $nginx_location/api/health passed"
+            else
+              echo "WARNING: Local HTTP test for $nginx_location/api/health failed"
             fi
 
       - name: Load and start Docker container
@@ -400,6 +421,7 @@ jobs:
                   echo "Public URL health check PASSED"
                 else
                   echo "WARNING: Public URL health check failed"
+                  curl -v -k https://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch/api/health
                 fi
                 exit 0
               else
@@ -420,6 +442,7 @@ jobs:
                     echo "Public URL health check PASSED"
                   else
                     echo "WARNING: Public URL health check failed"
+                    curl -v http://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch/api/health
                   fi
                   exit 0
                 else
