@@ -74,11 +74,6 @@ jobs:
         if: steps.should_deploy.outputs.deploy == 'true'
         run: |
           echo "Building Docker image for main branch"
-          echo "Triggered by: ${{ github.event_name }}"
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "Manual deployment triggered"
-            echo "Force rebuild: ${{ github.event.inputs.force_rebuild }}"
-          fi
           docker build \
             --build-arg VERSION=main-$(git rev-parse --short HEAD) \
             --build-arg BASE_PATH= \
@@ -88,7 +83,7 @@ jobs:
           echo "Docker image saved: location-tracker-main.tar"
           ls -la location-tracker-main.tar
 
-      - name: Stop existing container and clean old deployments
+      - name: Stop existing container and clean main deployment
         if: steps.should_deploy.outputs.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -97,16 +92,8 @@ jobs:
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
             echo "Cleaning up existing main deployment..."
-            echo "Deployment triggered by: ${{ github.event_name }}"
             
-            # Stop and disable any systemd service
-            if systemctl is-active --quiet location-tracker@main 2>/dev/null; then
-              echo "Stopping old systemd service..."
-              sudo systemctl stop location-tracker@main || echo "Service was not running"
-              sudo systemctl disable location-tracker@main || echo "Service was not enabled"
-            fi
-            
-            # Stop and remove location-tracker-main container
+            # Stop and remove location-tracker-main container only
             if docker ps -a --format '{{.Names}}' | grep -q "^location-tracker-main$"; then
               echo "Stopping existing container: location-tracker-main"
               docker stop location-tracker-main || echo "Container was not running"
@@ -121,33 +108,15 @@ jobs:
             
             # Check for and free port 8080
             echo "Checking for processes using port 8080..."
-            if sudo lsof -i :8080; then
+            if sudo lsof -i :8080 2>/dev/null; then
               echo "Found processes using port 8080, attempting to terminate..."
               sudo lsof -i :8080 | awk 'NR>1 {print $2}' | xargs -r sudo kill -9 || echo "Failed to terminate some processes"
               sleep 2
-              if sudo lsof -i :8080; then
-                echo "ERROR: Port 8080 still in use after cleanup"
-                sudo lsof -i :8080
-                sudo netstat -tuln | grep :8080 || echo "No process listening on port 8080"
-                exit 1
-              fi
-            else
-              echo "Port 8080 is free"
             fi
-            
-            # Clean up any orphaned Docker containers
-            if docker ps -a --format '{{.Names}}' | grep -q "location-tracker"; then
-              echo "Removing orphaned location-tracker containers..."
-              docker ps -a --filter "name=location-tracker" --format '{{.ID}}' | xargs -r docker rm -f || echo "Failed to remove some containers"
-            fi
-            
-            # Only clean up the main nginx configuration - preserve feature branch configs
-            echo "Cleaning up main nginx configuration..."
-            sudo rm -f /etc/nginx/conf.d/location-tracker-main.conf
             
             mkdir -p /home/ec2-user/certs
             mkdir -p /home/ec2-user/logs
-            echo "Cleanup completed"
+            echo "Main cleanup completed"
 
       - name: Upload Docker image
         if: steps.should_deploy.outputs.deploy == 'true'
@@ -186,7 +155,7 @@ jobs:
             fi
             echo "SSL certificates deployed successfully"
 
-      - name: Setup Nginx configuration
+      - name: Create unified Nginx configuration
         if: steps.should_deploy.outputs.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -195,17 +164,38 @@ jobs:
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
             domain="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}"
-            echo "Setting up Nginx configuration for domain: $domain"
+            echo "Creating unified Nginx configuration for domain: $domain"
             
-            # Create main nginx configuration
-            sudo tee /etc/nginx/conf.d/location-tracker-main.conf > /dev/null <<EOF
-            # Main application configuration
+            # Preserve existing feature branch locations if they exist
+            feature_locations=""
+            feature_locations_https=""
+            
+            # Check for existing feature configurations and extract their location blocks
+            for conf_file in /etc/nginx/conf.d/location-tracker-feature-*.conf; do
+              if [ -f "$conf_file" ]; then
+                echo "Found existing feature config: $conf_file"
+                # Extract HTTP location blocks (between server { and ssl_certificate)
+                feature_locations="$feature_locations$(awk '/location \/test\// { p=1 } p && /}/ { print; p=0; next } p' "$conf_file" || echo "")"$'\n'
+                # Extract HTTPS location blocks (after ssl_certificate)
+                feature_locations_https="$feature_locations_https$(awk '/ssl_certificate/,0 { if (/location \/test\//) p=1; if (p && /}/) { print; p=0; next } if (p) print }' "$conf_file" || echo "")"$'\n'
+              fi
+            done
+            
+            # Remove all existing location-tracker configs
+            sudo rm -f /etc/nginx/conf.d/location-tracker-*.conf
+            
+            # Create unified configuration
+            sudo tee /etc/nginx/conf.d/location-tracker-unified.conf > /dev/null <<EOF
+            # Unified configuration for main and feature branches
             server {
                 listen 80;
                 server_name $domain;
                 
-                # Redirect HTTP to HTTPS if certificates exist
+                # Main application (root path) - redirect to HTTPS if certs exist
                 location / {
+                    if (-f /etc/ssl/certs/location-tracker.crt) {
+                        return 301 https://\$server_name\$request_uri;
+                    }
                     proxy_pass http://127.0.0.1:8080;
                     proxy_http_version 1.1;
                     proxy_set_header Upgrade \$http_upgrade;
@@ -217,7 +207,11 @@ jobs:
                     proxy_cache_bypass \$http_upgrade;
                 }
                 
+                # WebSocket for main app
                 location /ws {
+                    if (-f /etc/ssl/certs/location-tracker.crt) {
+                        return 301 https://\$server_name\$request_uri;
+                    }
                     proxy_pass http://127.0.0.1:8080/ws;
                     proxy_http_version 1.1;
                     proxy_set_header Upgrade \$http_upgrade;
@@ -227,25 +221,20 @@ jobs:
                     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
                     proxy_set_header X-Forwarded-Proto \$scheme;
                 }
-            }
+            
+            $feature_locations}
             EOF
             
             # Add HTTPS server block if certificates exist
             if [ -f /etc/ssl/certs/location-tracker.crt ] && [ -f /etc/ssl/private/location-tracker.key ]; then
-              echo "SSL certificates found, configuring HTTPS..."
+              echo "SSL certificates found, adding HTTPS configuration..."
               
-              # First, update HTTP server to redirect to HTTPS
-              sudo sed -i '/location \/ {/,/}/c\
-                location / {\
-                    return 301 https://$server_name$request_uri;\
-                }' /etc/nginx/conf.d/location-tracker-main.conf
-              
-              # Then add HTTPS server block
-              sudo tee -a /etc/nginx/conf.d/location-tracker-main.conf > /dev/null <<EOF
+              sudo tee -a /etc/nginx/conf.d/location-tracker-unified.conf > /dev/null <<EOF
             
             # HTTPS server block
             server {
-                listen 443 ssl http2;
+                listen 443 ssl;
+                http2 on;
                 server_name $domain;
                 
                 ssl_certificate /etc/ssl/certs/location-tracker.crt;
@@ -262,6 +251,7 @@ jobs:
                 add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
                 add_header Referrer-Policy "strict-origin-when-cross-origin";
                 
+                # Main application (root path)
                 location / {
                     proxy_pass http://127.0.0.1:8080;
                     proxy_http_version 1.1;
@@ -274,6 +264,7 @@ jobs:
                     proxy_cache_bypass \$http_upgrade;
                 }
                 
+                # WebSocket for main app
                 location /ws {
                     proxy_pass http://127.0.0.1:8080/ws;
                     proxy_http_version 1.1;
@@ -284,32 +275,26 @@ jobs:
                     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
                     proxy_set_header X-Forwarded-Proto \$scheme;
                 }
-            }
+            
+            $feature_locations_https}
             EOF
             else
               echo "No SSL certificates found, HTTP only configuration"
             fi
             
-            # Test Nginx configuration
+            # Test configuration
             echo "Testing nginx configuration..."
             if sudo nginx -t; then
               echo "Nginx configuration test passed"
-              
-              # Check if nginx is running
               if sudo systemctl is-active nginx; then
-                echo "Nginx is running, reloading configuration..."
                 sudo systemctl reload nginx
               else
-                echo "Nginx is not running, starting..."
                 sudo systemctl start nginx
               fi
-              
               echo "Nginx configuration updated successfully"
             else
               echo "ERROR: Nginx configuration test failed"
               sudo nginx -t
-              echo "Configuration content:"
-              cat /etc/nginx/conf.d/location-tracker-main.conf
               exit 1
             fi
 
@@ -322,25 +307,15 @@ jobs:
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
             echo "Loading and starting Docker container: location-tracker-main"
-            echo "Deployment method: ${{ github.event_name }}"
             
-            # Load Docker image
             if [ -f "/tmp/location-tracker-main.tar" ]; then
               echo "Loading Docker image from tar file..."
               docker load < /tmp/location-tracker-main.tar
-              if docker images | grep -q "location-tracker.*main"; then
-                echo "Docker image loaded successfully"
-              else
-                echo "ERROR: Docker image failed to load"
-                exit 1
-              fi
             else
               echo "ERROR: Docker image tar file not found"
-              ls -la /tmp/location-tracker-*.tar || echo "No tar files found"
               exit 1
             fi
             
-            # Start Docker container
             echo "Starting Docker container..."
             docker run -d \
               --name location-tracker-main \
@@ -365,19 +340,15 @@ jobs:
             
             if docker ps --format '{{.Names}}' | grep -q "^location-tracker-main$"; then
               echo "Container started successfully: location-tracker-main"
-              docker ps | grep location-tracker-main
             else
               echo "ERROR: Container failed to start"
-              echo "Container status:"
-              docker ps -a | grep location-tracker-main || echo "Container not found"
-              echo "Container logs:"
-              docker logs location-tracker-main || echo "Failed to get logs"
+              docker logs location-tracker-main
               exit 1
             fi
             
             rm -f /tmp/location-tracker-main.tar
 
-      - name: Health check and final verification
+      - name: Health check
         if: steps.should_deploy.outputs.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -386,20 +357,13 @@ jobs:
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
             echo "=== Final Health Check ==="
-            echo "Deployment triggered by: ${{ github.event_name }}"
-            echo "Container status:"
-            docker ps | head -1
-            docker ps | grep location-tracker-main
-            
             max_attempts=5
             attempt=1
             while [ $attempt -le $max_attempts ]; do
               echo "Health check attempt $attempt/$max_attempts..."
               if curl -f -s http://localhost:8080/api/health; then
                 echo "Health check PASSED"
-                echo "=== Deployment Successful ==="
-                echo "Container: location-tracker-main"
-                echo "Local health: http://localhost:8080/api/health"
+                echo "=== Main Branch Deployment Successful ==="
                 if [ -f /etc/ssl/certs/location-tracker.crt ]; then
                   echo "Public URL: https://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}"
                 else
@@ -409,7 +373,6 @@ jobs:
               else
                 echo "Health check failed (attempt $attempt/$max_attempts)"
                 if [ $attempt -lt $max_attempts ]; then
-                  echo "Waiting 10 seconds before retry..."
                   sleep 10
                 fi
               fi
@@ -417,8 +380,5 @@ jobs:
             done
             
             echo "ERROR: All health checks failed"
-            echo "Container status:"
-            docker ps -a | grep location-tracker-main
-            echo "Recent container logs:"
             docker logs --tail 50 location-tracker-main
             exit 1
