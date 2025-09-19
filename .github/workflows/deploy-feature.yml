@@ -372,6 +372,7 @@ jobs:
             safe_branch="${{ steps.prepare.outputs.safe_branch }}"
             container_name="location-tracker-${safe_branch}"
             echo "Loading and starting Docker container: $container_name"
+            
             if [ -f "/tmp/location-tracker-${safe_branch}.tar" ]; then
               echo "Loading Docker image from tar file..."
               docker load < /tmp/location-tracker-${safe_branch}.tar
@@ -386,27 +387,31 @@ jobs:
               ls -la /tmp/location-tracker-*.tar || echo "No tar files found"
               exit 1
             fi
-            echo "Starting Docker container..."
-            # Note: Removed certificate volume mount and set AUTO_TLS=false to disable container HTTPS
-            # since nginx handles SSL termination
+            
+            echo "Starting Docker container with unique UDP port..."
+            # Use different UDP port (5052) to avoid conflict with main app (5051)
+            # Add LEADER_ELECTION_KEY to prevent conflicts between main and feature instances
             docker run -d \
               --name $container_name \
               --restart unless-stopped \
               -p 8081:8080 \
-              -p 5052:5051 \
+              -p 5052:5052 \
               -e DB_HOST="${{ secrets[format('{0}_DB_HOST', matrix.instance)] }}" \
               -e DB_NAME="${{ secrets[format('{0}_DB_NAME', matrix.instance)] }}" \
               -e DB_USER="${{ secrets[format('{0}_DB_USER', matrix.instance)] }}" \
               -e DB_PASSWORD="${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}" \
               -e DB_SSLMODE=require \
               -e PORT=8080 \
-              -e UDP_PORT=5051 \
+              -e UDP_PORT=5052 \
               -e DOMAIN="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}" \
               -e AUTO_TLS=false \
               -e DISABLE_TLS=true \
+              -e LEADER_ELECTION_KEY="feature-${safe_branch}" \
               location-tracker:${safe_branch}
+            
             echo "Waiting for container to start..."
             sleep 30
+            
             if docker ps --format '{{.Names}}' | grep -q "^${container_name}$"; then
               echo "Container started successfully: $container_name"
               docker ps | grep $container_name
@@ -418,14 +423,31 @@ jobs:
               docker logs $container_name || echo "Failed to get logs"
               exit 1
             fi
-            # Verify port 8081 is bound
+            
+            # Verify both HTTP and UDP ports are bound
             if sudo netstat -tuln | grep -q ":8081 "; then
-              echo "Port 8081 is now listening"
+              echo "Port 8081 (HTTP) is listening"
             else
-              echo "ERROR: Port 8081 is not listening"
+              echo "ERROR: Port 8081 (HTTP) is not listening"
               docker logs $container_name
               exit 1
             fi
+            
+            if sudo netstat -tuln | grep -q ":5052 "; then
+              echo "Port 5052 (UDP) is listening"
+            else
+              echo "WARNING: Port 5052 (UDP) is not listening yet"
+              # Give it more time for UDP to start
+              sleep 10
+              if sudo netstat -tuln | grep -q ":5052 "; then
+                echo "Port 5052 (UDP) is now listening"
+              else
+                echo "ERROR: Port 5052 (UDP) failed to start"
+                docker logs $container_name
+                exit 1
+              fi
+            fi
+            
             rm -f /tmp/location-tracker-${safe_branch}.tar
 
       - name: Health check and final verification
