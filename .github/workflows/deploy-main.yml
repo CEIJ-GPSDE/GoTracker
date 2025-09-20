@@ -155,7 +155,7 @@ jobs:
             fi
             echo "SSL certificates deployed successfully"
 
-      - name: Create unified Nginx configuration
+- name: Create unified Nginx configuration
         if: steps.should_deploy.outputs.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -166,76 +166,70 @@ jobs:
             domain="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}"
             echo "Creating unified Nginx configuration for domain: $domain"
             
-            # Preserve existing feature branch locations if they exist
-            feature_locations=""
-            feature_locations_https=""
+            # Get list of running feature containers to preserve their configurations
+            running_feature_containers=""
+            if docker ps --format "table {{.Names}}" | grep -q "location-tracker-feature-\|location-tracker-.*" | grep -v "location-tracker-main"; then
+              running_feature_containers=$(docker ps --format "{{.Names}}" | grep "location-tracker-" | grep -v "location-tracker-main" || echo "")
+            fi
             
-            # Check for existing feature configurations and extract their location blocks
-            for conf_file in /etc/nginx/conf.d/location-tracker-feature-*.conf; do
-              if [ -f "$conf_file" ]; then
-                echo "Found existing feature config: $conf_file"
-                # Extract HTTP location blocks (between server { and ssl_certificate)
-                feature_locations="$feature_locations$(awk '/location \/test\// { p=1 } p && /}/ { print; p=0; next } p' "$conf_file" || echo "")"$'\n'
-                # Extract HTTPS location blocks (after ssl_certificate)
-                feature_locations_https="$feature_locations_https$(awk '/ssl_certificate/,0 { if (/location \/test\//) p=1; if (p && /}/) { print; p=0; next } if (p) print }' "$conf_file" || echo "")"$'\n'
-              fi
-            done
+            echo "Running feature containers: $running_feature_containers"
             
             # Remove all existing location-tracker configs
             sudo rm -f /etc/nginx/conf.d/location-tracker-*.conf
             
-            # Create unified configuration
-            sudo tee /etc/nginx/conf.d/location-tracker-unified.conf > /dev/null <<EOF
+            # Create base unified configuration
+            sudo tee /etc/nginx/conf.d/location-tracker-unified.conf > /dev/null <<'EOF'
             # Unified configuration for main and feature branches
             server {
                 listen 80;
-                server_name $domain;
+                server_name DOMAIN_PLACEHOLDER;
                 
                 # Main application (root path) - redirect to HTTPS if certs exist
                 location / {
                     if (-f /etc/ssl/certs/location-tracker.crt) {
-                        return 301 https://\$server_name\$request_uri;
+                        return 301 https://$server_name$request_uri;
                     }
                     proxy_pass http://127.0.0.1:8080;
                     proxy_http_version 1.1;
-                    proxy_set_header Upgrade \$http_upgrade;
+                    proxy_set_header Upgrade $http_upgrade;
                     proxy_set_header Connection 'upgrade';
-                    proxy_set_header Host \$host;
-                    proxy_set_header X-Real-IP \$remote_addr;
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \$scheme;
-                    proxy_cache_bypass \$http_upgrade;
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
+                    proxy_cache_bypass $http_upgrade;
                 }
                 
                 # WebSocket for main app
                 location /ws {
                     if (-f /etc/ssl/certs/location-tracker.crt) {
-                        return 301 https://\$server_name\$request_uri;
+                        return 301 https://$server_name$request_uri;
                     }
                     proxy_pass http://127.0.0.1:8080/ws;
                     proxy_http_version 1.1;
-                    proxy_set_header Upgrade \$http_upgrade;
+                    proxy_set_header Upgrade $http_upgrade;
                     proxy_set_header Connection "Upgrade";
-                    proxy_set_header Host \$host;
-                    proxy_set_header X-Real-IP \$remote_addr;
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \$scheme;
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
                 }
-            
-            $feature_locations}
+                
+                # FEATURE_LOCATIONS_HTTP_PLACEHOLDER
+            }
             EOF
             
             # Add HTTPS server block if certificates exist
             if [ -f /etc/ssl/certs/location-tracker.crt ] && [ -f /etc/ssl/private/location-tracker.key ]; then
               echo "SSL certificates found, adding HTTPS configuration..."
               
-              sudo tee -a /etc/nginx/conf.d/location-tracker-unified.conf > /dev/null <<EOF
+              sudo tee -a /etc/nginx/conf.d/location-tracker-unified.conf > /dev/null <<'EOF'
             
             # HTTPS server block
             server {
                 listen 443 ssl;
                 http2 on;
-                server_name $domain;
+                server_name DOMAIN_PLACEHOLDER;
                 
                 ssl_certificate /etc/ssl/certs/location-tracker.crt;
                 ssl_certificate_key /etc/ssl/private/location-tracker.key;
@@ -255,6 +249,68 @@ jobs:
                 location / {
                     proxy_pass http://127.0.0.1:8080;
                     proxy_http_version 1.1;
+                    proxy_set_header Upgrade $http_upgrade;
+                    proxy_set_header Connection 'upgrade';
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
+                    proxy_cache_bypass $http_upgrade;
+                }
+                
+                # WebSocket for main app
+                location /ws {
+                    proxy_pass http://127.0.0.1:8080/ws;
+                    proxy_http_version 1.1;
+                    proxy_set_header Upgrade $http_upgrade;
+                    proxy_set_header Connection "Upgrade";
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
+                }
+                
+                # FEATURE_LOCATIONS_HTTPS_PLACEHOLDER
+            }
+            EOF
+            else
+              echo "No SSL certificates found, HTTP only configuration"
+            fi
+            
+            # Replace domain placeholder
+            sudo sed -i "s/DOMAIN_PLACEHOLDER/$domain/g" /etc/nginx/conf.d/location-tracker-unified.conf
+            
+            # Add feature branch locations for running containers
+            if [ ! -z "$running_feature_containers" ]; then
+              echo "Adding feature branch configurations for running containers..."
+              
+              feature_http_locations=""
+              feature_https_locations=""
+              
+              # Process each running feature container
+              for container_name in $running_feature_containers; do
+                # Extract branch name from container name (remove location-tracker- prefix)
+                if echo "$container_name" | grep -q "^location-tracker-"; then
+                  safe_branch=$(echo "$container_name" | sed 's/^location-tracker-//')
+                  # Convert safe branch name back to original branch name (reverse the transformation)
+                  branch=$(echo "$safe_branch" | sed 's/-/\//g')
+                  
+                  # Get container port (assume 8081 for feature branches)
+                  container_port="8081"
+                  
+                  echo "Adding configuration for container: $container_name, branch: $branch, port: $container_port"
+                  
+                  # Create location blocks
+                  location_path="/test/$branch"
+                  
+                  feature_http_location="
+                # Feature branch $location_path
+                location $location_path/ {
+                    if (-f /etc/ssl/certs/location-tracker.crt) {
+                        return 301 https://\$server_name\$request_uri;
+                    }
+                    proxy_pass http://127.0.0.1:$container_port/;
+                    proxy_http_version 1.1;
                     proxy_set_header Upgrade \$http_upgrade;
                     proxy_set_header Connection 'upgrade';
                     proxy_set_header Host \$host;
@@ -264,22 +320,69 @@ jobs:
                     proxy_cache_bypass \$http_upgrade;
                 }
                 
-                # WebSocket for main app
-                location /ws {
-                    proxy_pass http://127.0.0.1:8080/ws;
+                location $location_path/ws {
+                    if (-f /etc/ssl/certs/location-tracker.crt) {
+                        return 301 https://\$server_name\$request_uri;
+                    }
+                    proxy_pass http://127.0.0.1:$container_port/ws;
                     proxy_http_version 1.1;
                     proxy_set_header Upgrade \$http_upgrade;
-                    proxy_set_header Connection "Upgrade";
+                    proxy_set_header Connection \"Upgrade\";
                     proxy_set_header Host \$host;
                     proxy_set_header X-Real-IP \$remote_addr;
                     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
                     proxy_set_header X-Forwarded-Proto \$scheme;
                 }
-            
-            $feature_locations_https}
-            EOF
+                # End feature branch $location_path"
+                  
+                  feature_https_location="
+                # Feature branch HTTPS $location_path
+                location $location_path/ {
+                    proxy_pass http://127.0.0.1:$container_port/;
+                    proxy_http_version 1.1;
+                    proxy_set_header Upgrade \$http_upgrade;
+                    proxy_set_header Connection 'upgrade';
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
+                    proxy_cache_bypass \$http_upgrade;
+                }
+                
+                location $location_path/ws {
+                    proxy_pass http://127.0.0.1:$container_port/ws;
+                    proxy_http_version 1.1;
+                    proxy_set_header Upgrade \$http_upgrade;
+                    proxy_set_header Connection \"Upgrade\";
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
+                }
+                # End feature branch HTTPS $location_path"
+                  
+                  feature_http_locations="$feature_http_locations$feature_http_location"
+                  feature_https_locations="$feature_https_locations$feature_https_location"
+                fi
+              done
+              
+              # Replace placeholders with actual feature locations
+              if [ ! -z "$feature_http_locations" ]; then
+                # Use a unique delimiter to avoid issues with forward slashes
+                sudo sed -i "s|# FEATURE_LOCATIONS_HTTP_PLACEHOLDER|$feature_http_locations|g" /etc/nginx/conf.d/location-tracker-unified.conf
+              else
+                sudo sed -i "s|# FEATURE_LOCATIONS_HTTP_PLACEHOLDER||g" /etc/nginx/conf.d/location-tracker-unified.conf
+              fi
+              
+              if [ ! -z "$feature_https_locations" ]; then
+                sudo sed -i "s|# FEATURE_LOCATIONS_HTTPS_PLACEHOLDER|$feature_https_locations|g" /etc/nginx/conf.d/location-tracker-unified.conf
+              else
+                sudo sed -i "s|# FEATURE_LOCATIONS_HTTPS_PLACEHOLDER||g" /etc/nginx/conf.d/location-tracker-unified.conf
+              fi
             else
-              echo "No SSL certificates found, HTTP only configuration"
+              # Remove placeholders if no feature branches
+              sudo sed -i "s|# FEATURE_LOCATIONS_HTTP_PLACEHOLDER||g" /etc/nginx/conf.d/location-tracker-unified.conf
+              sudo sed -i "s|# FEATURE_LOCATIONS_HTTPS_PLACEHOLDER||g" /etc/nginx/conf.d/location-tracker-unified.conf
             fi
             
             # Test configuration
