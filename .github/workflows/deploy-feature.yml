@@ -244,76 +244,112 @@ jobs:
             EOF
             fi
             
-            # Remove any existing feature location blocks for this branch
-            sudo sed -i "/# Feature branch $nginx_location/,/# End feature branch $nginx_location/d" /etc/nginx/conf.d/location-tracker-unified.conf
+            # Remove any existing feature location blocks for this specific branch
+            echo "Removing existing configuration for branch: $nginx_location"
+            sudo sed -i "/# Feature branch.*$nginx_location/,/# End feature branch.*$nginx_location/d" /etc/nginx/conf.d/location-tracker-unified.conf
+            sudo sed -i "/# Feature branch HTTPS.*$nginx_location/,/# End feature branch HTTPS.*$nginx_location/d" /etc/nginx/conf.d/location-tracker-unified.conf
             
-            # Add feature branch location blocks to HTTP server
-            sudo sed -i "/# WebSocket for main app/i\\
-                # Feature branch $nginx_location\\
-                location $nginx_location/ {\\
-                    proxy_pass http://127.0.0.1:8081/;\\
-                    proxy_http_version 1.1;\\
-                    proxy_set_header Upgrade \$http_upgrade;\\
-                    proxy_set_header Connection 'upgrade';\\
-                    proxy_set_header Host \$host;\\
-                    proxy_set_header X-Real-IP \$remote_addr;\\
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;\\
-                    proxy_set_header X-Forwarded-Proto \$scheme;\\
-                    proxy_cache_bypass \$http_upgrade;\\
-                }\\
-                \\
-                location $nginx_location/ws {\\
-                    proxy_pass http://127.0.0.1:8081/ws;\\
-                    proxy_http_version 1.1;\\
-                    proxy_set_header Upgrade \$http_upgrade;\\
-                    proxy_set_header Connection \"Upgrade\";\\
-                    proxy_set_header Host \$host;\\
-                    proxy_set_header X-Real-IP \$remote_addr;\\
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;\\
-                    proxy_set_header X-Forwarded-Proto \$scheme;\\
-                }\\
-                # End feature branch $nginx_location\\
-                " /etc/nginx/conf.d/location-tracker-unified.conf
+            # Escape forward slashes for sed
+            escaped_location=$(echo "$nginx_location" | sed 's/\//\\\//g')
             
-            # Add feature branch location blocks to HTTPS server if it exists
-            if grep -q "listen 443 ssl" /etc/nginx/conf.d/location-tracker-unified.conf; then
-              sudo sed -i "/# WebSocket for main app/i\\
-                # Feature branch HTTPS $nginx_location\\
-                location $nginx_location/ {\\
-                    proxy_pass http://127.0.0.1:8081/;\\
-                    proxy_http_version 1.1;\\
-                    proxy_set_header Upgrade \$http_upgrade;\\
-                    proxy_set_header Connection 'upgrade';\\
-                    proxy_set_header Host \$host;\\
-                    proxy_set_header X-Real-IP \$remote_addr;\\
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;\\
-                    proxy_set_header X-Forwarded-Proto \$scheme;\\
-                    proxy_cache_bypass \$http_upgrade;\\
-                }\\
-                \\
-                location $nginx_location/ws {\\
-                    proxy_pass http://127.0.0.1:8081/ws;\\
-                    proxy_http_version 1.1;\\
-                    proxy_set_header Upgrade \$http_upgrade;\\
-                    proxy_set_header Connection \"Upgrade\";\\
-                    proxy_set_header Host \$host;\\
-                    proxy_set_header X-Real-IP \$remote_addr;\\
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;\\
-                    proxy_set_header X-Forwarded-Proto \$scheme;\\
-                }\\
-                # End feature branch HTTPS $nginx_location\\
-                " /etc/nginx/conf.d/location-tracker-unified.conf
+            # Create the feature location blocks
+            feature_http_block="
+                # Feature branch $nginx_location
+                location $nginx_location/ {
+                    if (-f \/etc\/ssl\/certs\/location-tracker.crt) {
+                        return 301 https://\\\$server_name\\\$request_uri;
+                    }
+                    proxy_pass http:\/\/127.0.0.1:8081\/;
+                    proxy_http_version 1.1;
+                    proxy_set_header Upgrade \\\$http_upgrade;
+                    proxy_set_header Connection 'upgrade';
+                    proxy_set_header Host \\\$host;
+                    proxy_set_header X-Real-IP \\\$remote_addr;
+                    proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \\\$scheme;
+                    proxy_cache_bypass \\\$http_upgrade;
+                }
+                
+                location $nginx_location\/ws {
+                    if (-f \/etc\/ssl\/certs\/location-tracker.crt) {
+                        return 301 https://\\\$server_name\\\$request_uri;
+                    }
+                    proxy_pass http:\/\/127.0.0.1:8081\/ws;
+                    proxy_http_version 1.1;
+                    proxy_set_header Upgrade \\\$http_upgrade;
+                    proxy_set_header Connection \\\"Upgrade\\\";
+                    proxy_set_header Host \\\$host;
+                    proxy_set_header X-Real-IP \\\$remote_addr;
+                    proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \\\$scheme;
+                }
+                # End feature branch $nginx_location"
+            
+            feature_https_block="
+                # Feature branch HTTPS $nginx_location
+                location $nginx_location/ {
+                    proxy_pass http:\/\/127.0.0.1:8081\/;
+                    proxy_http_version 1.1;
+                    proxy_set_header Upgrade \\\$http_upgrade;
+                    proxy_set_header Connection 'upgrade';
+                    proxy_set_header Host \\\$host;
+                    proxy_Set_header X-Real-IP \\\$remote_addr;
+                    proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \\\$scheme;
+                    proxy_cache_bypass \\\$http_upgrade;
+                }
+                
+                location $nginx_location\/ws {
+                    proxy_pass http:\/\/127.0.0.1:8081\/ws;
+                    proxy_http_version 1.1;
+                    proxy_set_header Upgrade \\\$http_upgrade;
+                    proxy_set_header Connection \\\"Upgrade\\\";
+                    proxy_set_header Host \\\$host;
+                    proxy_set_header X-Real-IP \\\$remote_addr;
+                    proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \\\$scheme;
+                }
+                # End feature branch HTTPS $nginx_location"
+            
+            # Find the insertion points and add the feature blocks
+            # For HTTP server - insert before the closing brace
+            echo "Adding HTTP feature block..."
+            # Find the line number of the first server block's closing brace
+            http_server_end=$(sudo grep -n "^}" /etc/nginx/conf.d/location-tracker-unified.conf | head -1 | cut -d: -f1)
+            if [ ! -z "$http_server_end" ]; then
+              # Insert before the closing brace
+              sudo sed -i "${http_server_end}i\\$feature_http_block" /etc/nginx/conf.d/location-tracker-unified.conf
+            else
+              echo "Warning: Could not find HTTP server closing brace"
+            fi
+            
+            # For HTTPS server - insert before the second closing brace (if exists)
+            if sudo grep -q "listen 443 ssl" /etc/nginx/conf.d/location-tracker-unified.conf; then
+              echo "Adding HTTPS feature block..."
+              # Find the line number of the second server block's closing brace
+              https_server_end=$(sudo grep -n "^}" /etc/nginx/conf.d/location-tracker-unified.conf | tail -1 | cut -d: -f1)
+              if [ ! -z "$https_server_end" ]; then
+                # Insert before the closing brace
+                sudo sed -i "${https_server_end}i\\$feature_https_block" /etc/nginx/conf.d/location-tracker-unified.conf
+              else
+                echo "Warning: Could not find HTTPS server closing brace"
+              fi
+            else
+              echo "No HTTPS configuration found, skipping HTTPS feature block"
             fi
             
             echo "Feature branch locations added to unified configuration"
             
             # Test configuration
+            echo "Testing nginx configuration..."
             if sudo nginx -t; then
               echo "Nginx configuration test passed"
               sudo systemctl reload nginx
               echo "Nginx configuration updated successfully"
             else
               echo "ERROR: Nginx configuration test failed"
+              echo "Configuration file content:"
+              sudo cat /etc/nginx/conf.d/location-tracker-unified.conf
               sudo nginx -t
               exit 1
             fi
