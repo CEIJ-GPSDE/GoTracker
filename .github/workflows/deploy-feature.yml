@@ -72,12 +72,14 @@ jobs:
           
           echo "Using instance name: $instance_name"
           echo "Branch: $branch"
+
+          ls
           
           # Modify the HTML title to include instance name and branch
-          sed -i "s|<title>Real-time Location Tracker</title>|<title>Real-time Location Tracker - $instance_name ($branch)</title>|g" index.html
+          sed -i "s|<title>Real-time Location Tracker</title>|<title>Real-time Location Tracker - $instance_name ($branch)</title>|g" ./static/index.html
           
           # Also update the h1 header to show the instance
-          sed -i "s|<h1>🌍 Real-time Location Tracker</h1>|<h1>🌍 Real-time Location Tracker - $instance_name</h1>|g" index.html
+          sed -i "s|<h1>🌍 Real-time Location Tracker</h1>|<h1>🌍 Real-time Location Tracker - $instance_name</h1>|g" ./static/index.html
           
           echo "HTML modifications completed"
 
