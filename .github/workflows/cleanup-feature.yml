@@ -311,10 +311,8 @@ jobs:
                   sed -i "s|# FEATURE_LOCATIONS_HTTPS_PLACEHOLDER||g" /tmp/nginx-unified.conf
                 fi
               else
-                # Remove placeholders if no remaining feature branches
-                sed -i "s|# FEATURE_LOCATIONS_HTTP_PLACEHOLDER||g" /tmp/nginx-unified.conf
-                sed -i "s|# FEATURE_LOCATIONS_HTTPS_PLACEHOLDER||g" /tmp/nginx-unified.conf
-                echo "No remaining feature branches, using clean configuration with placeholders"
+                # Keep placeholders even if no remaining feature branches
+                echo "No remaining feature branches, keeping placeholders for future deployments"
               fi
               
               # Move the configuration file to the final location
