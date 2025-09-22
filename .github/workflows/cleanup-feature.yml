@@ -300,15 +300,11 @@ jobs:
                 # Replace placeholders with actual feature locations
                 if [ ! -z "$feature_http_locations" ]; then
                   # Use a unique delimiter to avoid issues with forward slashes
-                  sed -i "s|# FEATURE_LOCATIONS_HTTP_PLACEHOLDER|$feature_http_locations|g" /tmp/nginx-unified.conf
-                else
-                  sed -i "s|# FEATURE_LOCATIONS_HTTP_PLACEHOLDER||g" /tmp/nginx-unified.conf
+                  sed -i "s|# FEATURE_LOCATIONS_HTTP_PLACEHOLDER|$feature_http_locations\n# FEATURE_LOCATIONS_HTTP_PLACEHOLDER|g" /tmp/nginx-unified.conf
                 fi
                 
                 if [ ! -z "$feature_https_locations" ]; then
-                  sed -i "s|# FEATURE_LOCATIONS_HTTPS_PLACEHOLDER|$feature_https_locations|g" /tmp/nginx-unified.conf
-                else
-                  sed -i "s|# FEATURE_LOCATIONS_HTTPS_PLACEHOLDER||g" /tmp/nginx-unified.conf
+                  sed -i "s|# FEATURE_LOCATIONS_HTTPS_PLACEHOLDER|$feature_https_locations\n# FEATURE_LOCATIONS_HTTPS_PLACEHOLDER|g" /tmp/nginx-unified.conf
                 fi
               else
                 # Keep placeholders even if no remaining feature branches
