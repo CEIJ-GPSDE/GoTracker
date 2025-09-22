@@ -180,54 +180,57 @@ jobs:
             echo "Safe branch name: $safe_branch"
             echo "Nginx location: $nginx_location"
             
+            # Backup existing configuration
+            sudo cp /etc/nginx/conf.d/location-tracker-unified.conf /etc/nginx/conf.d/location-tracker-unified.conf.backup
+            
             # Check if unified config exists, if not create basic one
             if [ ! -f "/etc/nginx/conf.d/location-tracker-unified.conf" ]; then
               echo "Creating basic unified configuration..."
-              sudo tee /etc/nginx/conf.d/location-tracker-unified.conf > /dev/null <<EOF
+              sudo tee /etc/nginx/conf.d/location-tracker-unified.conf > /dev/null <<'EOF'
             # Unified configuration for main and feature branches
             server {
                 listen 80;
-                server_name $domain;
+                server_name DOMAIN_PLACEHOLDER;
                 
                 # Main application (root path)
                 location / {
                     if (-f /etc/ssl/certs/location-tracker.crt) {
-                        return 301 https://\$server_name\$request_uri;
+                        return 301 https://$server_name$request_uri;
                     }
                     proxy_pass http://127.0.0.1:8080;
                     proxy_http_version 1.1;
-                    proxy_set_header Upgrade \$http_upgrade;
+                    proxy_set_header Upgrade $http_upgrade;
                     proxy_set_header Connection 'upgrade';
-                    proxy_set_header Host \$host;
-                    proxy_set_header X-Real-IP \$remote_addr;
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \$scheme;
-                    proxy_cache_bypass \$http_upgrade;
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
+                    proxy_cache_bypass $http_upgrade;
                 }
                 
                 # WebSocket for main app
                 location /ws {
                     if (-f /etc/ssl/certs/location-tracker.crt) {
-                        return 301 https://\$server_name\$request_uri;
+                        return 301 https://$server_name$request_uri;
                     }
                     proxy_pass http://127.0.0.1:8080/ws;
                     proxy_http_version 1.1;
-                    proxy_set_header Upgrade \$http_upgrade;
+                    proxy_set_header Upgrade $http_upgrade;
                     proxy_set_header Connection "Upgrade";
-                    proxy_set_header Host \$host;
-                    proxy_set_header X-Real-IP \$remote_addr;
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \$scheme;
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
                 }
             
-            # FEATURE_LOCATIONS_HTTP_PLACEHOLDER
+                # FEATURE_LOCATIONS_HTTP_PLACEHOLDER
             }
             
             # HTTPS server block
             server {
                 listen 443 ssl;
                 http2 on;
-                server_name $domain;
+                server_name DOMAIN_PLACEHOLDER;
                 
                 ssl_certificate /etc/ssl/certs/location-tracker.crt;
                 ssl_certificate_key /etc/ssl/private/location-tracker.key;
@@ -247,30 +250,32 @@ jobs:
                 location / {
                     proxy_pass http://127.0.0.1:8080;
                     proxy_http_version 1.1;
-                    proxy_set_header Upgrade \$http_upgrade;
+                    proxy_set_header Upgrade $http_upgrade;
                     proxy_set_header Connection 'upgrade';
-                    proxy_set_header Host \$host;
-                    proxy_set_header X-Real-IP \$remote_addr;
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \$scheme;
-                    proxy_cache_bypass \$http_upgrade;
+                    proxy_set_header Host $host;
+                    proxy_Set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
+                    proxy_cache_bypass $http_upgrade;
                 }
                 
                 # WebSocket for main app
                 location /ws {
                     proxy_pass http://127.0.0.1:8080/ws;
                     proxy_http_version 1.1;
-                    proxy_set_header Upgrade \$http_upgrade;
+                    proxy_set_header Upgrade $http_upgrade;
                     proxy_set_header Connection "Upgrade";
-                    proxy_set_header Host \$host;
-                    proxy_set_header X-Real-IP \$remote_addr;
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \$scheme;
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
                 }
                 
-            # FEATURE_LOCATIONS_HTTPS_PLACEHOLDER
+                # FEATURE_LOCATIONS_HTTPS_PLACEHOLDER
             }
             EOF
+              # Replace domain placeholder
+              sudo sed -i "s/DOMAIN_PLACEHOLDER/$domain/g" /etc/nginx/conf.d/location-tracker-unified.conf
             fi
             
             # Remove any existing feature location blocks for this specific branch
@@ -278,8 +283,8 @@ jobs:
             sudo sed -i "/# Feature branch.*$(echo "$nginx_location" | sed 's/[[\.*^$(){}?+|/]/\\&/g')/,/# End feature branch.*$(echo "$nginx_location" | sed 's/[[\.*^$(){}?+|/]/\\&/g')/d" /etc/nginx/conf.d/location-tracker-unified.conf
             sudo sed -i "/# Feature branch HTTPS.*$(echo "$nginx_location" | sed 's/[[\.*^$(){}?+|/]/\\&/g')/,/# End feature branch HTTPS.*$(echo "$nginx_location" | sed 's/[[\.*^$(){}?+|/]/\\&/g')/d" /etc/nginx/conf.d/location-tracker-unified.conf
             
-            # Create temporary files for the feature location blocks
-            cat > /tmp/feature_http_block.conf <<EOF
+            # Create feature location blocks
+            cat > /tmp/feature_locations.conf <<EOF
                 # Feature branch $nginx_location
                 location $nginx_location/ {
                     if (-f /etc/ssl/certs/location-tracker.crt) {
@@ -307,12 +312,12 @@ jobs:
                     proxy_set_header Host \$host;
                     proxy_set_header X-Real-IP \$remote_addr;
                     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \$scheme;
+                    proxy_Set_header X-Forwarded-Proto \$scheme;
                 }
                 # End feature branch $nginx_location
             EOF
             
-            cat > /tmp/feature_https_block.conf <<EOF
+            cat > /tmp/feature_locations_https.conf <<EOF
                 # Feature branch HTTPS $nginx_location
                 location $nginx_location/ {
                     proxy_pass http://127.0.0.1:8081/;
@@ -339,50 +344,49 @@ jobs:
                 # End feature branch HTTPS $nginx_location
             EOF
             
-            # Replace HTTP placeholder with the feature block
-            if sudo grep -q "# FEATURE_LOCATIONS_HTTP_PLACEHOLDER" /etc/nginx/conf.d/location-tracker-unified.conf; then
-              echo "Replacing HTTP placeholder with feature locations..."
-              # Create a temp file with the replacement
-              sudo sed '/# FEATURE_LOCATIONS_HTTP_PLACEHOLDER/{
-                r /tmp/feature_http_block.conf
-                d
-              }' /etc/nginx/conf.d/location-tracker-unified.conf > /tmp/nginx_temp.conf
-              sudo mv /tmp/nginx_temp.conf /etc/nginx/conf.d/location-tracker-unified.conf
-            else
-              echo "HTTP placeholder not found, appending to HTTP server block..."
-              # Find HTTP server block and insert before closing brace
-              sudo sed -i '/# WebSocket for main app/,/^    }$/{
-                /^    }$/{
-                  i\
+            # Use Python to safely insert the location blocks
+            python3 << 'PYTHON_SCRIPT'
+            import re
+            import sys
             
-                  r /tmp/feature_http_block.conf
-                }
-              }' /etc/nginx/conf.d/location-tracker-unified.conf
-            fi
+            # Read the nginx config
+            with open('/etc/nginx/conf.d/location-tracker-unified.conf', 'r') as f:
+                content = f.read()
             
-            # Replace HTTPS placeholder with the feature block
-            if sudo grep -q "# FEATURE_LOCATIONS_HTTPS_PLACEHOLDER" /etc/nginx/conf.d/location-tracker-unified.conf; then
-              echo "Replacing HTTPS placeholder with feature locations..."
-              # Create a temp file with the replacement
-              sudo sed '/# FEATURE_LOCATIONS_HTTPS_PLACEHOLDER/{
-                r /tmp/feature_https_block.conf
-                d
-              }' /etc/nginx/conf.d/location-tracker-unified.conf > /tmp/nginx_temp2.conf
-              sudo mv /tmp/nginx_temp2.conf /etc/nginx/conf.d/location-tracker-unified.conf
-            else
-              echo "HTTPS placeholder not found, appending to HTTPS server block..."
-              # Find HTTPS server block and insert before closing brace
-              sudo sed -i '/listen 443 ssl/,/^}$/{
-                /^}$/{
-                  i\
+            # Read the feature location blocks
+            with open('/tmp/feature_locations.conf', 'r') as f:
+                http_block = f.read()
             
-                  r /tmp/feature_https_block.conf
-                }
-              }' /etc/nginx/conf.d/location-tracker-unified.conf
-            fi
+            with open('/tmp/feature_locations_https.conf', 'r') as f:
+                https_block = f.read()
+            
+            # Replace HTTP placeholder or insert before closing brace of first server block
+            if '# FEATURE_LOCATIONS_HTTP_PLACEHOLDER' in content:
+                content = content.replace('# FEATURE_LOCATIONS_HTTP_PLACEHOLDER', http_block.strip())
+            else:
+                # Find the first server block (HTTP) and insert before its closing brace
+                pattern = r'(server\s*\{[^}]*listen\s+80[^}]*?)(\s*})(?=\s*(?:#.*?HTTPS|server\s*\{[^}]*listen\s+443|$))'
+                replacement = r'\1' + '\n' + http_block.rstrip() + r'\2'
+                content = re.sub(pattern, replacement, content, count=1, flags=re.MULTILINE | re.DOTALL)
+            
+            # Replace HTTPS placeholder or insert before closing brace of HTTPS server block
+            if '# FEATURE_LOCATIONS_HTTPS_PLACEHOLDER' in content:
+                content = content.replace('# FEATURE_LOCATIONS_HTTPS_PLACEHOLDER', https_block.strip())
+            else:
+                # Find the HTTPS server block and insert before its closing brace
+                pattern = r'(server\s*\{[^}]*listen\s+443[^}]*?)(\s*})(?=\s*$)'
+                replacement = r'\1' + '\n' + https_block.rstrip() + r'\2'
+                content = re.sub(pattern, replacement, content, count=1, flags=re.MULTILINE | re.DOTALL)
+            
+            # Write back the modified content
+            with open('/etc/nginx/conf.d/location-tracker-unified.conf', 'w') as f:
+                f.write(content)
+            
+            print("Configuration updated successfully")
+            PYTHON_SCRIPT
             
             # Clean up temporary files
-            rm -f /tmp/feature_http_block.conf /tmp/feature_https_block.conf
+            rm -f /tmp/feature_locations.conf /tmp/feature_locations_https.conf
             
             echo "Feature branch locations added to unified configuration"
             
@@ -407,6 +411,10 @@ jobs:
               echo "Configuration file content:"
               sudo cat /etc/nginx/conf.d/location-tracker-unified.conf
               sudo nginx -t
+              
+              # Restore backup
+              echo "Restoring backup configuration..."
+              sudo cp /etc/nginx/conf.d/location-tracker-unified.conf.backup /etc/nginx/conf.d/location-tracker-unified.conf
               exit 1
             fi
 
