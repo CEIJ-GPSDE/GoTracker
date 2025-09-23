@@ -41,7 +41,6 @@ A robust, scalable real-time location tracking system built with Go, featuring l
          ┌──────▼──────┐          ┌──────▼──────┐
          │  Main App   │          │ Feature App │
          │  (Port 8080)│          │ (Port 8081) │
-         │             │          │             │
          └──────┬──────┘          └──────┬──────┘
                 │                        │
                 └────────────┬───────────┘
