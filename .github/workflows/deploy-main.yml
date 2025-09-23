@@ -70,6 +70,40 @@ jobs:
       - uses: actions/checkout@v4
         if: steps.should_deploy.outputs.deploy == 'true'
 
+      - name: Set safe branch name and instance info
+        if: matrix.deploy == 'true'
+        id: prepare
+        run: |
+          branch="${{ github.event.inputs.branch }}"
+          safe_branch=$(echo "$branch" | tr '/' '-' | tr '[:upper:]' '[:lower:]')
+          echo "safe_branch=$safe_branch" >> $GITHUB_OUTPUT
+          echo "Branch: $branch -> Safe: $safe_branch"
+          echo "Instance: ${{ matrix.instance }}"
+
+      - name: Modify HTML with instance name
+        if: matrix.deploy == 'true'
+        run: |
+          instance_name="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}"
+          branch="${{ github.event.inputs.branch }}"
+          
+          # Default to matrix.instance if secret is not set
+          if [ -z "$instance_name" ]; then
+            instance_name="${{ matrix.instance }}"
+          fi
+          
+          echo "Using instance name: $instance_name"
+          echo "Branch: $branch"
+
+          ls
+          
+          # Modify the HTML title to include instance name and branch
+          sed -i "s|<title>Real-time Location Tracker</title>|<title>Real-time Location Tracker - $instance_name ($branch)</title>|g" ./static/index.html
+          
+          # Also update the h1 header to show the instance
+          sed -i "s|<h1>🌍 Real-time Location Tracker</h1>|<h1>🌍 Real-time Location Tracker - $instance_name</h1>|g" ./static/index.html
+          
+          echo "HTML modifications completed"
+
       - name: Build Docker image
         if: steps.should_deploy.outputs.deploy == 'true'
         run: |
