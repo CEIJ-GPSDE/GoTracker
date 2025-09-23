@@ -49,7 +49,7 @@ jobs:
         with:
           ref: ${{ github.event.inputs.branch }}
 
-      - name: Set safe branch name
+      - name: Set safe branch name and instance info
         if: matrix.deploy == 'true'
         id: prepare
         run: |
@@ -57,6 +57,31 @@ jobs:
           safe_branch=$(echo "$branch" | tr '/' '-' | tr '[:upper:]' '[:lower:]')
           echo "safe_branch=$safe_branch" >> $GITHUB_OUTPUT
           echo "Branch: $branch -> Safe: $safe_branch"
+          echo "Instance: ${{ matrix.instance }}"
+
+      - name: Modify HTML with instance name
+        if: matrix.deploy == 'true'
+        run: |
+          instance_name="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}"
+          branch="${{ github.event.inputs.branch }}"
+          
+          # Default to matrix.instance if secret is not set
+          if [ -z "$instance_name" ]; then
+            instance_name="${{ matrix.instance }}"
+          fi
+          
+          echo "Using instance name: $instance_name"
+          echo "Branch: $branch"
+
+          ls
+          
+          # Modify the HTML title to include instance name and branch
+          sed -i "s|<title>Real-time Location Tracker</title>|<title>Real-time Location Tracker - $instance_name ($branch)</title>|g" ./static/index.html
+          
+          # Also update the h1 header to show the instance
+          sed -i "s|<h1>🌍 Real-time Location Tracker</h1>|<h1>🌍 Real-time Location Tracker - $instance_name</h1>|g" ./static/index.html
+          
+          echo "HTML modifications completed"
 
       - name: Build Docker image
         if: matrix.deploy == 'true'
@@ -146,6 +171,9 @@ jobs:
           username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
+            # Fixed Nginx configuration update script
+            # Replace the entire "Update unified Nginx configuration with feature branch" step
+            
             branch="${{ github.event.inputs.branch }}"
             safe_branch="${{ steps.prepare.outputs.safe_branch }}"
             domain="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}"
@@ -154,6 +182,9 @@ jobs:
             echo "Adding feature branch to unified Nginx configuration: $branch"
             echo "Safe branch name: $safe_branch"
             echo "Nginx location: $nginx_location"
+            
+            # Backup existing configuration
+            sudo cp /etc/nginx/conf.d/location-tracker-unified.conf /etc/nginx/conf.d/location-tracker-unified.conf.backup
             
             # Check if unified config exists, if not create basic one
             if [ ! -f "/etc/nginx/conf.d/location-tracker-unified.conf" ]; then
@@ -195,7 +226,7 @@ jobs:
                     proxy_set_header X-Forwarded-Proto \$scheme;
                 }
             
-            # FEATURE_LOCATIONS_HTTP_PLACEHOLDER
+                # FEATURE_LOCATIONS_HTTP_PLACEHOLDER
             }
             
             # HTTPS server block
@@ -223,7 +254,7 @@ jobs:
                     proxy_pass http://127.0.0.1:8080;
                     proxy_http_version 1.1;
                     proxy_set_header Upgrade \$http_upgrade;
-                    proxy_set_header Connection 'upgrade';
+                    proxy_Set_header Connection 'upgrade';
                     proxy_set_header Host \$host;
                     proxy_set_header X-Real-IP \$remote_addr;
                     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -243,7 +274,7 @@ jobs:
                     proxy_set_header X-Forwarded-Proto \$scheme;
                 }
                 
-            # FEATURE_LOCATIONS_HTTPS_PLACEHOLDER
+                # FEATURE_LOCATIONS_HTTPS_PLACEHOLDER
             }
             EOF
             fi
@@ -253,8 +284,8 @@ jobs:
             sudo sed -i "/# Feature branch.*$(echo "$nginx_location" | sed 's/[[\.*^$(){}?+|/]/\\&/g')/,/# End feature branch.*$(echo "$nginx_location" | sed 's/[[\.*^$(){}?+|/]/\\&/g')/d" /etc/nginx/conf.d/location-tracker-unified.conf
             sudo sed -i "/# Feature branch HTTPS.*$(echo "$nginx_location" | sed 's/[[\.*^$(){}?+|/]/\\&/g')/,/# End feature branch HTTPS.*$(echo "$nginx_location" | sed 's/[[\.*^$(){}?+|/]/\\&/g')/d" /etc/nginx/conf.d/location-tracker-unified.conf
             
-            # Create temporary files for the feature location blocks
-            cat > /tmp/feature_http_block.conf <<EOF
+            # Create feature location blocks
+            cat > /tmp/feature_locations_http.txt <<EOF
                 # Feature branch $nginx_location
                 location $nginx_location/ {
                     if (-f /etc/ssl/certs/location-tracker.crt) {
@@ -287,7 +318,7 @@ jobs:
                 # End feature branch $nginx_location
             EOF
             
-            cat > /tmp/feature_https_block.conf <<EOF
+            cat > /tmp/feature_locations_https.txt <<EOF
                 # Feature branch HTTPS $nginx_location
                 location $nginx_location/ {
                     proxy_pass http://127.0.0.1:8081/;
@@ -314,75 +345,66 @@ jobs:
                 # End feature branch HTTPS $nginx_location
             EOF
             
-            # Replace HTTP placeholder with the feature block
+            # Simple and reliable replacement using sed
+            echo "Updating HTTP server block..."
             if sudo grep -q "# FEATURE_LOCATIONS_HTTP_PLACEHOLDER" /etc/nginx/conf.d/location-tracker-unified.conf; then
-              echo "Replacing HTTP placeholder with feature locations..."
-              # Create a temp file with the replacement
-              sudo sed '/# FEATURE_LOCATIONS_HTTP_PLACEHOLDER/{
-                r /tmp/feature_http_block.conf
-                d
-              }' /etc/nginx/conf.d/location-tracker-unified.conf > /tmp/nginx_temp.conf
-              sudo mv /tmp/nginx_temp.conf /etc/nginx/conf.d/location-tracker-unified.conf
+                # Replace placeholder with feature locations
+                sudo sed -i '/# FEATURE_LOCATIONS_HTTP_PLACEHOLDER/{
+                    r /tmp/feature_locations_http.txt
+                    d
+                }' /etc/nginx/conf.d/location-tracker-unified.conf
             else
-              echo "HTTP placeholder not found, appending to HTTP server block..."
-              # Find HTTP server block and insert before closing brace
-              sudo sed -i '/# WebSocket for main app/,/^    }$/{
-                /^    }$/{
-                  i\
-            
-                  r /tmp/feature_http_block.conf
-                }
-              }' /etc/nginx/conf.d/location-tracker-unified.conf
+                echo "No HTTP placeholder found - this might indicate configuration issues"
             fi
             
-            # Replace HTTPS placeholder with the feature block
+            echo "Updating HTTPS server block..."
             if sudo grep -q "# FEATURE_LOCATIONS_HTTPS_PLACEHOLDER" /etc/nginx/conf.d/location-tracker-unified.conf; then
-              echo "Replacing HTTPS placeholder with feature locations..."
-              # Create a temp file with the replacement
-              sudo sed '/# FEATURE_LOCATIONS_HTTPS_PLACEHOLDER/{
-                r /tmp/feature_https_block.conf
-                d
-              }' /etc/nginx/conf.d/location-tracker-unified.conf > /tmp/nginx_temp2.conf
-              sudo mv /tmp/nginx_temp2.conf /etc/nginx/conf.d/location-tracker-unified.conf
+                # Replace placeholder with feature locations  
+                sudo sed -i '/# FEATURE_LOCATIONS_HTTPS_PLACEHOLDER/{
+                    r /tmp/feature_locations_https.txt
+                    d
+                }' /etc/nginx/conf.d/location-tracker-unified.conf
             else
-              echo "HTTPS placeholder not found, appending to HTTPS server block..."
-              # Find HTTPS server block and insert before closing brace
-              sudo sed -i '/listen 443 ssl/,/^}$/{
-                /^}$/{
-                  i\
-            
-                  r /tmp/feature_https_block.conf
-                }
-              }' /etc/nginx/conf.d/location-tracker-unified.conf
+                echo "No HTTPS placeholder found - this might indicate configuration issues"
             fi
             
             # Clean up temporary files
-            rm -f /tmp/feature_http_block.conf /tmp/feature_https_block.conf
+            rm -f /tmp/feature_locations_http.txt /tmp/feature_locations_https.txt
             
+            echo "Configuration updated successfully"
             echo "Feature branch locations added to unified configuration"
             
             # Test configuration
             echo "Testing nginx configuration..."
             if sudo nginx -t; then
-              echo "Nginx configuration test passed"
-              sudo systemctl reload nginx
-              echo "Nginx configuration updated successfully"
-              
-              # Verify the configuration was applied correctly
-              echo "Verifying configuration contains feature branch locations:"
-              if sudo grep -q "location $nginx_location/" /etc/nginx/conf.d/location-tracker-unified.conf; then
-                echo "✅ Feature branch location blocks found in configuration"
-              else
-                echo "❌ Feature branch location blocks NOT found in configuration"
-                echo "Configuration content:"
-                sudo cat /etc/nginx/conf.d/location-tracker-unified.conf
-              fi
+                echo "Nginx configuration test passed"
+                sudo systemctl reload nginx
+                echo "Nginx configuration updated successfully"
+                
+                # Verify the configuration was applied correctly
+                echo "Verifying configuration contains feature branch locations:"
+                if sudo grep -q "location $nginx_location/" /etc/nginx/conf.d/location-tracker-unified.conf; then
+                    echo "✅ Feature branch location blocks found in configuration"
+                    # Show the relevant parts of the config
+                    echo "HTTP server locations:"
+                    sudo sed -n '/server {/,/^}/p' /etc/nginx/conf.d/location-tracker-unified.conf | grep -A5 -B5 "$nginx_location" || echo "Not found in HTTP block"
+                    echo "HTTPS server locations:"  
+                    sudo sed -n '/listen 443 ssl/,/^}/p' /etc/nginx/conf.d/location-tracker-unified.conf | grep -A5 -B5 "$nginx_location" || echo "Not found in HTTPS block"
+                else
+                    echo "❌ Feature branch location blocks NOT found in configuration"
+                fi
             else
-              echo "ERROR: Nginx configuration test failed"
-              echo "Configuration file content:"
-              sudo cat /etc/nginx/conf.d/location-tracker-unified.conf
-              sudo nginx -t
-              exit 1
+                echo "ERROR: Nginx configuration test failed"
+                echo "Configuration file content:"
+                sudo cat /etc/nginx/conf.d/location-tracker-unified.conf
+                sudo nginx -t
+                
+                # Restore backup
+                if [ -f "/etc/nginx/conf.d/location-tracker-unified.conf.backup" ]; then
+                    echo "Restoring backup configuration..."
+                    sudo cp /etc/nginx/conf.d/location-tracker-unified.conf.backup /etc/nginx/conf.d/location-tracker-unified.conf
+                fi
+                exit 1
             fi
 
       - name: Load and start Docker container
@@ -449,8 +471,15 @@ jobs:
             branch="${{ github.event.inputs.branch }}"
             safe_branch="${{ steps.prepare.outputs.safe_branch }}"
             container_name="location-tracker-${safe_branch}"
+            instance_name="${{ secrets[format('{0}_INSTANCE_NAME', matrix.instance)] }}"
+            
+            # Default to matrix.instance if secret is not set
+            if [ -z "$instance_name" ]; then
+              instance_name="${{ matrix.instance }}"
+            fi
             
             echo "=== Final Health Check ==="
+            echo "Instance: $instance_name"
             echo "Feature branch: $branch"
             echo "Container: $container_name"
             
@@ -461,6 +490,7 @@ jobs:
               if curl -f -s http://localhost:8081/api/health; then
                 echo "Health check PASSED"
                 echo "=== Feature Branch Deployment Successful ==="
+                echo "Instance: $instance_name"
                 echo "Feature branch: $branch"
                 echo "Container: $container_name"
                 if [ -f /etc/ssl/certs/location-tracker.crt ]; then
