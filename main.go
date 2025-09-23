@@ -100,6 +100,7 @@ func (db *Database) InitializeSchema() error {
 
 	CREATE INDEX IF NOT EXISTS idx_locations_timestamp ON locations(timestamp DESC);
 	CREATE INDEX IF NOT EXISTS idx_locations_device_timestamp ON locations(device_id, timestamp DESC);
+	CREATE INDEX IF NOT EXISTS idx_locations_timestamp_range ON locations(timestamp);
 	`
 
 	_, err := db.Exec(schema)
@@ -355,7 +356,7 @@ func (us *UDPSniffer) storeLocation(packet *LocationPacket) error {
 	return err
 }
 
-// API Server - simplified
+// API Server - enhanced with historical endpoints
 type APIServer struct {
 	db     *Database
 	wsHub  *WebSocketHub
@@ -385,6 +386,7 @@ func (api *APIServer) Run(ctx context.Context) {
 	r.HandleFunc("/api/stats", api.statsHandler).Methods("GET")
 	r.HandleFunc("/api/locations/latest", api.latestLocationHandler).Methods("GET")
 	r.HandleFunc("/api/locations/history", api.locationHistoryHandler).Methods("GET")
+	r.HandleFunc("/api/locations/range", api.locationRangeHandler).Methods("GET") // New endpoint
 	r.HandleFunc("/api/locations/device/{deviceId}", api.deviceLocationHistoryHandler).Methods("GET")
 	r.HandleFunc("/ws", api.wsHub.HandleWebSocket)
 
@@ -519,15 +521,23 @@ func (api *APIServer) locationHistoryHandler(w http.ResponseWriter, r *http.Requ
 		limit = "100"
 	}
 
-	query := fmt.Sprintf(`
+	// Validate limit
+	limitInt, err := strconv.Atoi(limit)
+	if err != nil || limitInt <= 0 || limitInt > 1000 {
+		http.Error(w, "Invalid limit parameter", http.StatusBadRequest)
+		return
+	}
+
+	query := `
 		SELECT device_id, latitude, longitude, timestamp
 		FROM locations
 		ORDER BY timestamp DESC
-		LIMIT %s
-	`, limit)
+		LIMIT $1
+	`
 
-	rows, err := api.db.Query(query)
+	rows, err := api.db.Query(query, limitInt)
 	if err != nil {
+		log.Printf("Database query error: %v", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
@@ -537,9 +547,102 @@ func (api *APIServer) locationHistoryHandler(w http.ResponseWriter, r *http.Requ
 	for rows.Next() {
 		var location LocationPacket
 		if err := rows.Scan(&location.DeviceID, &location.Latitude, &location.Longitude, &location.Timestamp); err != nil {
+			log.Printf("Row scan error: %v", err)
 			continue
 		}
 		locations = append(locations, location)
+	}
+
+	if err = rows.Err(); err != nil {
+		log.Printf("Rows iteration error: %v", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(locations)
+}
+
+// New handler for historical time range queries
+func (api *APIServer) locationRangeHandler(w http.ResponseWriter, r *http.Request) {
+	startTimeStr := r.URL.Query().Get("start")
+	endTimeStr := r.URL.Query().Get("end")
+	deviceID := r.URL.Query().Get("device")
+
+	if startTimeStr == "" || endTimeStr == "" {
+		http.Error(w, "start and end parameters are required", http.StatusBadRequest)
+		return
+	}
+
+	startTime, err := time.Parse(time.RFC3339, startTimeStr)
+	if err != nil {
+		http.Error(w, "Invalid start time format, use RFC3339", http.StatusBadRequest)
+		return
+	}
+
+	endTime, err := time.Parse(time.RFC3339, endTimeStr)
+	if err != nil {
+		http.Error(w, "Invalid end time format, use RFC3339", http.StatusBadRequest)
+		return
+	}
+
+	if startTime.After(endTime) {
+		http.Error(w, "Start time must be before end time", http.StatusBadRequest)
+		return
+	}
+
+	// Limit the time range to prevent huge queries
+	maxDuration := 30 * 24 * time.Hour // 30 days
+	if endTime.Sub(startTime) > maxDuration {
+		http.Error(w, "Time range too large, maximum 30 days", http.StatusBadRequest)
+		return
+	}
+
+	var query string
+	var args []interface{}
+
+	if deviceID != "" {
+		query = `
+			SELECT device_id, latitude, longitude, timestamp
+			FROM locations
+			WHERE timestamp >= $1 AND timestamp <= $2 AND device_id = $3
+			ORDER BY timestamp DESC
+			LIMIT 1000
+		`
+		args = []interface{}{startTime, endTime, deviceID}
+	} else {
+		query = `
+			SELECT device_id, latitude, longitude, timestamp
+			FROM locations
+			WHERE timestamp >= $1 AND timestamp <= $2
+			ORDER BY timestamp DESC
+			LIMIT 1000
+		`
+		args = []interface{}{startTime, endTime}
+	}
+
+	rows, err := api.db.Query(query, args...)
+	if err != nil {
+		log.Printf("Database query error: %v", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var locations []LocationPacket
+	for rows.Next() {
+		var location LocationPacket
+		if err := rows.Scan(&location.DeviceID, &location.Latitude, &location.Longitude, &location.Timestamp); err != nil {
+			log.Printf("Row scan error: %v", err)
+			continue
+		}
+		locations = append(locations, location)
+	}
+
+	if err = rows.Err(); err != nil {
+		log.Printf("Rows iteration error: %v", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -550,21 +653,34 @@ func (api *APIServer) deviceLocationHistoryHandler(w http.ResponseWriter, r *htt
 	vars := mux.Vars(r)
 	deviceId := vars["deviceId"]
 
+	if deviceId == "" {
+		http.Error(w, "Device ID is required", http.StatusBadRequest)
+		return
+	}
+
 	limit := r.URL.Query().Get("limit")
 	if limit == "" {
 		limit = "50"
 	}
 
-	query := fmt.Sprintf(`
+	// Validate limit
+	limitInt, err := strconv.Atoi(limit)
+	if err != nil || limitInt <= 0 || limitInt > 1000 {
+		http.Error(w, "Invalid limit parameter", http.StatusBadRequest)
+		return
+	}
+
+	query := `
 		SELECT device_id, latitude, longitude, timestamp
 		FROM locations
 		WHERE device_id = $1
 		ORDER BY timestamp DESC
-		LIMIT %s
-	`, limit)
+		LIMIT $2
+	`
 
-	rows, err := api.db.Query(query, deviceId)
+	rows, err := api.db.Query(query, deviceId, limitInt)
 	if err != nil {
+		log.Printf("Database query error: %v", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
@@ -574,16 +690,23 @@ func (api *APIServer) deviceLocationHistoryHandler(w http.ResponseWriter, r *htt
 	for rows.Next() {
 		var location LocationPacket
 		if err := rows.Scan(&location.DeviceID, &location.Latitude, &location.Longitude, &location.Timestamp); err != nil {
+			log.Printf("Row scan error: %v", err)
 			continue
 		}
 		locations = append(locations, location)
+	}
+
+	if err = rows.Err(); err != nil {
+		log.Printf("Rows iteration error: %v", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(locations)
 }
 
-// Main Application - simplified
+// Main Application
 type App struct {
 	config     *Config
 	db         *Database
