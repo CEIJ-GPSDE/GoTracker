@@ -65,6 +65,72 @@
             z-index: 1000;
         }
 
+        .map-controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+
+        .track-btn {
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            color: white;
+            border: none;
+            padding: 12px 16px;
+            border-radius: 10px;
+            font-weight: 500;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+        }
+
+        .track-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(34, 197, 94, 0.4);
+        }
+
+        .track-btn.disabled {
+            background: linear-gradient(135deg, #6b7280, #4b5563);
+            cursor: pointer;
+        }
+
+        .track-btn.disabled:hover {
+            box-shadow: 0 8px 20px rgba(107, 114, 128, 0.4);
+        }
+
+        .track-icon {
+            width: 16px;
+            height: 16px;
+            border: 2px solid currentColor;
+            border-radius: 50%;
+            position: relative;
+        }
+
+        .track-icon::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 6px;
+            height: 6px;
+            background: currentColor;
+            border-radius: 50%;
+        }
+
+        .track-btn.enabled .track-icon {
+            animation: pulse-track 2s infinite;
+        }
+
+        @keyframes pulse-track {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.1); }
+        }
+
         .status {
             display: flex;
             align-items: center;
@@ -122,9 +188,10 @@
         }
 
         .location-info { flex: 1; overflow-y: auto; min-height: 0; } /* important: min-height:0 so it doesn't force parent's height */
-        .location-item { padding:15px; border:1px solid #e5e7eb; border-radius:10px; margin-bottom:10px; background:white; transition: all .3s ease; }
+        .location-item { padding:15px; border:1px solid #e5e7eb; border-radius:10px; margin-bottom:10px; background:white; transition: all .3s ease; cursor: pointer; }
         .location-item:hover { transform: translateX(5px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
         .location-item.latest { background: linear-gradient(135deg,#ecfdf5,#d1fae5); border-color:#22c55e; animation: highlight 3s ease-in-out; }
+        .location-item.selected { background: linear-gradient(135deg,#eff6ff,#dbeafe); border-color:#3b82f6; box-shadow: 0 5px 15px rgba(59, 130, 246, 0.2); }
         @keyframes highlight { 0%,100%{opacity:1;} 50%{opacity:0.8;} }
 
         .device-id { font-weight:600; color:#374151; margin-bottom:8px; }
@@ -163,6 +230,8 @@
         .header h1 { font-size: 2rem; }
         .dashboard { height: auto; }
         .map-container { height: 50vh; min-height: 300px; }
+        .map-controls { right: 10px; top: 10px; }
+        .map-overlay { left: 10px; top: 10px; }
         }
         @media (orientation: landscape) {
             .dashboard { height: calc(100vh - 120px); }
@@ -184,6 +253,12 @@
             <div class="status-dot"></div>
             <span>Connecting...</span>
         </div>
+        </div>
+        <div class="map-controls">
+            <button id="track-latest-btn" class="track-btn enabled">
+                <div class="track-icon"></div>
+                <span>Track Latest</span>
+            </button>
         </div>
         <div id="map"></div>
     </div>
@@ -231,10 +306,12 @@
             this.maxReconnectAttempts = 10;
             this.selectedDevice = '';
             this.historyLimit = 50;
+            this.isTrackingLatest = true; // Default to enabled
+            this.selectedLocationIndex = -1; // Track selected location
+            this.userInteracted = false; // Track if user manually moved map
             
-            // --- Nueva línea: array para coordenadas de la ruta ---
+            // Nueva línea: array para coordenadas de la ruta
             this.routeCoords = [];
-            // ------------------------------------------------------
 
             // Configuration with template variable support
             this.config = {
@@ -274,20 +351,39 @@
             this.map.addControl(new maplibregl.NavigationControl(), 'top-right');
             this.map.addControl(new maplibregl.FullscreenControl(), 'top-right');
 
+            // Add map movement listeners to detect user interaction
+            this.map.on('dragstart', () => {
+                this.handleUserInteraction();
+            });
+
+            this.map.on('zoomstart', () => {
+                this.handleUserInteraction();
+            });
+
             this.map.on('load', () => {
-                // --- NUEVO: Inicializa la línea de ruta (vacía por defecto) al cargar ---
+                // Inicializa la línea de ruta (vacía por defecto) al cargar
                 this.initializeRouteLine();
                 // Por si ya hay ubicaciones cargadas (como en el refresh inicial)
                 this.routeCoords = this.locations.map(loc => [loc.longitude, loc.latitude]);
                 this.updateRouteLine();
-                // -----------------------------------------------------------------------
                 console.log('Map loaded successfully');
             });
             this.map.on('error', (e) => {
                 console.error('Map error:', e);
             });
         }
-    // --- NUEVO: Crear la capa y source para la línea de ruta ---
+
+        handleUserInteraction() {
+            // Only disable tracking if user manually moves the map (not programmatic)
+            if (!this.userInteracted) {
+                this.userInteracted = true;
+                if (this.isTrackingLatest) {
+                    this.toggleTracking(false);
+                }
+            }
+        }
+
+        // Crear la capa y source para la línea de ruta
         initializeRouteLine() {
             if (this.map.getSource('route')) {
                 this.map.removeLayer('route-line');
@@ -317,9 +413,8 @@
                 }
             });
         }
-        // ----------------------------------------------------------
 
-        // --- NUEVO: Actualizar la geojson source con la nueva trayectoria ---
+        // Actualizar la geojson source con la nueva trayectoria
         updateRouteLine() {
             if (!this.map.getSource('route')) return;
             this.map.getSource('route').setData({
@@ -330,13 +425,44 @@
                 }
             });
         }
-        // -------------------------------------------------------------------
+
+        toggleTracking(enable = null) {
+            if (enable === null) {
+                this.isTrackingLatest = !this.isTrackingLatest;
+            } else {
+                this.isTrackingLatest = enable;
+            }
+            
+            const btn = document.getElementById('track-latest-btn');
+            if (this.isTrackingLatest) {
+                btn.classList.add('enabled');
+                btn.classList.remove('disabled');
+                btn.querySelector('span').textContent = 'Track Latest';
+                // If we just enabled tracking and have locations, center on latest
+                if (this.locations.length > 0) {
+                    this.centerMapOnLatestLocation();
+                }
+            } else {
+                btn.classList.remove('enabled');
+                btn.classList.add('disabled');
+                btn.querySelector('span').textContent = 'Tracking Off';
+            }
+        }
+
         setupEventListeners() {
+            // Track Latest button
+            document.getElementById('track-latest-btn').addEventListener('click', () => {
+                this.userInteracted = false; // Reset user interaction flag
+                this.selectedLocationIndex = -1; // Clear selected location
+                this.toggleTracking();
+                this.updateLocationSelection();
+            });
+
             // Device filter
             document.getElementById('device-filter').addEventListener('change', (e) => {
                 this.selectedDevice = e.target.value;
                 this.filterAndDisplayLocations();
-                // --- NUEVO: Actualizar línea si cambias de dispositivo ---
+                // Actualizar línea si cambias de dispositivo
                 if (this.selectedDevice) {
                     // Filtra las coordenadas solo para el dispositivo seleccionado
                     this.routeCoords = this.locations
@@ -347,7 +473,6 @@
                     this.routeCoords = this.locations.map(loc => [loc.longitude, loc.latitude]);
                 }
                 this.updateRouteLine();
-                // ---------------------------------------------------------
             });
 
             // History limit
@@ -427,7 +552,7 @@
                     this.updateDevicesList();
                     this.displayLocations();
                     this.updateStatistics();
-                    // --- NUEVO: reconstruye el arreglo de coordenadas para la línea ---
+                    // reconstruye el arreglo de coordenadas para la línea
                     if (this.selectedDevice) {
                         this.routeCoords = this.locations
                             .filter(loc => loc.device_id === this.selectedDevice)
@@ -436,9 +561,14 @@
                         this.routeCoords = this.locations.map(loc => [loc.longitude, loc.latitude]);
                     }
                     this.updateRouteLine();
-                    // -------------------------------------------------------------
+                    
                     if (this.locations.length > 0) {
-                        this.centerMapOnLatestLocation();
+                        // Show marker for latest location immediately
+                        this.updateMapMarker(this.locations[0]);
+                        // Center on latest if tracking is enabled
+                        if (this.isTrackingLatest) {
+                            this.centerMapOnLatestLocation();
+                        }
                     }
                 } else {
                     console.error('Failed to load initial data:', response.status);
@@ -466,23 +596,26 @@
             this.filterAndDisplayLocations();
             this.updateStatistics();
             
-            // --- NUEVO: Añade nuevo punto a la línea y actualiza trayecto ---
+            // Añade nuevo punto a la línea y actualiza trayecto
             if (this.selectedDevice === '' || this.selectedDevice === location.device_id) {
                 this.routeCoords.unshift([location.longitude, location.latitude]);
                 if (this.routeCoords.length > this.historyLimit) {
                     this.routeCoords = this.routeCoords.slice(0, this.historyLimit);
                 }
                 this.updateRouteLine();
-                // Centra solo si corresponde
-                this.centerMapOnLocation(location);
+                
+                // Only center if tracking is enabled and no specific location is selected
+                if (this.isTrackingLatest && this.selectedLocationIndex === -1) {
+                    this.userInteracted = false; // Allow programmatic movement
+                    this.centerMapOnLocation(location);
+                }
             }
-            // ---------------------------------------------------------------
         }
 
         updateMapMarker(location) {
             const deviceId = location.device_id;
             
-            // Remove existing marker
+            // Remove existing marker for this device
             if (this.markers.has(deviceId)) {
                 this.markers.get(deviceId).remove();
             }
@@ -530,10 +663,47 @@
         }
 
         centerMapOnLocation(location) {
+            this.userInteracted = false; // Allow programmatic movement
             this.map.flyTo({
                 center: [location.longitude, location.latitude],
                 zoom: Math.max(this.map.getZoom(), 12),
                 duration: 1000
+            });
+        }
+
+        selectLocation(locationIndex) {
+            this.selectedLocationIndex = locationIndex;
+            this.userInteracted = false; // Allow programmatic movement
+            
+            // If a specific location is selected, disable tracking
+            if (locationIndex >= 0) {
+                this.toggleTracking(false);
+                const location = this.getFilteredLocations()[locationIndex];
+                if (location) {
+                    this.centerMapOnLocation(location);
+                    // Show marker for selected location
+                    this.updateMapMarker(location);
+                }
+            }
+            
+            this.updateLocationSelection();
+        }
+
+        getFilteredLocations() {
+            if (this.selectedDevice) {
+                return this.locations.filter(loc => loc.device_id === this.selectedDevice);
+            }
+            return this.locations;
+        }
+
+        updateLocationSelection() {
+            // Update visual selection in the locations list
+            const locationItems = document.querySelectorAll('.location-item');
+            locationItems.forEach((item, index) => {
+                item.classList.remove('selected');
+                if (index === this.selectedLocationIndex) {
+                    item.classList.add('selected');
+                }
             });
         }
 
@@ -557,12 +727,7 @@
         }
 
         filterAndDisplayLocations() {
-            let filteredLocations = this.locations;
-            
-            if (this.selectedDevice) {
-                filteredLocations = this.locations.filter(loc => loc.device_id === this.selectedDevice);
-            }
-            
+            let filteredLocations = this.getFilteredLocations();
             this.displayLocations(filteredLocations);
         }
 
@@ -575,7 +740,8 @@
             }
             
             container.innerHTML = locations.slice(0, this.historyLimit).map((location, index) => `
-                <div class="location-item ${index === 0 ? 'latest' : ''}" onclick="locationTracker.centerMapOnLocation(${JSON.stringify(location).replace(/"/g, '&quot;')})">
+                <div class="location-item ${index === 0 ? 'latest' : ''} ${index === this.selectedLocationIndex ? 'selected' : ''}" 
+                     onclick="locationTracker.selectLocation(${index})">
                     <div class="device-id">${location.device_id}</div>
                     <div class="coordinates">${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}</div>
                     <div class="timestamp">${new Date(location.timestamp).toLocaleString()}</div>
