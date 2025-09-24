@@ -80,7 +80,7 @@ RUN echo '#!/bin/sh' > /root/entrypoint.sh && \
 RUN chmod +x /root/entrypoint.sh
 
 # Expose ports
-EXPOSE 8080 8443 5051
+EXPOSE 8080 8443 5051 5052 8081
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
