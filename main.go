@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -302,6 +302,10 @@ func (us *UDPSniffer) Run(ctx context.Context) {
 				continue
 			}
 
+			// ✅ Always log raw packet content
+			raw := string(buffer[:n])
+			log.Printf("Received raw UDP packet from %s: %s", addr, raw)
+
 			packet := us.parsePacket(buffer[:n])
 			if packet != nil {
 				if err := us.storeLocation(packet); err != nil {
@@ -317,25 +321,23 @@ func (us *UDPSniffer) Run(ctx context.Context) {
 }
 
 func (us *UDPSniffer) parsePacket(data []byte) *LocationPacket {
-	parts := string(data)
-	if len(parts) < 10 {
+	parts := strings.TrimSpace(string(data))
+	fields := strings.Split(parts, ",")
+	if len(fields) != 3 {
+		log.Printf("Invalid UDP packet format: %s", parts)
 		return nil
 	}
 
-	var deviceID string
-	var lat, lng float64
-
-	parsed, err := fmt.Sscanf(parts, "%[^,],%f,%f", &deviceID, &lat, &lng)
-	if err != nil || parsed != 3 {
-		// Generate mock data for demonstration if parsing fails
-		deviceID = "device_" + strconv.Itoa(rand.Intn(1000))
-		lat = 40.7128 + (rand.Float64()-0.5)*0.1
-		lng = -74.0060 + (rand.Float64()-0.5)*0.1
+	deviceID := fields[0]
+	lat, err1 := strconv.ParseFloat(fields[1], 64)
+	lng, err2 := strconv.ParseFloat(fields[2], 64)
+	if err1 != nil || err2 != nil {
+		log.Printf("Invalid coordinates in UDP packet: %s", parts)
+		return nil
 	}
 
-	// Validate coordinates
 	if lat < -90 || lat > 90 || lng < -180 || lng > 180 {
-		log.Printf("Invalid coordinates: lat=%f, lng=%f", lat, lng)
+		log.Printf("Out-of-range coordinates: lat=%f, lng=%f", lat, lng)
 		return nil
 	}
 
