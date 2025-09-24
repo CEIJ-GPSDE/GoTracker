@@ -757,8 +757,8 @@ class LocationTracker {
             attributionControl: true
         });
 
-        this.map.addControl(new maplibregl.NavigationControl(), 'top-right');
-        this.map.addControl(new maplibregl.FullscreenControl(), 'top-right');
+        this.map.addControl(new maplibregl.NavigationControl(), 'bottom-left');
+        this.map.addControl(new maplibregl.FullscreenControl(), 'bottom-left');
 
         this.map.on('dragstart', () => {
             this.handleUserInteraction();
