@@ -12,7 +12,7 @@ services:
     ports:
       - "8080:8080"   # HTTP
       - "8443:8443"   # HTTPS
-      - "5051:5051"   # UDP
+      - "5051:5051/udp"   # UDP
     volumes:
       - ./certs:/root/certs:ro
       - ./logs:/var/log
@@ -43,7 +43,7 @@ services:
     ports:
       - "8081:8080"   # HTTP
       - "8444:8443"   # HTTPS
-      - "5052:5051"   # UDP
+      - "5052:5051/udp"   # UDP
     volumes:
       - ./certs:/root/certs:ro
       - ./logs:/var/log

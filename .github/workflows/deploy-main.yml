@@ -463,7 +463,7 @@ jobs:
               --name location-tracker-main \
               --restart unless-stopped \
               -p 8080:8080 \
-              -p 5051:5051 \
+              -p 5051:5051/udp \
               -v /home/ec2-user/certs:/root/certs:ro \
               -v /home/ec2-user/logs:/var/log \
               -e DB_HOST="${{ secrets[format('{0}_DB_HOST', matrix.instance)] }}" \

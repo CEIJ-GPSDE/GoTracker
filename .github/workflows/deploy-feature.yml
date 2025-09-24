@@ -767,7 +767,7 @@ jobs:
               --name $container_name \
               --restart unless-stopped \
               -p 8081:8080 \
-              -p 5052:5052 \
+              -p 5052:5052/udp \
               -e DB_HOST="${{ secrets[format('{0}_DB_HOST', matrix.instance)] }}" \
               -e DB_NAME="${{ secrets[format('{0}_DB_NAME', matrix.instance)] }}" \
               -e DB_USER="${{ secrets[format('{0}_DB_USER', matrix.instance)] }}" \

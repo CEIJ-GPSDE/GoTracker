@@ -26,24 +26,23 @@
         .header p { font-size: 1.1rem; opacity: 0.9; }
 
         .dashboard {
-            display: grid;
-            grid-template-columns: 1fr 350px;
-            gap: 20px;
+            position: relative;
             height: calc(100vh - 160px);
-            min-height: 0;
+            min-height: 400px;
         }
-        .dashboard > * { min-height: 0; }
 
         .map-container {
             background: white;
             border-radius: 15px;
             overflow: hidden;
             box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            position: relative;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
             display: flex;
             flex-direction: column;
-            min-height: 0;
-            height: 100%;
         }
 
         #map {
@@ -75,7 +74,7 @@
             gap: 10px;
         }
 
-        .track-btn, .history-btn {
+        .track-btn, .history-btn, .menu-toggle-btn {
             background: linear-gradient(135deg, #22c55e, #16a34a);
             color: white;
             border: none;
@@ -95,13 +94,21 @@
             background: linear-gradient(135deg, #3b82f6, #1d4ed8);
         }
 
-        .track-btn:hover, .history-btn:hover {
+        .menu-toggle-btn {
+            background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+        }
+
+        .track-btn:hover, .history-btn:hover, .menu-toggle-btn:hover {
             transform: translateY(-2px);
             box-shadow: 0 8px 20px rgba(34, 197, 94, 0.4);
         }
 
         .history-btn:hover {
             box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4);
+        }
+
+        .menu-toggle-btn:hover {
+            box-shadow: 0 8px 20px rgba(139, 92, 246, 0.4);
         }
 
         .track-btn.disabled {
@@ -141,6 +148,128 @@
             50% { opacity: 0.7; transform: scale(1.1); }
         }
 
+        /* Popup Menu Styles */
+        .popup-menu {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(5px);
+            z-index: 10000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .popup-menu.active {
+            display: flex;
+        }
+
+        .popup-content {
+            background: white;
+            border-radius: 20px;
+            max-width: 90vw;
+            max-height: 90vh;
+            width: 100%;
+            overflow-y: auto;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.3);
+            animation: popupSlideIn 0.3s ease-out;
+        }
+
+        @keyframes popupSlideIn {
+            from {
+                opacity: 0;
+                transform: scale(0.9) translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        .popup-header {
+            padding: 25px 30px 20px;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border-radius: 20px 20px 0 0;
+        }
+
+        .popup-header h2 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .popup-close {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            transition: all 0.3s ease;
+        }
+
+        .popup-close:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: rotate(90deg);
+        }
+
+        .popup-body {
+            padding: 0;
+            max-height: calc(90vh - 100px);
+            overflow-y: auto;
+        }
+
+        .menu-tabs {
+            display: flex;
+            background: #f8fafc;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .tab-button {
+            flex: 1;
+            padding: 15px 20px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font-weight: 500;
+            color: #6b7280;
+            transition: all 0.3s ease;
+            border-bottom: 3px solid transparent;
+        }
+
+        .tab-button.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            background: white;
+        }
+
+        .tab-button:hover {
+            background: #f1f5f9;
+            color: #374151;
+        }
+
+        .tab-content {
+            display: none;
+            padding: 30px;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
         .status {
             display: flex;
             align-items: center;
@@ -164,45 +293,36 @@
             50% { opacity: 0.5; }
         }
 
-        .sidebar {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-            min-height: 0;
-        }
-
         .card {
             background: rgba(255,255,255,0.95);
             backdrop-filter: blur(10px);
             border-radius: 15px;
-            padding: 25px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            transition: transform 0.3s ease;
+            margin-bottom: 20px;
             overflow: hidden;
-            display: flex;
-            flex-direction: column;
         }
-        .card:hover { transform: translateY(-5px); }
 
         .card h3 { 
-            color: #374151; 
-            margin-bottom: 15px; 
+            color: white; 
+            margin: 0;
+            padding: 20px 25px; 
             font-size: 1.2rem; 
             display: flex; 
             align-items: center; 
             gap: 10px; 
+            background: linear-gradient(135deg, #667eea, #764ba2);
         }
         
         .card-icon { 
             width: 24px; 
             height: 24px; 
-            border-radius: 6px; 
             display: flex; 
             align-items: center; 
             justify-content: center; 
-            color: white; 
-            font-size: 14px;
-            background: linear-gradient(135deg, #667eea, #764ba2);
+            font-size: 16px;
+        }
+
+        .card-body {
+            padding: 25px;
         }
 
         /* Historical Controls */
@@ -254,53 +374,13 @@
             border-color: #3b82f6;
         }
 
-        /* Location Dropdown */
-        .location-dropdown {
-            position: relative;
-        }
-
-        .location-dropdown-header {
-            background: white;
-            border: 1px solid #d1d5db;
-            border-radius: 8px;
-            padding: 12px;
-            cursor: pointer;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            transition: all 0.3s ease;
-        }
-
-        .location-dropdown-header:hover {
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
-        }
-
-        .location-dropdown-arrow {
-            transition: transform 0.3s ease;
-        }
-
-        .location-dropdown.open .location-dropdown-arrow {
-            transform: rotate(180deg);
-        }
-
-        .location-dropdown-content {
-            position: absolute;
-            top: 100%;
-            left: 0;
-            right: 0;
-            background: white;
-            border: 1px solid #d1d5db;
-            border-radius: 8px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-            max-height: 300px;
+        /* Location List */
+        .location-list {
+            max-height: 400px;
             overflow-y: auto;
-            z-index: 1000;
-            display: none;
-        }
-
-        .location-dropdown.open .location-dropdown-content {
-            display: block;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            background: white;
         }
 
         .location-item { 
@@ -313,8 +393,6 @@
         
         .location-item:hover { 
             background: #f8fafc;
-            transform: none;
-            box-shadow: none;
         }
         
         .location-item:last-child {
@@ -323,19 +401,17 @@
         
         .location-item.latest { 
             background: linear-gradient(135deg, #ecfdf5, #d1fae5); 
-            border-bottom-color: #22c55e; 
         }
         
         .location-item.selected { 
             background: linear-gradient(135deg, #eff6ff, #dbeafe); 
-            border-bottom-color: #3b82f6;
         }
 
         .device-id { font-weight: 600; color: #374151; margin-bottom: 8px; }
         .coordinates { font-family: 'Courier New', monospace; color: #6b7280; font-size: 0.9rem; margin-bottom: 5px; }
         .timestamp { font-size: 0.8rem; color: #9ca3af; }
 
-        .controls .control-group { margin-bottom: 15px; }
+        .control-group { margin-bottom: 15px; }
         .control-group label { display: block; margin-bottom: 5px; font-weight: 500; color: #374151; }
         .control-group input, .control-group select { 
             width: 100%; 
@@ -361,6 +437,7 @@
             width: 100%; 
             cursor: pointer; 
             transition: all 0.3s ease;
+            margin-bottom: 10px;
         }
         .btn:hover { 
             transform: translateY(-2px); 
@@ -375,12 +452,12 @@
             box-shadow: 0 5px 15px rgba(107, 114, 128, 0.4);
         }
 
-        .stats { padding: 20px; }
+        .stats { }
         .stat-item { 
             display: flex; 
             justify-content: space-between; 
             align-items: center; 
-            padding: 10px 0; 
+            padding: 12px 0; 
             border-bottom: 1px solid #e5e7eb; 
         }
         .stat-item:last-child { border-bottom: none; }
@@ -419,34 +496,75 @@
             margin-bottom: 15px; 
         }
 
-        /* Responsive rules */
-        @media (max-width: 1024px) {
-            .dashboard { 
-                grid-template-columns: 1fr; 
-                grid-template-rows: 60vh auto; 
-                height: auto; 
+        /* Desktop specific styles */
+        @media (min-width: 1025px) {
+            .popup-content {
+                max-width: 800px;
+                width: 800px;
             }
-            .sidebar { 
-                display: grid; 
-                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); 
-                gap: 20px; 
-            }
-            .map-container { height: 60vh; }
         }
 
+        /* Tablet styles */
+        @media (max-width: 1024px) and (min-width: 769px) {
+            .popup-content {
+                max-width: 700px;
+            }
+            
+            .time-range-controls {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Mobile styles */
         @media (max-width: 768px) {
             .container { padding: 10px; }
             .header h1 { font-size: 2rem; }
-            .dashboard { height: auto; }
-            .map-container { height: 50vh; min-height: 300px; }
+            .dashboard { height: calc(100vh - 120px); }
             .map-controls { right: 10px; top: 10px; }
             .map-overlay { left: 10px; top: 10px; }
-            .time-range-controls { grid-template-columns: 1fr; }
+            
+            .popup-content {
+                margin: 10px;
+                max-width: calc(100vw - 20px);
+                max-height: calc(100vh - 20px);
+            }
+            
+            .popup-header {
+                padding: 20px;
+            }
+            
+            .popup-header h2 {
+                font-size: 1.3rem;
+            }
+            
+            .tab-content {
+                padding: 20px;
+            }
+            
+            .menu-tabs {
+                flex-direction: column;
+            }
+            
+            .tab-button {
+                text-align: left;
+                padding: 12px 20px;
+            }
+            
+            .time-range-controls {
+                grid-template-columns: 1fr;
+            }
         }
-        
-        @media (orientation: landscape) {
-            .dashboard { height: calc(100vh - 120px); }
-            .map-container { min-height: 40vh; }
+
+        /* Landscape mobile */
+        @media (max-height: 500px) and (orientation: landscape) {
+            .dashboard { height: calc(100vh - 80px); }
+            .header { margin-bottom: 10px; }
+            .header h1 { font-size: 1.8rem; }
+            .container { padding: 5px; }
+            
+            .popup-content {
+                max-height: calc(100vh - 10px);
+            }
         }
     </style>
 </head>
@@ -474,79 +592,109 @@
                     <span>📅</span>
                     <span>History Mode</span>
                 </button>
+                <button id="menu-toggle-btn" class="menu-toggle-btn">
+                    <span>⚙️</span>
+                    <span>Menu</span>
+                </button>
             </div>
             <div id="map"></div>
         </div>
+    </div>
+</div>
 
-        <div class="sidebar">
-            <div class="card">
-                <h3><div class="card-icon">⏱️</div>Historical View</h3>
-                <div class="historical-controls" id="historical-controls">
-                    <div class="quick-ranges">
-                        <button class="quick-range-btn" data-hours="1">1h</button>
-                        <button class="quick-range-btn" data-hours="6">6h</button>
-                        <button class="quick-range-btn" data-hours="24">24h</button>
-                        <button class="quick-range-btn" data-hours="168">1w</button>
-                        <button class="quick-range-btn" data-hours="0">All</button>
+<!-- Popup Menu -->
+<div class="popup-menu" id="popup-menu">
+    <div class="popup-content">
+        <div class="popup-header">
+            <h2>Controls & Information</h2>
+            <button class="popup-close" id="popup-close">×</button>
+        </div>
+        <div class="popup-body">
+            <div class="menu-tabs">
+                <button class="tab-button active" data-tab="historical">📅 Historical View</button>
+                <button class="tab-button" data-tab="locations">📍 Locations</button>
+                <button class="tab-button" data-tab="controls">⚙️ Controls</button>
+                <button class="tab-button" data-tab="stats">📊 Statistics</button>
+            </div>
+            
+            <!-- Historical Tab -->
+            <div class="tab-content active" id="historical-tab">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="historical-controls" id="historical-controls">
+                            <div class="quick-ranges">
+                                <button class="quick-range-btn" data-hours="1">1h</button>
+                                <button class="quick-range-btn" data-hours="6">6h</button>
+                                <button class="quick-range-btn" data-hours="24">24h</button>
+                                <button class="quick-range-btn" data-hours="168">1w</button>
+                                <button class="quick-range-btn" data-hours="0">All</button>
+                            </div>
+                            <div class="time-range-controls">
+                                <div class="control-group">
+                                    <label for="start-time">From:</label>
+                                    <input type="datetime-local" id="start-time">
+                                </div>
+                                <div class="control-group">
+                                    <label for="end-time">To:</label>
+                                    <input type="datetime-local" id="end-time">
+                                </div>
+                            </div>
+                            <button class="btn" id="apply-time-filter">Apply Time Filter</button>
+                            <button class="btn secondary" id="clear-time-filter">Clear Filter</button>
+                        </div>
                     </div>
-                    <div class="time-range-controls">
+                </div>
+            </div>
+            
+            <!-- Locations Tab -->
+            <div class="tab-content" id="locations-tab">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="location-list" id="location-list">
+                            <div class="loading"><div class="spinner"></div>Loading locations...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Controls Tab -->
+            <div class="tab-content" id="controls-tab">
+                <div class="card">
+                    <div class="card-body">
                         <div class="control-group">
-                            <label for="start-time">From:</label>
-                            <input type="datetime-local" id="start-time">
+                            <label for="device-filter">Filter by Device:</label>
+                            <select id="device-filter"><option value="">All Devices</option></select>
                         </div>
                         <div class="control-group">
-                            <label for="end-time">To:</label>
-                            <input type="datetime-local" id="end-time">
+                            <label for="history-limit">History Limit:</label>
+                            <input type="number" id="history-limit" value="50" min="10" max="500">
+                        </div>
+                        <button class="btn" onclick="locationTracker.refreshData()">Refresh Data</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Statistics Tab -->
+            <div class="tab-content" id="stats-tab">
+                <div class="card">
+                    <div class="card-body stats">
+                        <div class="stat-item">
+                            <span class="stat-label">Connected Clients:</span>
+                            <span class="stat-value" id="connected-clients">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Total Locations:</span>
+                            <span class="stat-value" id="total-locations">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Active Devices:</span>
+                            <span class="stat-value" id="active-devices">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Last Update:</span>
+                            <span class="stat-value" id="last-update">-</span>
                         </div>
                     </div>
-                    <button class="btn" id="apply-time-filter">Apply Time Filter</button>
-                    <button class="btn secondary" id="clear-time-filter">Clear Filter</button>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3><div class="card-icon">📍</div>Locations</h3>
-                <div class="location-dropdown" id="location-dropdown">
-                    <div class="location-dropdown-header" id="location-dropdown-header">
-                        <span id="location-dropdown-text">Select location...</span>
-                        <span class="location-dropdown-arrow">▼</span>
-                    </div>
-                    <div class="location-dropdown-content" id="location-dropdown-content">
-                        <div class="loading"><div class="spinner"></div>Loading locations...</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card controls">
-                <h3><div class="card-icon">⚙️</div>Controls</h3>
-                <div class="control-group">
-                    <label for="device-filter">Filter by Device:</label>
-                    <select id="device-filter"><option value="">All Devices</option></select>
-                </div>
-                <div class="control-group">
-                    <label for="history-limit">History Limit:</label>
-                    <input type="number" id="history-limit" value="50" min="10" max="500">
-                </div>
-                <button class="btn" onclick="locationTracker.refreshData()">Refresh Data</button>
-            </div>
-
-            <div class="card stats">
-                <h3><div class="card-icon">📊</div>Statistics</h3>
-                <div class="stat-item">
-                    <span class="stat-label">Connected Clients:</span>
-                    <span class="stat-value" id="connected-clients">-</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">Total Locations:</span>
-                    <span class="stat-value" id="total-locations">-</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">Active Devices:</span>
-                    <span class="stat-value" id="active-devices">-</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">Last Update:</span>
-                    <span class="stat-value" id="last-update">-</span>
                 </div>
             </div>
         </div>
@@ -589,6 +737,7 @@ class LocationTracker {
         try {
             this.initializeMap();
             this.setupEventListeners();
+            this.setupPopupMenu();
             await this.loadInitialData();
             this.connectWebSocket();
             this.startStatsPolling();
@@ -608,8 +757,8 @@ class LocationTracker {
             attributionControl: true
         });
 
-        this.map.addControl(new maplibregl.NavigationControl(), 'top-right');
-        this.map.addControl(new maplibregl.FullscreenControl(), 'top-right');
+        this.map.addControl(new maplibregl.NavigationControl(), 'bottom-left');
+        this.map.addControl(new maplibregl.FullscreenControl(), 'bottom-left');
 
         this.map.on('dragstart', () => {
             this.handleUserInteraction();
@@ -628,6 +777,59 @@ class LocationTracker {
 
         this.map.on('error', (e) => {
             console.error('Map error:', e);
+        });
+    }
+
+    setupPopupMenu() {
+        const menuToggle = document.getElementById('menu-toggle-btn');
+        const popupMenu = document.getElementById('popup-menu');
+        const popupClose = document.getElementById('popup-close');
+        const tabButtons = document.querySelectorAll('.tab-button');
+        const tabContents = document.querySelectorAll('.tab-content');
+
+        // Toggle menu
+        menuToggle.addEventListener('click', () => {
+            popupMenu.classList.add('active');
+        });
+
+        // Close menu
+        const closeMenu = () => {
+            popupMenu.classList.remove('active');
+        };
+
+        popupClose.addEventListener('click', closeMenu);
+
+        // Close when clicking outside content
+        popupMenu.addEventListener('click', (e) => {
+            if (e.target === popupMenu) {
+                closeMenu();
+            }
+        });
+
+        // Tab switching
+        tabButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const tabId = button.dataset.tab;
+                
+                // Update button states
+                tabButtons.forEach(btn => btn.classList.remove('active'));
+                button.classList.add('active');
+                
+                // Update content visibility
+                tabContents.forEach(content => {
+                    content.classList.remove('active');
+                    if (content.id === `${tabId}-tab`) {
+                        content.classList.add('active');
+                    }
+                });
+            });
+        });
+
+        // Close menu with Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && popupMenu.classList.contains('active')) {
+                closeMenu();
+            }
         });
     }
 
@@ -775,19 +977,6 @@ class LocationTracker {
             this.clearTimeFilter();
         });
 
-        // Location dropdown
-        document.getElementById('location-dropdown-header').addEventListener('click', () => {
-            this.toggleLocationDropdown();
-        });
-
-        // Close dropdown when clicking outside
-        document.addEventListener('click', (e) => {
-            const dropdown = document.getElementById('location-dropdown');
-            if (!dropdown.contains(e.target)) {
-                dropdown.classList.remove('open');
-            }
-        });
-
         // Device filter
         document.getElementById('device-filter').addEventListener('change', (e) => {
             this.selectedDevice = e.target.value;
@@ -918,11 +1107,6 @@ class LocationTracker {
     clearAllMarkers() {
         this.markers.forEach(marker => marker.remove());
         this.markers.clear();
-    }
-
-    toggleLocationDropdown() {
-        const dropdown = document.getElementById('location-dropdown');
-        dropdown.classList.toggle('open');
     }
 
     connectWebSocket() {
@@ -1108,21 +1292,6 @@ class LocationTracker {
         }
         
         this.updateLocationSelection();
-        this.toggleLocationDropdown(); // Close dropdown after selection
-        this.updateDropdownHeader(locationIndex);
-    }
-
-    updateDropdownHeader(selectedIndex) {
-        const headerText = document.getElementById('location-dropdown-text');
-        if (selectedIndex >= 0) {
-            const locations = this.isHistoryMode ? this.filteredLocations : this.getFilteredLocations();
-            const location = locations[selectedIndex];
-            if (location) {
-                headerText.textContent = `${location.device_id} - ${new Date(location.timestamp).toLocaleString()}`;
-            }
-        } else {
-            headerText.textContent = 'Select location...';
-        }
     }
 
     getFilteredLocations() {
@@ -1164,7 +1333,7 @@ class LocationTracker {
     }
 
     displayLocations(locations = this.locations) {
-        const container = document.getElementById('location-dropdown-content');
+        const container = document.getElementById('location-list');
         
         if (locations.length === 0) {
             container.innerHTML = '<div class="loading">No locations found</div>';
@@ -1182,7 +1351,7 @@ class LocationTracker {
     }
 
     displayFilteredLocations() {
-        const container = document.getElementById('location-dropdown-content');
+        const container = document.getElementById('location-list');
         
         if (this.filteredLocations.length === 0) {
             container.innerHTML = '<div class="loading">No locations found in selected time range</div>';
@@ -1213,7 +1382,7 @@ class LocationTracker {
     }
 
     showError(message) {
-        const container = document.getElementById('location-dropdown-content');
+        const container = document.getElementById('location-list');
         container.innerHTML = `<div class="error">${message}</div>`;
     }
 
