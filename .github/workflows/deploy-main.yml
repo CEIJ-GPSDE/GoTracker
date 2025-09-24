@@ -83,7 +83,7 @@ jobs:
       - name: Modify HTML with instance name
         if: steps.should_deploy.outputs.deploy == 'true'
         run: |
-          instance_name="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}"
+          instance_name="${{ secrets[format('{0}_PAGE_NAME', matrix.instance)] }}"
           branch="${{ github.event.inputs.branch }}"
           
           # Default to matrix.instance if secret is not set
