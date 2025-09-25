@@ -443,26 +443,6 @@ sudo systemctl reload nginx
 - Regular certificate renewal
 - HTTP to HTTPS redirects
 
-## 📈 Scaling Considerations
-
-### Horizontal Scaling
-- Add more EC2 instances behind load balancer
-- Configure database read replicas
-- Use ElastiCache for session storage
-- Implement CDN for static assets
-
-### Vertical Scaling
-- Increase instance sizes as needed
-- Monitor CPU and memory usage
-- Tune database connection pool sizes
-- Optimize Docker resource limits
-
-### Database Optimization
-- Index on timestamp columns
-- Archive old location data
-- Implement connection pooling
-- Monitor query performance
-
 ## 🔄 Backup and Recovery
 
 ### Database Backups
