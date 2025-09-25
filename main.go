@@ -16,9 +16,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
-
-
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	_ "github.com/lib/pq"
@@ -76,7 +73,6 @@ func NewDatabase(config *Config) (*Database, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
-
 	if err := db.Ping(); err != nil {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
