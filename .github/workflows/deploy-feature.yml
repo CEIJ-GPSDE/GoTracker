@@ -86,244 +86,21 @@ jobs:
             echo "Cleaning up temporary files..."
             rm -f /tmp/location-tracker-${safe_branch}.tar || echo "No tar file to clean up"
             
-            # Regenerate unified Nginx configuration without this feature branch
-            if [ -f "/etc/nginx/conf.d/location-tracker-unified.conf" ]; then
-              echo "Regenerating unified Nginx configuration..."
-              domain="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}"
-              
-              # Get list of remaining running feature containers (excluding the one we just stopped)
-              remaining_feature_containers=""
-              if docker ps --format "table {{.Names}}" | grep -q "location-tracker-"; then
-                remaining_feature_containers=$(docker ps --format "{{.Names}}" | grep "location-tracker-" | grep -v "location-tracker-main" | grep -v "^${container_name}$" || echo "")
-              fi
-              
-              echo "Remaining feature containers: $remaining_feature_containers"
-              
-              # Create base unified configuration
-              cat > /tmp/nginx-unified.conf << 'NGINX_EOF'
-            # Unified configuration for main and feature branches
-            server {
-                listen 80;
-                server_name DOMAIN_PLACEHOLDER;
-                
-                # Main application (root path) - redirect to HTTPS if certs exist
-                location / {
-                    if (-f /etc/ssl/certs/location-tracker.crt) {
-                        return 301 https://$server_name$request_uri;
-                    }
-                    proxy_pass http://127.0.0.1:8080;
-                    proxy_http_version 1.1;
-                    proxy_set_header Upgrade $http_upgrade;
-                    proxy_set_header Connection 'upgrade';
-                    proxy_set_header Host $host;
-                    proxy_set_header X-Real-IP $remote_addr;
-                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto $scheme;
-                    proxy_cache_bypass $http_upgrade;
-                }
-                
-                # WebSocket for main app
-                location /ws {
-                    if (-f /etc/ssl/certs/location-tracker.crt) {
-                        return 301 https://$server_name$request_uri;
-                    }
-                    proxy_pass http://127.0.0.1:8080/ws;
-                    proxy_http_version 1.1;
-                    proxy_set_header Upgrade $http_upgrade;
-                    proxy_set_header Connection "Upgrade";
-                    proxy_set_header Host $host;
-                    proxy_set_header X-Real-IP $remote_addr;
-                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto $scheme;
-                }
+            # Remove the modular nginx configuration file
+            echo "Removing nginx configuration file..."
+            sudo rm -f /etc/nginx/conf.d/location-tracker/feature-${safe_branch}.conf
+            echo "Feature branch nginx configuration removed"
             
-            # FEATURE_LOCATIONS_HTTP_PLACEHOLDER
-            }
-            NGINX_EOF
-              
-              # Add HTTPS server block if certificates exist
-              if [ -f /etc/ssl/certs/location-tracker.crt ] && [ -f /etc/ssl/private/location-tracker.key ]; then
-                echo "SSL certificates found, adding HTTPS configuration..."
-                
-                cat >> /tmp/nginx-unified.conf << 'NGINX_HTTPS_EOF'
-            
-            # HTTPS server block
-            server {
-                listen 443 ssl;
-                http2 on;
-                server_name DOMAIN_PLACEHOLDER;
-                
-                ssl_certificate /etc/ssl/certs/location-tracker.crt;
-                ssl_certificate_key /etc/ssl/private/location-tracker.key;
-                ssl_protocols TLSv1.2 TLSv1.3;
-                ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384;
-                ssl_prefer_server_ciphers off;
-                ssl_session_cache shared:SSL:10m;
-                ssl_session_timeout 10m;
-                
-                add_header X-Frame-Options DENY;
-                add_header X-Content-Type-Options nosniff;
-                add_header X-XSS-Protection "1; mode=block";
-                add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
-                add_header Referrer-Policy "strict-origin-when-cross-origin";
-                
-                # Main application (root path)
-                location / {
-                    proxy_pass http://127.0.0.1:8080;
-                    proxy_http_version 1.1;
-                    proxy_set_header Upgrade $http_upgrade;
-                    proxy_set_header Connection 'upgrade';
-                    proxy_set_header Host $host;
-                    proxy_set_header X-Real-IP $remote_addr;
-                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto $scheme;
-                    proxy_cache_bypass $http_upgrade;
-                }
-                
-                # WebSocket for main app
-                location /ws {
-                    proxy_pass http://127.0.0.1:8080/ws;
-                    proxy_http_version 1.1;
-                    proxy_set_header Upgrade $http_upgrade;
-                    proxy_set_header Connection "Upgrade";
-                    proxy_set_header Host $host;
-                    proxy_set_header X-Real-IP $remote_addr;
-                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto $scheme;
-                }
-                
-            # FEATURE_LOCATIONS_HTTPS_PLACEHOLDER
-            }
-            NGINX_HTTPS_EOF
-              else
-                echo "No SSL certificates found, HTTP only configuration"
-              fi
-              
-              # Replace domain placeholder
-              sed -i "s/DOMAIN_PLACEHOLDER/$domain/g" /tmp/nginx-unified.conf
-              
-              # Add feature branch locations for remaining running containers
-              if [ ! -z "$remaining_feature_containers" ]; then
-                echo "Adding feature branch configurations for remaining containers..."
-                
-                feature_http_locations=""
-                feature_https_locations=""
-                
-                # Process each remaining running feature container
-                for remaining_container_name in $remaining_feature_containers; do
-                  # Extract branch name from container name (remove location-tracker- prefix)
-                  if echo "$remaining_container_name" | grep -q "^location-tracker-"; then
-                    remaining_safe_branch=$(echo "$remaining_container_name" | sed 's/^location-tracker-//')
-                    # Convert safe branch name back to original branch name (reverse the transformation)
-                    remaining_branch=$(echo "$remaining_safe_branch" | sed 's/-/\//g')
-                    
-                    # Get container port (assume 8081 for feature branches)
-                    container_port="8082"
-                    
-                    echo "Adding configuration for container: $remaining_container_name, branch: $remaining_branch, port: $container_port"
-                    
-                    # Create location blocks
-                    location_path="/test/$remaining_branch"
-                    
-                    feature_http_location="
-                # Feature branch $location_path
-                location $location_path/ {
-                    if (-f /etc/ssl/certs/location-tracker.crt) {
-                        return 301 https://\$server_name\$request_uri;
-                    }
-                    proxy_pass http://127.0.0.1:$container_port/;
-                    proxy_http_version 1.1;
-                    proxy_set_header Upgrade \$http_upgrade;
-                    proxy_set_header Connection 'upgrade';
-                    proxy_set_header Host \$host;
-                    proxy_set_header X-Real-IP \$remote_addr;
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \$scheme;
-                    proxy_cache_bypass \$http_upgrade;
-                }
-                
-                location $location_path/ws {
-                    if (-f /etc/ssl/certs/location-tracker.crt) {
-                        return 301 https://\$server_name\$request_uri;
-                    }
-                    proxy_pass http://127.0.0.1:$container_port/ws;
-                    proxy_http_version 1.1;
-                    proxy_set_header Upgrade \$http_upgrade;
-                    proxy_set_header Connection \"Upgrade\";
-                    proxy_set_header Host \$host;
-                    proxy_set_header X-Real-IP \$remote_addr;
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \$scheme;
-                }
-                # End feature branch $location_path"
-                    
-                    feature_https_location="
-                # Feature branch HTTPS $location_path
-                location $location_path/ {
-                    proxy_pass http://127.0.0.1:$container_port/;
-                    proxy_http_version 1.1;
-                    proxy_set_header Upgrade \$http_upgrade;
-                    proxy_set_header Connection 'upgrade';
-                    proxy_set_header Host \$host;
-                    proxy_set_header X-Real-IP \$remote_addr;
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \$scheme;
-                    proxy_cache_bypass \$http_upgrade;
-                }
-                
-                location $location_path/ws {
-                    proxy_pass http://127.0.0.1:$container_port/ws;
-                    proxy_http_version 1.1;
-                    proxy_set_header Upgrade \$http_upgrade;
-                    proxy_set_header Connection \"Upgrade\";
-                    proxy_set_header Host \$host;
-                    proxy_set_header X-Real-IP \$remote_addr;
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \$scheme;
-                }
-                # End feature branch HTTPS $location_path"
-                    
-                    feature_http_locations="$feature_http_locations$feature_http_location"
-                    feature_https_locations="$feature_https_locations$feature_https_location"
-                  fi
-                done
-                
-                # Replace placeholders with actual feature locations
-                if [ ! -z "$feature_http_locations" ]; then
-                  # Use a unique delimiter to avoid issues with forward slashes
-                  sed -i "s|# FEATURE_LOCATIONS_HTTP_PLACEHOLDER|$feature_http_locations\n# FEATURE_LOCATIONS_HTTP_PLACEHOLDER|g" /tmp/nginx-unified.conf
-                fi
-                
-                if [ ! -z "$feature_https_locations" ]; then
-                  sed -i "s|# FEATURE_LOCATIONS_HTTPS_PLACEHOLDER|$feature_https_locations\n# FEATURE_LOCATIONS_HTTPS_PLACEHOLDER|g" /tmp/nginx-unified.conf
-                fi
-              else
-                # Keep placeholders even if no remaining feature branches
-                echo "No remaining feature branches, keeping placeholders for future deployments"
-              fi
-              
-              # Move the configuration file to the final location
-              sudo mv /tmp/nginx-unified.conf /etc/nginx/conf.d/location-tracker-unified.conf
-              
-              # Test nginx configuration
-              echo "Testing Nginx configuration..."
-              if sudo nginx -t; then
-                echo "Nginx configuration test passed"
-                sudo systemctl reload nginx
-                echo "Nginx configuration reloaded successfully"
-                echo "✅ Unified Nginx configuration regenerated without feature branch $nginx_location"
-              else
-                echo "ERROR: Nginx configuration test failed after regeneration"
-                sudo nginx -t
-                echo "Configuration file content:"
-                sudo cat /etc/nginx/conf.d/location-tracker-unified.conf
-                exit 1
-              fi
+            # Reload nginx to apply changes
+            if sudo nginx -t; then
+              sudo systemctl reload nginx
+              echo "✅ Nginx configuration reloaded after cleanup"
             else
-              echo "WARNING: Unified Nginx configuration file not found"
+              echo "WARNING: Nginx configuration test failed after cleanup"
+              sudo nginx -t
             fi
             
-            # Check if port 8082 is still in use
+            # Check if ports are still in use and clean up...
             echo "Checking if port 8082 is still in use..."
             if sudo lsof -i :8082 2>/dev/null; then
               echo "WARNING: Port 8082 still in use by:"
@@ -334,49 +111,14 @@ jobs:
               echo "✅ Port 8082 is now free"
             fi
             
-            # Check if port 5053 is still in use
-            echo "Checking if port 5053 is still in use..."
-            if sudo lsof -i :5053 2>/dev/null; then
-              echo "WARNING: Port 5053 still in use by:"
-              sudo lsof -i :5053
-              echo "Attempting to terminate processes..."
-              sudo lsof -i :5053 | awk 'NR>1 {print $2}' | xargs -r sudo kill -9 || echo "Failed to terminate some processes"
-            else
-              echo "✅ Port 5053 is now free"
-            fi
-            
-            # Clean up database entries for this instance if possible
-            echo "Checking for database cleanup opportunities..."
-            if docker ps --format '{{.Names}}' | grep -q "^location-tracker-main$"; then
-              echo "Main container is running, attempting to clean leader election entries..."
-              # Try to remove any stale leader election entries for this instance
-              main_container_id=$(docker ps --format '{{.ID}}' --filter "name=location-tracker-main")
-              if [ ! -z "$main_container_id" ]; then
-                docker exec $main_container_id sh -c '
-                  if command -v psql >/dev/null; then
-                    echo "Cleaning up potential stale leader election entries..."
-                    # Remove any entries older than 1 minute (they should be refreshed every 5 seconds)
-                    PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c "DELETE FROM leader_election WHERE last_heartbeat < NOW() - INTERVAL '\''1 minute'\'';" || echo "Could not clean leader election table"
-                  fi
-                ' || echo "Could not access database for cleanup"
-              fi
-            else
-              echo "Main container not running, skipping database cleanup"
-            fi
-            
-            echo "=== Cleanup Summary ==="
+            echo "=== Feature branch cleanup completed ==="
             echo "✅ Docker container stopped and removed"
             echo "✅ Docker image removed"
-            echo "✅ Nginx configuration regenerated with proper placeholders"
+            echo "✅ Nginx configuration file removed"
             echo "✅ Ports freed"
             echo "✅ Temporary files cleaned"
             echo ""
             echo "Feature branch '$branch' has been completely cleaned up from ${{ matrix.instance }}"
-            echo "Configuration is ready for future deploy-feature runs"
-            
-            # Show current running containers
-            echo "=== Current Running Location Tracker Containers ==="
-            docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep location-tracker || echo "No location tracker containers running"
 
       - uses: actions/checkout@v4
         if: matrix.deploy == 'true'
@@ -497,7 +239,7 @@ jobs:
               chmod 600 /home/ec2-user/certs/server.key
             fi
 
-      - name: Update unified Nginx configuration with feature branch
+      - name: Update modular Nginx configuration with feature branch
         if: matrix.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -505,240 +247,69 @@ jobs:
           username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
-            # Fixed Nginx configuration update script
-            # Replace the entire "Update unified Nginx configuration with feature branch" step
-            
             branch="${{ github.event.inputs.branch }}"
             safe_branch="${{ steps.prepare.outputs.safe_branch }}"
-            domain="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}"
             nginx_location="/test/$branch"
             
-            echo "Adding feature branch to unified Nginx configuration: $branch"
+            echo "Creating modular configuration for feature branch: $branch"
             echo "Safe branch name: $safe_branch"
             echo "Nginx location: $nginx_location"
             
-            # Backup existing configuration
-            sudo cp /etc/nginx/conf.d/location-tracker-unified.conf /etc/nginx/conf.d/location-tracker-unified.conf.backup
+            # Ensure the modular configuration directory exists
+            sudo mkdir -p /etc/nginx/conf.d/location-tracker
             
-            # Check if unified config exists, if not create basic one
-            if [ ! -f "/etc/nginx/conf.d/location-tracker-unified.conf" ]; then
-              echo "Creating basic unified configuration..."
-              sudo tee /etc/nginx/conf.d/location-tracker-unified.conf > /dev/null <<EOF
-            # Unified configuration for main and feature branches
-            server {
-                listen 80;
-                server_name $domain;
-                
-                # Main application (root path)
-                location / {
-                    if (-f /etc/ssl/certs/location-tracker.crt) {
-                        return 301 https://\$server_name\$request_uri;
-                    }
-                    proxy_pass http://127.0.0.1:8080;
-                    proxy_http_version 1.1;
-                    proxy_set_header Upgrade \$http_upgrade;
-                    proxy_set_header Connection 'upgrade';
-                    proxy_set_header Host \$host;
-                    proxy_set_header X-Real-IP \$remote_addr;
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \$scheme;
-                    proxy_cache_bypass \$http_upgrade;
-                }
-                
-                # WebSocket for main app
-                location /ws {
-                    if (-f /etc/ssl/certs/location-tracker.crt) {
-                        return 301 https://\$server_name\$request_uri;
-                    }
-                    proxy_pass http://127.0.0.1:8080/ws;
-                    proxy_http_version 1.1;
-                    proxy_set_header Upgrade \$http_upgrade;
-                    proxy_set_header Connection "Upgrade";
-                    proxy_set_header Host \$host;
-                    proxy_set_header X-Real-IP \$remote_addr;
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \$scheme;
-                }
-                # DEV_LOCATIONS_HTTP_PLACEHOLDER
-                # FEATURE_LOCATIONS_HTTP_PLACEHOLDER
+            # Remove any existing feature configuration for this branch
+            sudo rm -f /etc/nginx/conf.d/location-tracker/feature-${safe_branch}.conf
+            
+            # Create feature branch configuration file
+            cat > /tmp/feature-${safe_branch}.conf << EOF
+            # Configuration for feature branch: $branch
+            location $nginx_location/ {
+                proxy_pass http://127.0.0.1:8082/;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade \$http_upgrade;
+                proxy_set_header Connection 'upgrade';
+                proxy_set_header Host \$host;
+                proxy_set_header X-Real-IP \$remote_addr;
+                proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto \$scheme;
+                proxy_cache_bypass \$http_upgrade;
             }
-            
-            # HTTPS server block
-            server {
-                listen 443 ssl;
-                http2 on;
-                server_name $domain;
-                
-                ssl_certificate /etc/ssl/certs/location-tracker.crt;
-                ssl_certificate_key /etc/ssl/private/location-tracker.key;
-                ssl_protocols TLSv1.2 TLSv1.3;
-                ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384;
-                ssl_prefer_server_ciphers off;
-                ssl_session_cache shared:SSL:10m;
-                ssl_session_timeout 10m;
-                
-                add_header X-Frame-Options DENY;
-                add_header X-Content-Type-Options nosniff;
-                add_header X-XSS-Protection "1; mode=block";
-                add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
-                add_header Referrer-Policy "strict-origin-when-cross-origin";
-                
-                # Main application (root path)
-                location / {
-                    proxy_pass http://127.0.0.1:8080;
-                    proxy_http_version 1.1;
-                    proxy_set_header Upgrade \$http_upgrade;
-                    proxy_set_header Connection 'upgrade';
-                    proxy_set_header Host \$host;
-                    proxy_set_header X-Real-IP \$remote_addr;
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \$scheme;
-                    proxy_cache_bypass \$http_upgrade;
-                }
-                
-                # WebSocket for main app
-                location /ws {
-                    proxy_pass http://127.0.0.1:8080/ws;
-                    proxy_http_version 1.1;
-                    proxy_set_header Upgrade \$http_upgrade;
-                    proxy_set_header Connection "Upgrade";
-                    proxy_set_header Host \$host;
-                    proxy_set_header X-Real-IP \$remote_addr;
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \$scheme;
-                }
-                # DEV_LOCATIONS_HTTPS_PLACEHOLDER
-                # FEATURE_LOCATIONS_HTTPS_PLACEHOLDER
+
+            location $nginx_location/ws {
+                proxy_pass http://127.0.0.1:8082/ws;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade \$http_upgrade;
+                proxy_set_header Connection "Upgrade";
+                proxy_set_header Host \$host;
+                proxy_set_header X-Real-IP \$remote_addr;
+                proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto \$scheme;
             }
             EOF
-            fi
             
-            # Remove any existing feature location blocks for this specific branch
-            echo "Removing existing configuration for branch: $nginx_location"
-            sudo sed -i "/# Feature branch.*$(echo "$nginx_location" | sed 's/[[\.*^$(){}?+|/]/\\&/g')/,/# End feature branch.*$(echo "$nginx_location" | sed 's/[[\.*^$(){}?+|/]/\\&/g')/d" /etc/nginx/conf.d/location-tracker-unified.conf
-            sudo sed -i "/# Feature branch HTTPS.*$(echo "$nginx_location" | sed 's/[[\.*^$(){}?+|/]/\\&/g')/,/# End feature branch HTTPS.*$(echo "$nginx_location" | sed 's/[[\.*^$(){}?+|/]/\\&/g')/d" /etc/nginx/conf.d/location-tracker-unified.conf
-            
-            # Create feature location blocks
-            cat > /tmp/feature_locations_http.txt <<EOF
-                # Feature branch $nginx_location
-                location $nginx_location/ {
-                    if (-f /etc/ssl/certs/location-tracker.crt) {
-                        return 301 https://\$server_name\$request_uri;
-                    }
-                    proxy_pass http://127.0.0.1:8082/;
-                    proxy_http_version 1.1;
-                    proxy_set_header Upgrade \$http_upgrade;
-                    proxy_set_header Connection 'upgrade';
-                    proxy_set_header Host \$host;
-                    proxy_set_header X-Real-IP \$remote_addr;
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \$scheme;
-                    proxy_cache_bypass \$http_upgrade;
-                }
-                
-                location $nginx_location/ws {
-                    if (-f /etc/ssl/certs/location-tracker.crt) {
-                        return 301 https://\$server_name\$request_uri;
-                    }
-                    proxy_pass http://127.0.0.1:8082/ws;
-                    proxy_http_version 1.1;
-                    proxy_set_header Upgrade \$http_upgrade;
-                    proxy_set_header Connection "Upgrade";
-                    proxy_set_header Host \$host;
-                    proxy_set_header X-Real-IP \$remote_addr;
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \$scheme;
-                }
-                # End feature branch $nginx_location
-            EOF
-            
-            cat > /tmp/feature_locations_https.txt <<EOF
-                # Feature branch HTTPS $nginx_location
-                location $nginx_location/ {
-                    proxy_pass http://127.0.0.1:8082/;
-                    proxy_http_version 1.1;
-                    proxy_set_header Upgrade \$http_upgrade;
-                    proxy_set_header Connection 'upgrade';
-                    proxy_set_header Host \$host;
-                    proxy_set_header X-Real-IP \$remote_addr;
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \$scheme;
-                    proxy_cache_bypass \$http_upgrade;
-                }
-                
-                location $nginx_location/ws {
-                    proxy_pass http://127.0.0.1:8082/ws;
-                    proxy_http_version 1.1;
-                    proxy_set_header Upgrade \$http_upgrade;
-                    proxy_set_header Connection "Upgrade";
-                    proxy_set_header Host \$host;
-                    proxy_set_header X-Real-IP \$remote_addr;
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \$scheme;
-                }
-                # End feature branch HTTPS $nginx_location
-            EOF
-            
-            # Simple and reliable replacement using sed
-            echo "Updating HTTP server block..."
-            if sudo grep -q "# FEATURE_LOCATIONS_HTTP_PLACEHOLDER" /etc/nginx/conf.d/location-tracker-unified.conf; then
-                # Replace placeholder with feature locations
-                sudo sed -i '/# FEATURE_LOCATIONS_HTTP_PLACEHOLDER/{
-                    r /tmp/feature_locations_http.txt
-                    d
-                }' /etc/nginx/conf.d/location-tracker-unified.conf
-            else
-                echo "No HTTP placeholder found - this might indicate configuration issues"
-            fi
-            
-            echo "Updating HTTPS server block..."
-            if sudo grep -q "# FEATURE_LOCATIONS_HTTPS_PLACEHOLDER" /etc/nginx/conf.d/location-tracker-unified.conf; then
-                # Replace placeholder with feature locations  
-                sudo sed -i '/# FEATURE_LOCATIONS_HTTPS_PLACEHOLDER/{
-                    r /tmp/feature_locations_https.txt
-                    d
-                }' /etc/nginx/conf.d/location-tracker-unified.conf
-            else
-                echo "No HTTPS placeholder found - this might indicate configuration issues"
-            fi
-            
-            # Clean up temporary files
-            rm -f /tmp/feature_locations_http.txt /tmp/feature_locations_https.txt
-            
-            echo "Configuration updated successfully"
-            echo "Feature branch locations added to unified configuration"
+            # Move the configuration to the nginx directory
+            sudo mv /tmp/feature-${safe_branch}.conf /etc/nginx/conf.d/location-tracker/feature-${safe_branch}.conf
             
             # Test configuration
             echo "Testing nginx configuration..."
             if sudo nginx -t; then
-                echo "Nginx configuration test passed"
-                sudo systemctl reload nginx
-                echo "Nginx configuration updated successfully"
-                
-                # Verify the configuration was applied correctly
-                echo "Verifying configuration contains feature branch locations:"
-                if sudo grep -q "location $nginx_location/" /etc/nginx/conf.d/location-tracker-unified.conf; then
-                    echo "✅ Feature branch location blocks found in configuration"
-                    # Show the relevant parts of the config
-                    echo "HTTP server locations:"
-                    sudo sed -n '/server {/,/^}/p' /etc/nginx/conf.d/location-tracker-unified.conf | grep -A5 -B5 "$nginx_location" || echo "Not found in HTTP block"
-                    echo "HTTPS server locations:"  
-                    sudo sed -n '/listen 443 ssl/,/^}/p' /etc/nginx/conf.d/location-tracker-unified.conf | grep -A5 -B5 "$nginx_location" || echo "Not found in HTTPS block"
-                else
-                    echo "❌ Feature branch location blocks NOT found in configuration"
-                fi
+              echo "Nginx configuration test passed"
+              sudo systemctl reload nginx
+              echo "Feature branch configuration added successfully"
+              
+              # Verify the configuration was applied
+              echo "Verifying configuration contains feature branch:"
+              if sudo test -f /etc/nginx/conf.d/location-tracker/feature-${safe_branch}.conf; then
+                echo "✅ Feature branch configuration file created"
+                sudo ls -la /etc/nginx/conf.d/location-tracker/feature-*.conf
+              else
+                echo "❌ Feature branch configuration file NOT found"
+              fi
             else
-                echo "ERROR: Nginx configuration test failed"
-                echo "Configuration file content:"
-                sudo cat /etc/nginx/conf.d/location-tracker-unified.conf
-                sudo nginx -t
-                
-                # Restore backup
-                if [ -f "/etc/nginx/conf.d/location-tracker-unified.conf.backup" ]; then
-                    echo "Restoring backup configuration..."
-                    sudo cp /etc/nginx/conf.d/location-tracker-unified.conf.backup /etc/nginx/conf.d/location-tracker-unified.conf
-                fi
-                exit 1
+              echo "ERROR: Nginx configuration test failed"
+              sudo nginx -t
+              exit 1
             fi
 
       - name: Load and start Docker container

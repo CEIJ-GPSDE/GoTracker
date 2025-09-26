@@ -189,7 +189,7 @@ jobs:
             fi
             echo "SSL certificates deployed successfully"
 
-      - name: Create unified Nginx configuration
+      - name: Create modular Nginx configuration
         if: steps.should_deploy.outputs.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -198,22 +198,17 @@ jobs:
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
             domain="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}"
-            echo "Creating unified Nginx configuration for domain: $domain"
+            echo "Creating modular Nginx configuration for domain: $domain"
             
-            # Get list of running feature containers to preserve their configurations
-            running_feature_containers=""
-            if docker ps --format "table {{.Names}}" | grep -q "location-tracker-"; then
-              running_feature_containers=$(docker ps --format "{{.Names}}" | grep "location-tracker-" | grep -v "location-tracker-main" || echo "")
-            fi
+            # Create directories for modular configuration
+            sudo mkdir -p /etc/nginx/conf.d/location-tracker
             
-            echo "Running feature containers: $running_feature_containers"
-            
-            # Remove all existing location-tracker configs
+            # Remove old unified config if it exists
             sudo rm -f /etc/nginx/conf.d/location-tracker-*.conf
             
-            # Create base unified configuration
-            cat > /tmp/nginx-unified.conf << 'NGINX_EOF'
-            # Unified configuration for main, dev, and feature branches
+            # Create base server configuration
+            cat > /tmp/nginx-base.conf << 'NGINX_EOF'
+            # Base server configuration for main application
             server {
                 listen 80;
                 server_name DOMAIN_PLACEHOLDER;
@@ -249,8 +244,9 @@ jobs:
                     proxy_set_header X-Forwarded-Proto $scheme;
                 }
             
-                # DEV_LOCATIONS_HTTP_PLACEHOLDER
-                # FEATURE_LOCATIONS_HTTP_PLACEHOLDER
+                # Include development and feature branch configurations
+                include /etc/nginx/conf.d/location-tracker/dev-*.conf;
+                include /etc/nginx/conf.d/location-tracker/feature-*.conf;
             }
             NGINX_EOF
             
@@ -258,7 +254,7 @@ jobs:
             if [ -f /etc/ssl/certs/location-tracker.crt ] && [ -f /etc/ssl/private/location-tracker.key ]; then
               echo "SSL certificates found, adding HTTPS configuration..."
               
-              cat >> /tmp/nginx-unified.conf << 'NGINX_HTTPS_EOF'
+              cat >> /tmp/nginx-base.conf << 'NGINX_HTTPS_EOF'
             
             # HTTPS server block
             server {
@@ -305,8 +301,9 @@ jobs:
                     proxy_set_header X-Forwarded-Proto $scheme;
                 }
                 
-                # DEV_LOCATIONS_HTTPS_PLACEHOLDER
-                # FEATURE_LOCATIONS_HTTPS_PLACEHOLDER
+                # Include development and feature branch configurations
+                include /etc/nginx/conf.d/location-tracker/dev-*.conf;
+                include /etc/nginx/conf.d/location-tracker/feature-*.conf;
             }
             NGINX_HTTPS_EOF
             else
@@ -314,115 +311,72 @@ jobs:
             fi
             
             # Replace domain placeholder
-            sed -i "s/DOMAIN_PLACEHOLDER/$domain/g" /tmp/nginx-unified.conf
+            sed -i "s/DOMAIN_PLACEHOLDER/$domain/g" /tmp/nginx-base.conf
             
-            # Add feature branch locations for running containers
-            if [ ! -z "$running_feature_containers" ]; then
-              echo "Adding feature branch configurations for running containers..."
-              
-              feature_http_locations=""
-              feature_https_locations=""
-              
-              # Process each running feature container
-              for container_name in $running_feature_containers; do
-                # Extract branch name from container name (remove location-tracker- prefix)
-                if echo "$container_name" | grep -q "^location-tracker-"; then
-                  safe_branch=$(echo "$container_name" | sed 's/^location-tracker-//')
-                  # Convert safe branch name back to original branch name (reverse the transformation)
-                  branch=$(echo "$safe_branch" | sed 's/-/\//g')
-                  
-                  # Get container port (assume 8081 for feature branches)
-                  container_port="8082"
-                  
-                  echo "Adding configuration for container: $container_name, branch: $branch, port: $container_port"
-                  
-                  # Create location blocks
-                  location_path="/test/$branch"
-                  
-                  feature_http_location="
-                # Feature branch $location_path
-                location $location_path/ {
-                    if (-f /etc/ssl/certs/location-tracker.crt) {
-                        return 301 https://\$server_name\$request_uri;
-                    }
-                    proxy_pass http://127.0.0.1:$container_port/;
-                    proxy_http_version 1.1;
-                    proxy_set_header Upgrade \$http_upgrade;
-                    proxy_set_header Connection 'upgrade';
-                    proxy_set_header Host \$host;
-                    proxy_set_header X-Real-IP \$remote_addr;
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \$scheme;
-                    proxy_cache_bypass \$http_upgrade;
-                }
-                
-                location $location_path/ws {
-                    if (-f /etc/ssl/certs/location-tracker.crt) {
-                        return 301 https://\$server_name\$request_uri;
-                    }
-                    proxy_pass http://127.0.0.1:$container_port/ws;
-                    proxy_http_version 1.1;
-                    proxy_set_header Upgrade \$http_upgrade;
-                    proxy_set_header Connection \"Upgrade\";
-                    proxy_set_header Host \$host;
-                    proxy_set_header X-Real-IP \$remote_addr;
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \$scheme;
-                }
-                # End feature branch $location_path"
-                  
-                  feature_https_location="
-                # Feature branch HTTPS $location_path
-                location $location_path/ {
-                    proxy_pass http://127.0.0.1:$container_port/;
-                    proxy_http_version 1.1;
-                    proxy_set_header Upgrade \$http_upgrade;
-                    proxy_set_header Connection 'upgrade';
-                    proxy_set_header Host \$host;
-                    proxy_set_header X-Real-IP \$remote_addr;
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \$scheme;
-                    proxy_cache_bypass \$http_upgrade;
-                }
-                
-                location $location_path/ws {
-                    proxy_pass http://127.0.0.1:$container_port/ws;
-                    proxy_http_version 1.1;
-                    proxy_set_header Upgrade \$http_upgrade;
-                    proxy_set_header Connection \"Upgrade\";
-                    proxy_set_header Host \$host;
-                    proxy_set_header X-Real-IP \$remote_addr;
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \$scheme;
-                }
-                # End feature branch HTTPS $location_path"
-                  
-                  feature_http_locations="$feature_http_locations$feature_http_location"
-                  feature_https_locations="$feature_https_locations$feature_https_location"
-                fi
-              done
-              
-              # Replace placeholders with actual feature locations
-              if [ ! -z "$feature_http_locations" ]; then
-                # Use a unique delimiter to avoid issues with forward slashes
-                sed -i "s|# FEATURE_LOCATIONS_HTTP_PLACEHOLDER|$feature_http_locations|g" /tmp/nginx-unified.conf
-              else
-                sed -i "s|# FEATURE_LOCATIONS_HTTP_PLACEHOLDER||g" /tmp/nginx-unified.conf
-              fi
-              
-              if [ ! -z "$feature_https_locations" ]; then
-                sed -i "s|# FEATURE_LOCATIONS_HTTPS_PLACEHOLDER|$feature_https_locations|g" /tmp/nginx-unified.conf
-              else
-                sed -i "s|# FEATURE_LOCATIONS_HTTPS_PLACEHOLDER||g" /tmp/nginx-unified.conf
-              fi
-            else
-              # Remove placeholders if no feature branches - but keep DEV placeholders
-              sed -i "s|# FEATURE_LOCATIONS_HTTP_PLACEHOLDER||g" /tmp/nginx-unified.conf
-              sed -i "s|# FEATURE_LOCATIONS_HTTPS_PLACEHOLDER||g" /tmp/nginx-unified.conf
+            # Preserve existing feature configurations by recreating them from running containers
+            running_feature_containers=""
+            if docker ps --format "table {{.Names}}" | grep -q "location-tracker-"; then
+              running_feature_containers=$(docker ps --format "{{.Names}}" | grep "location-tracker-" | grep -v "location-tracker-main" || echo "")
             fi
             
-            # Move the configuration file to the final location
-            sudo mv /tmp/nginx-unified.conf /etc/nginx/conf.d/location-tracker-unified.conf
+            echo "Preserving configurations for running containers: $running_feature_containers"
+            
+            # Recreate feature configurations for running containers
+            if [ ! -z "$running_feature_containers" ]; then
+              for container_name in $running_feature_containers; do
+                if echo "$container_name" | grep -q "^location-tracker-"; then
+                  safe_branch=$(echo "$container_name" | sed 's/^location-tracker-//')
+                  branch=$(echo "$safe_branch" | sed 's/-/\//g')
+                  
+                  # Determine if it's a dev or feature branch and set appropriate port
+                  if echo "$branch" | grep -q "^dev/"; then
+                    container_port="8081"
+                    config_type="dev"
+                    location_path="/dev/$branch"
+                  else
+                    container_port="8082"
+                    config_type="feature"
+                    location_path="/test/$branch"
+                  fi
+                  
+                  config_file="/etc/nginx/conf.d/location-tracker/${config_type}-${safe_branch}.conf"
+                  
+                  echo "Creating configuration for $config_type branch: $location_path"
+                  
+                  # Create the branch-specific configuration file
+                  cat > /tmp/${config_type}-${safe_branch}.conf << EOF
+            # Configuration for $config_type branch: $branch
+            location $location_path/ {
+                proxy_pass http://127.0.0.1:$container_port/;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade \$http_upgrade;
+                proxy_set_header Connection 'upgrade';
+                proxy_set_header Host \$host;
+                proxy_set_header X-Real-IP \$remote_addr;
+                proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto \$scheme;
+                proxy_cache_bypass \$http_upgrade;
+            }
+
+            location $location_path/ws {
+                proxy_pass http://127.0.0.1:$container_port/ws;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade \$http_upgrade;
+                proxy_set_header Connection "Upgrade";
+                proxy_set_header Host \$host;
+                proxy_set_header X-Real-IP \$remote_addr;
+                proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto \$scheme;
+            }
+            EOF
+                  
+                  sudo mv /tmp/${config_type}-${safe_branch}.conf $config_file
+                fi
+              done
+            fi
+            
+            # Move the base configuration to the final location
+            sudo mv /tmp/nginx-base.conf /etc/nginx/conf.d/location-tracker-base.conf
             
             # Test configuration
             echo "Testing nginx configuration..."
@@ -433,14 +387,15 @@ jobs:
               else
                 sudo systemctl start nginx
               fi
-              echo "Nginx configuration updated successfully"
+              echo "Modular Nginx configuration created successfully"
             else
               echo "ERROR: Nginx configuration test failed"
-              echo "Configuration file content:"
-              sudo cat /etc/nginx/conf.d/location-tracker-unified.conf
+              echo "Base configuration content:"
+              sudo cat /etc/nginx/conf.d/location-tracker-base.conf
               sudo nginx -t
               exit 1
             fi
+
 
       - name: Load and start Docker container
         if: steps.should_deploy.outputs.deploy == 'true'
