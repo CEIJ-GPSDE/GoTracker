@@ -975,7 +975,7 @@ class LocationTracker {
         document.getElementById('track-latest-btn').addEventListener('click', () => {
             this.userInteracted = false;
             this.selectedLocationIndex = -1;
-            this.toggleTracking();
+            this.toggleTracking(true);
             this.updateLocationSelection();
         });
 
@@ -1242,10 +1242,10 @@ class LocationTracker {
                 }
                 this.updateRouteLine();
                 
-                if (this.isTrackingLatest && this.selectedLocationIndex === -1) {
-                    this.userInteracted = false;
+                if (this.isTrackingLatest && !this.userInteracted) {
                     this.centerMapOnLocation(location);
                 }
+
             }
         }
     }
