@@ -594,6 +594,27 @@
           50%  { transform: scale(2);   opacity: 0; }
           100% { transform: scale(1);   opacity: 0.6; }
         }
+
+        .trace-marker {
+          width: 10px;
+          height: 10px;
+          border-radius: 50%;
+          background: #3b82f6; /* blue */
+          border: 2px solid white;
+          box-shadow: 0 0 4px rgba(0,0,0,0.3);
+          cursor: pointer;
+          opacity: 0;               /* hidden by default */
+          transition: opacity 0.2s;
+        }
+
+        .trace-marker:hover {
+          opacity: 1;               /* show when hovered */
+        }
+
+        .trace-marker.always-visible {
+          opacity: 1 !important;    /* forced visible */
+        }
+
     </style>
 </head>
 <body>
@@ -699,6 +720,13 @@
                         </div>
                         <button class="btn" onclick="locationTracker.refreshData()">Refresh Data</button>
                     </div>
+                    <div class="control-group">
+                      <label style="display:flex; align-items:center; gap:6px;">
+                        <input type="checkbox" id="toggle-trace-dots">
+                        Show trace dots
+                      </label>
+                    </div>
+
                 </div>
             </div>
             
@@ -940,13 +968,7 @@ class LocationTracker {
         `;
 
         const el = document.createElement('div');
-        el.style.width = "10px";
-        el.style.height = "10px";
-        el.style.borderRadius = "50%";
-        el.style.background = "#3b82f6"; // blue dots for trace
-        el.style.border = "2px solid white";
-        el.style.boxShadow = "0 0 4px rgba(0,0,0,0.3)";
-        el.style.cursor = "pointer";
+        el.className = 'trace-marker';
 
         const marker = new maplibregl.Marker({ element: el })
             .setLngLat([location.longitude, location.latitude])
@@ -955,7 +977,6 @@ class LocationTracker {
 
         this.traceMarkers.push(marker);
     }
-
     clearTraceMarkers() {
         this.traceMarkers.forEach(m => m.remove());
         this.traceMarkers = [];
@@ -1036,6 +1057,19 @@ class LocationTracker {
         document.getElementById('history-mode-btn').addEventListener('click', () => {
             this.toggleHistoryMode();
         });
+
+        document.getElementById('toggle-trace-dots').addEventListener('change', (e) => {
+            const show = e.target.checked;
+            this.traceMarkers.forEach(marker => {
+                const el = marker.getElement();
+                if (show) {
+                    el.classList.add('always-visible');
+                } else {
+                    el.classList.remove('always-visible');
+                }
+            });
+        });
+
 
         // Quick range buttons
         document.querySelectorAll('.quick-range-btn').forEach(btn => {
@@ -1153,7 +1187,7 @@ class LocationTracker {
             this.routeCoords = this.locations.map(loc => [loc.longitude, loc.latitude]);
         }
         this.updateRouteLine();
-    
+
         // ✅ add per-point markers
         this.clearTraceMarkers();
         const locs = this.selectedDevice
@@ -1161,11 +1195,11 @@ class LocationTracker {
             : this.locations;
         locs.forEach(loc => this.createTraceMarker(loc));
     }
-    
+
     updateRouteForFiltered() {
         this.routeCoords = this.filteredLocations.map(loc => [loc.longitude, loc.latitude]);
         this.updateRouteLine();
-    
+
         // ✅ add per-point markers
         this.clearTraceMarkers();
         this.filteredLocations.forEach(loc => this.createTraceMarker(loc));
