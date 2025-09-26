@@ -237,7 +237,7 @@ jobs:
           sed -i "s|<title>Real-time Location Tracker</title>|<title>$instance_name ($branch)</title>|g" ./static/index.html
           
           # Also update the h1 header to show the instance
-          sed -i "s|<h1>🌍 Real-time Location Tracker</h1>|<h1>🌐 $instance_name (DEV)</h1>|g" ./static/index.html
+          sed -i "s|<h1>🌍 Real-time Location Tracker</h1>|<h1>🌍 $instance_name (DEV)</h1>|g" ./static/index.html
           
           echo "HTML modifications completed"
 
