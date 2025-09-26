@@ -425,7 +425,7 @@ jobs:
                     proxy_pass http://127.0.0.1:8081/;
                     proxy_http_version 1.1;
                     proxy_set_header Upgrade \$http_upgrade;
-                    proxy_Set_header Connection 'upgrade';
+                    proxy_set_header Connection 'upgrade';
                     proxy_set_header Host \$host;
                     proxy_set_header X-Real-IP \$remote_addr;
                     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -443,7 +443,7 @@ jobs:
                     proxy_set_header Connection "Upgrade";
                     proxy_set_header Host \$host;
                     proxy_set_header X-Real-IP \$remote_addr;
-                    proxy_Set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
                     proxy_set_header X-Forwarded-Proto \$scheme;
                 }
                 # End dev branch $nginx_location
@@ -454,24 +454,24 @@ jobs:
                 location $nginx_location/ {
                     proxy_pass http://127.0.0.1:8081/;
                     proxy_http_version 1.1;
-                    proxy_Set_header Upgrade \$http_upgrade;
+                    proxy_set_header Upgrade \$http_upgrade;
                     proxy_set_header Connection 'upgrade';
                     proxy_set_header Host \$host;
                     proxy_set_header X-Real-IP \$remote_addr;
-                    proxy_Set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                    proxy_Set_header X-Forwarded-Proto \$scheme;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
                     proxy_cache_bypass \$http_upgrade;
                 }
                 
                 location $nginx_location/ws {
                     proxy_pass http://127.0.0.1:8081/ws;
                     proxy_http_version 1.1;
-                    proxy_Set_header Upgrade \$http_upgrade;
-                    proxy_Set_header Connection "Upgrade";
-                    proxy_Set_header Host \$host;
-                    proxy_Set_header X-Real-IP \$remote_addr;
-                    proxy_Set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                    proxy_Set_header X-Forwarded-Proto \$scheme;
+                    proxy_set_header Upgrade \$http_upgrade;
+                    proxy_set_header Connection "Upgrade";
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
                 }
                 # End dev branch HTTPS $nginx_location
             EOF
