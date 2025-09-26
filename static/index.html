@@ -1243,7 +1243,7 @@ class LocationTracker {
             
             this.devices.add(location.device_id);
             this.updateDevicesList();
-            this.updateMapMarker(location);
+            this.updateMapMarker(location, true);
             this.filterAndDisplayLocations();
             this.updateStatistics();
             
@@ -1263,45 +1263,56 @@ class LocationTracker {
     }
 
         updateMapMarker(location, isLatest = false) {
-        const deviceId = location.device_id;
+            const deviceId = location.device_id;
+            let marker = this.markers.get(deviceId);
 
-        if (this.markers.has(deviceId)) {
-            this.markers.get(deviceId).remove();
-        }
-
-        const popupContent = `
-            <div style="font-family: system-ui; min-width: 200px;">
-                <h4 style="margin: 0 0 10px 0; color: #374151;">${deviceId}</h4>
-                <div style="font-size: 12px; color: #6b7280; margin-bottom: 5px;">
-                    <strong>Coordinates:</strong><br>
-                    ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}
+            const popupContent = `
+                <div style="font-family: system-ui; min-width: 200px;">
+                    <h4 style="margin: 0 0 10px 0; color: #374151;">${deviceId}</h4>
+                    <div style="font-size: 12px; color: #6b7280; margin-bottom: 5px;">
+                        <strong>Coordinates:</strong><br>
+                        ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}
+                    </div>
+                    <div style="font-size: 12px; color: #6b7280;">
+                        <strong>Time:</strong><br>
+                        ${new Date(location.timestamp).toLocaleString()}
+                    </div>
                 </div>
-                <div style="font-size: 12px; color: #6b7280;">
-                    <strong>Time:</strong><br>
-                    ${new Date(location.timestamp).toLocaleString()}
-                </div>
-            </div>
-        `;
-
-        let marker;
-        if (isLatest) {
-            const el = document.createElement('div');
-            el.className = 'pulse-marker';   // ✅ pulsing latest
-            marker = new maplibregl.Marker({ element: el })
+            `;
+            
+            if (!marker) {
+                // Create marker if not exist
+                let el;
+                if (isLatest) {
+                    el = document.createElement('div');
+                    el.className = 'pulse-marker';
+                }
+            
+                marker = new maplibregl.Marker({
+                    element: el || undefined,
+                    color: isLatest ? undefined : this.getDeviceColor(deviceId)
+                })
                 .setLngLat([location.longitude, location.latitude])
                 .setPopup(new maplibregl.Popup().setHTML(popupContent))
                 .addTo(this.map);
-        } else {
-            marker = new maplibregl.Marker({
-                color: this.getDeviceColor(deviceId)
-            })
-            .setLngLat([location.longitude, location.latitude])
-            .setPopup(new maplibregl.Popup().setHTML(popupContent))
-            .addTo(this.map);
+            
+                this.markers.set(deviceId, marker);
+            } else {
+                // Just update existing marker
+                marker.setLngLat([location.longitude, location.latitude]);
+                marker.setPopup(new maplibregl.Popup().setHTML(popupContent));
+            }
+        
+            // Ensure pulse only applies to the latest
+            const el = marker.getElement();
+            if (isLatest) {
+                el.classList.add('pulse-marker');
+                el.style.zIndex = "9999";
+            } else {
+                el.classList.remove('pulse-marker');
+            }
         }
 
-        this.markers.set(deviceId, marker);
-    }
 
     getDeviceColor(deviceId) {
         const colors = ['#ef4444', '#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#06b6d4', '#f97316'];
