@@ -36,26 +36,20 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        instance: [EC2_1, EC2_2, EC2_3, EC2_4]
+        include:
+          - instance: EC2_1
+            deploy: ${{ github.event.inputs.deploy_to_EC2_1 }}
+          - instance: EC2_2
+            deploy: ${{ github.event.inputs.deploy_to_EC2_2 }}
+          - instance: EC2_3
+            deploy: ${{ github.event.inputs.deploy_to_EC2_3 }}
+          - instance: EC2_4
+            deploy: ${{ github.event.inputs.deploy_to_EC2_4 }}
       fail-fast: false
     steps:
       - name: Determine deployment
         id: should_deploy
         run: |
-          echo "=== Debugging Information ==="
-          echo "Event name: ${{ github.event_name }}"
-          echo "Matrix instance: ${{ matrix.instance }}"
-          
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "Manual deployment inputs:"
-            echo "  Branch: ${{ inputs.branch }}"
-            echo "  EC2_1: ${{ inputs.deploy_to_EC2_1 }}"
-            echo "  EC2_2: ${{ inputs.deploy_to_EC2_2 }}"
-            echo "  EC2_3: ${{ inputs.deploy_to_EC2_3 }}"
-            echo "  EC2_4: ${{ inputs.deploy_to_EC2_4 }}"
-          fi
-          echo "=========================="
-          
           if [ "${{ github.event_name }}" = "push" ]; then
             # Auto-deploy specific dev branches to their assigned instances
             case "${{ github.ref_name }}" in
@@ -105,38 +99,9 @@ jobs:
                 ;;
             esac
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            # Handle manual deployment - check each instance individually
-            case "${{ matrix.instance }}" in
-              "EC2_1")
-                deploy_flag="${{ inputs.deploy_to_EC2_1 }}"
-                ;;
-              "EC2_2")
-                deploy_flag="${{ inputs.deploy_to_EC2_2 }}"
-                ;;
-              "EC2_3")
-                deploy_flag="${{ inputs.deploy_to_EC2_3 }}"
-                ;;
-              "EC2_4")
-                deploy_flag="${{ inputs.deploy_to_EC2_4 }}"
-                ;;
-              *)
-                deploy_flag="false"
-                ;;
-            esac
-            
-            echo "Raw deploy flag for ${{ matrix.instance }}: '$deploy_flag'"
-            
-            # Convert string boolean to actual boolean comparison
-            if [ "$deploy_flag" = "true" ]; then
-              echo "deploy=true" >> $GITHUB_OUTPUT
-              echo "✅ Will deploy to ${{ matrix.instance }}"
-            else
-              echo "deploy=false" >> $GITHUB_OUTPUT  
-              echo "❌ Skipping ${{ matrix.instance }} (flag: '$deploy_flag')"
-            fi
-            
-            echo "branch=${{ inputs.branch }}" >> $GITHUB_OUTPUT
-            echo "Manual deployment - ${{ matrix.instance }}: $deploy_flag (branch: ${{ inputs.branch }})"
+            echo "deploy=${{ matrix.deploy }}" >> $GITHUB_OUTPUT
+            echo "branch=${{ github.event.inputs.branch }}" >> $GITHUB_OUTPUT
+            echo "Deploying ${{ matrix.instance }}: ${{ matrix.deploy }} (manual trigger for ${{ github.event.inputs.branch }})"
           else
             echo "deploy=false" >> $GITHUB_OUTPUT
             echo "Unknown event type, skipping deployment"
