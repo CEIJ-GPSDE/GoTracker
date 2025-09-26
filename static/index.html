@@ -805,6 +805,7 @@ class LocationTracker {
         this.suppressUserInteraction = false;
         this.traceMarkers = [];
         this.showTraceDots = false;
+        this.liveUpdateQueue = []; 
 
         this.config = {
             basePath: '${BASE_PATH}' || '',
@@ -1065,13 +1066,22 @@ class LocationTracker {
             // do not clear live data, just stop updating
             // history rendering uses filteredLocations
             this.updateRouteForFiltered();
+            this.markers.forEach(marker => {
+                const el = marker.getElement();
+                if (el && el.classList.contains('pulse-marker')) {
+                    el.style.display = 'none';
+                }
+            });
         } else {
             btn.style.background = 'linear-gradient(135deg, #3b82f6, #1d4ed8)';
             btn.querySelector('span:last-child').textContent = 'History Mode';
             controls.classList.remove('active');
             trackBtn.style.display = 'flex';
             // resume live updates
-            this.updateRouteForDevice();
+            while (this.liveUpdateQueue.length > 0) {
+                const loc = this.liveUpdateQueue.shift();
+                this.applyLocationUpdate(loc);
+            }
         }
     }
 
@@ -1242,10 +1252,13 @@ class LocationTracker {
     updateRouteForFiltered() {
         this.routeCoords = this.filteredLocations.map(loc => [loc.longitude, loc.latitude]);
         this.updateRouteLine();
-
-        // ✅ add per-point markers
+    
         this.clearTraceMarkers();
-        this.filteredLocations.forEach(loc => this.createTraceMarker(loc));
+        this.filteredLocations.forEach(loc => {
+            this.updateMapMarker(loc, false); 
+            this.createTraceMarker(loc);
+        });
+    
         this.applyTraceDotsVisibility();
     }
 
@@ -1360,84 +1373,83 @@ class LocationTracker {
         
         // Only process new locations if not in history mode
         if (this.isHistoryMode) {
+            this.liveUpdateQueue.push(location);
             return;
         }
-        if (!this.isHistoryMode) {
-            this.locations.unshift(location);
-            
-            if (this.locations.length > this.historyLimit * 2) {
-                this.locations = this.locations.slice(0, this.historyLimit);
-            }
-            
-            this.devices.add(location.device_id);
-            this.updateDevicesList();
-            this.updateMapMarker(location, true);
-            this.filterAndDisplayLocations();
-            this.updateStatistics();
-            
-            if (this.selectedDevice === '' || this.selectedDevice === location.device_id) {
-                 this.locations.unshift(location);
-                this.updateMapMarker(location, true);
-                this.updateRouteForDevice();        
-                if (this.isTrackingLatest && !this.userInteracted) {
-                    this.centerMapOnLocation(location);
-                }
-
-            }
-        }
-
+        this.applyLocationUpdate(location);
     }
 
-        updateMapMarker(location, isLatest = false) {
-            const deviceId = location.device_id;
-            let marker = this.markers.get(deviceId);
-
-            const popupContent = `
-                <div style="font-family: system-ui; min-width: 200px;">
-                    <h4 style="margin: 0 0 10px 0; color: #374151;">${deviceId}</h4>
-                    <div style="font-size: 12px; color: #6b7280; margin-bottom: 5px;">
-                        <strong>Coordinates:</strong><br>
-                        ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}
-                    </div>
-                    <div style="font-size: 12px; color: #6b7280;">
-                        <strong>Time:</strong><br>
-                        ${new Date(location.timestamp).toLocaleString()}
-                    </div>
+    updateMapMarker(location, isLatest = false) {
+        const deviceId = location.device_id;
+        let marker = this.markers.get(deviceId);
+        const popupContent = `
+            <div style="font-family: system-ui; min-width: 200px;">
+                <h4 style="margin: 0 0 10px 0; color: #374151;">${deviceId}</h4>
+                <div style="font-size: 12px; color: #6b7280; margin-bottom: 5px;">
+                    <strong>Coordinates:</strong><br>
+                    ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}
                 </div>
-            `;
-            
-            if (!marker) {
-                // Create marker if not exist
-                let el;
-                if (isLatest) {
-                    el = document.createElement('div');
-                    el.className = 'pulse-marker';
-                }
-            
-                marker = new maplibregl.Marker({
-                    element: el || undefined,
-                    color: isLatest ? undefined : this.getDeviceColor(deviceId)
-                })
-                .setLngLat([location.longitude, location.latitude])
-                .setPopup(new maplibregl.Popup().setHTML(popupContent))
-                .addTo(this.map);
-            
-                this.markers.set(deviceId, marker);
-            } else {
-                // Just update existing marker
-                marker.setLngLat([location.longitude, location.latitude]);
-                marker.setPopup(new maplibregl.Popup().setHTML(popupContent));
+                <div style="font-size: 12px; color: #6b7280;">
+                    <strong>Time:</strong><br>
+                    ${new Date(location.timestamp).toLocaleString()}
+                </div>
+            </div>
+        `;
+        
+        if (!marker) {
+            // Create marker if not exist
+            let el;
+            if (isLatest) {
+                el = document.createElement('div');
+                el.className = 'pulse-marker';
             }
         
-            // Ensure pulse only applies to the latest
-            const el = marker.getElement();
-            if (isLatest) {
-                el.classList.add('pulse-marker');
-                el.style.zIndex = "9999";
-            } else {
-                el.classList.remove('pulse-marker');
+            marker = new maplibregl.Marker({
+                element: el || undefined,
+                color: isLatest ? undefined : this.getDeviceColor(deviceId)
+            })
+            .setLngLat([location.longitude, location.latitude])
+            .setPopup(new maplibregl.Popup().setHTML(popupContent))
+            .addTo(this.map);
+        
+            this.markers.set(deviceId, marker);
+        } else {
+            // Just update existing marker
+            marker.setLngLat([location.longitude, location.latitude]);
+            marker.setPopup(new maplibregl.Popup().setHTML(popupContent));
+        }
+    
+        // Ensure pulse only applies to the latest
+        const el = marker.getElement();
+        if (isLatest) {
+            el.classList.add('pulse-marker');
+            el.style.zIndex = "9999";
+        } else {
+            el.classList.remove('pulse-marker');
+        }
+    }
+
+    applyLocationUpdate(location) {
+        this.locations.unshift(location);
+    
+        // prevent uncontrolled growth
+        if (this.locations.length > this.historyLimit * 2) {
+            this.locations = this.locations.slice(0, this.historyLimit);
+        }
+    
+        this.devices.add(location.device_id);
+        this.updateDevicesList();
+        this.filterAndDisplayLocations();
+        this.updateStatistics();
+    
+        if (this.selectedDevice === '' || this.selectedDevice === location.device_id) {
+            this.updateMapMarker(location, !this.isHistoryMode);
+            this.updateRouteForDevice();
+            if (this.isTrackingLatest && !this.userInteracted) {
+                this.centerMapOnLocation(location);
             }
         }
+    }
 
 
     getDeviceColor(deviceId) {
