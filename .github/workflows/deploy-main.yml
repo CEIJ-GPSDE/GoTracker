@@ -213,7 +213,7 @@ jobs:
             
             # Create base unified configuration
             cat > /tmp/nginx-unified.conf << 'NGINX_EOF'
-            # Unified configuration for main and feature branches
+            # Unified configuration for main, dev, and feature branches
             server {
                 listen 80;
                 server_name DOMAIN_PLACEHOLDER;
@@ -249,7 +249,8 @@ jobs:
                     proxy_set_header X-Forwarded-Proto $scheme;
                 }
             
-            # FEATURE_LOCATIONS_HTTP_PLACEHOLDER
+                # DEV_LOCATIONS_HTTP_PLACEHOLDER
+                # FEATURE_LOCATIONS_HTTP_PLACEHOLDER
             }
             NGINX_EOF
             
@@ -304,7 +305,8 @@ jobs:
                     proxy_set_header X-Forwarded-Proto $scheme;
                 }
                 
-            # FEATURE_LOCATIONS_HTTPS_PLACEHOLDER
+                # DEV_LOCATIONS_HTTPS_PLACEHOLDER
+                # FEATURE_LOCATIONS_HTTPS_PLACEHOLDER
             }
             NGINX_HTTPS_EOF
             else
@@ -330,7 +332,7 @@ jobs:
                   branch=$(echo "$safe_branch" | sed 's/-/\//g')
                   
                   # Get container port (assume 8081 for feature branches)
-                  container_port="8081"
+                  container_port="8082"
                   
                   echo "Adding configuration for container: $container_name, branch: $branch, port: $container_port"
                   
@@ -414,7 +416,7 @@ jobs:
                 sed -i "s|# FEATURE_LOCATIONS_HTTPS_PLACEHOLDER||g" /tmp/nginx-unified.conf
               fi
             else
-              # Remove placeholders if no feature branches
+              # Remove placeholders if no feature branches - but keep DEV placeholders
               sed -i "s|# FEATURE_LOCATIONS_HTTP_PLACEHOLDER||g" /tmp/nginx-unified.conf
               sed -i "s|# FEATURE_LOCATIONS_HTTPS_PLACEHOLDER||g" /tmp/nginx-unified.conf
             fi

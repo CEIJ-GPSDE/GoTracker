@@ -1,0 +1,649 @@
+name: Deploy Development Branch
+
+on:
+  push:
+    branches:
+      - 'dev/cesar'
+      - 'dev/Barrios'
+      - 'dev/uribe'
+      - 'dev/carmona'
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Development branch to deploy"
+        required: true
+        type: string
+      deploy_to_EC2_1:
+        description: "Deploy to EC2_1"
+        type: boolean
+        default: false
+      deploy_to_EC2_2:
+        description: "Deploy to EC2_2"
+        type: boolean
+        default: false
+      deploy_to_EC2_3:
+        description: "Deploy to EC2_3"
+        type: boolean
+        default: false
+      deploy_to_EC2_4:
+        description: "Deploy to EC2_4"
+        type: boolean
+        default: false
+
+jobs:
+  deploy-development:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - instance: EC2_1
+            deploy: ${{ github.event.inputs.deploy_to_EC2_1 }}
+          - instance: EC2_2
+            deploy: ${{ github.event.inputs.deploy_to_EC2_2 }}
+          - instance: EC2_3
+            deploy: ${{ github.event.inputs.deploy_to_EC2_3 }}
+          - instance: EC2_4
+            deploy: ${{ github.event.inputs.deploy_to_EC2_4 }}
+      fail-fast: false
+    steps:
+      - name: Determine deployment
+        id: should_deploy
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            # Auto-deploy specific dev branches to their assigned instances
+            case "${{ github.ref_name }}" in
+              "dev/cesar")
+                if [ "${{ matrix.instance }}" = "EC2_1" ]; then
+                  echo "deploy=true" >> $GITHUB_OUTPUT
+                  echo "branch=dev/cesar" >> $GITHUB_OUTPUT
+                  echo "Deploying dev/cesar to EC2_1 (triggered by push)"
+                else
+                  echo "deploy=false" >> $GITHUB_OUTPUT
+                  echo "Skipping ${{ matrix.instance }} for dev/cesar push"
+                fi
+                ;;
+              "dev/Barrios")
+                if [ "${{ matrix.instance }}" = "EC2_2" ]; then
+                  echo "deploy=true" >> $GITHUB_OUTPUT
+                  echo "branch=dev/Barrios" >> $GITHUB_OUTPUT
+                  echo "Deploying dev/Barrios to EC2_2 (triggered by push)"
+                else
+                  echo "deploy=false" >> $GITHUB_OUTPUT
+                  echo "Skipping ${{ matrix.instance }} for dev/Barrios push"
+                fi
+                ;;
+              "dev/uribe")
+                if [ "${{ matrix.instance }}" = "EC2_3" ]; then
+                  echo "deploy=true" >> $GITHUB_OUTPUT
+                  echo "branch=dev/uribe" >> $GITHUB_OUTPUT
+                  echo "Deploying dev/uribe to EC2_3 (triggered by push)"
+                else
+                  echo "deploy=false" >> $GITHUB_OUTPUT
+                  echo "Skipping ${{ matrix.instance }} for dev/uribe push"
+                fi
+                ;;
+              "dev/carmona")
+                if [ "${{ matrix.instance }}" = "EC2_4" ]; then
+                  echo "deploy=true" >> $GITHUB_OUTPUT
+                  echo "branch=dev/carmona" >> $GITHUB_OUTPUT
+                  echo "Deploying dev/carmona to EC2_4 (triggered by push)"
+                else
+                  echo "deploy=false" >> $GITHUB_OUTPUT
+                  echo "Skipping ${{ matrix.instance }} for dev/carmona push"
+                fi
+                ;;
+              *)
+                echo "deploy=false" >> $GITHUB_OUTPUT
+                echo "Unknown dev branch: ${{ github.ref_name }}"
+                ;;
+            esac
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "deploy=${{ matrix.deploy }}" >> $GITHUB_OUTPUT
+            echo "branch=${{ github.event.inputs.branch }}" >> $GITHUB_OUTPUT
+            echo "Deploying ${{ matrix.instance }}: ${{ matrix.deploy }} (manual trigger for ${{ github.event.inputs.branch }})"
+          else
+            echo "deploy=false" >> $GITHUB_OUTPUT
+            echo "Unknown event type, skipping deployment"
+          fi
+
+      - name: Skip unchecked instances
+        if: steps.should_deploy.outputs.deploy != 'true'
+        run: echo "Skipping ${{ matrix.instance }} - not selected for deployment"
+
+      - name: Cleanup development branch deployment
+        if: steps.should_deploy.outputs.deploy == 'true'
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
+          username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
+          key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
+          script: |
+            branch="${{ steps.should_deploy.outputs.branch }}"
+            safe_branch=$(echo "$branch" | tr '/' '-' | tr '[:upper:]' '[:lower:]')
+            container_name="location-tracker-${safe_branch}"
+            nginx_location="/dev/$branch"
+            
+            echo "=== Cleaning up development branch deployment: $branch ==="
+            echo "Container name: $container_name"
+            echo "Nginx location: $nginx_location"
+            
+            # Stop and remove dev container
+            echo "Stopping and removing Docker container..."
+            if docker ps -a --format '{{.Names}}' | grep -q "^${container_name}$"; then
+              echo "Found container: $container_name"
+              docker stop $container_name || echo "Container was not running"
+              docker rm -f $container_name || echo "Failed to remove container"
+              echo "Container removed successfully"
+            else
+              echo "Container $container_name not found (already cleaned up)"
+            fi
+            
+            # Remove dev image
+            echo "Removing Docker image..."
+            if docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "^location-tracker:${safe_branch}$"; then
+              echo "Found image: location-tracker:${safe_branch}"
+              docker rmi -f location-tracker:${safe_branch} || echo "Failed to remove image"
+              echo "Image removed successfully"
+            else
+              echo "Image location-tracker:${safe_branch} not found (already cleaned up)"
+            fi
+            
+            # Clean up any leftover tar files
+            echo "Cleaning up temporary files..."
+            rm -f /tmp/location-tracker-${safe_branch}.tar || echo "No tar file to clean up"
+            
+            # Check if port 8081 is still in use
+            echo "Checking if port 8081 is still in use..."
+            if sudo lsof -i :8081 2>/dev/null; then
+              echo "WARNING: Port 8081 still in use by:"
+              sudo lsof -i :8081
+              echo "Attempting to terminate processes..."
+              sudo lsof -i :8081 | awk 'NR>1 {print $2}' | xargs -r sudo kill -9 || echo "Failed to terminate some processes"
+            else
+              echo "✅ Port 8081 is now free"
+            fi
+            
+            # Check if port 5052 is still in use  
+            echo "Checking if port 5052 is still in use..."
+            if sudo lsof -i :5052 2>/dev/null; then
+              echo "WARNING: Port 5052 still in use by:"
+              sudo lsof -i :5052
+              echo "Attempting to terminate processes..."
+              sudo lsof -i :5052 | awk 'NR>1 {print $2}' | xargs -r sudo kill -9 || echo "Failed to terminate some processes"
+            else
+              echo "✅ Port 5052 is now free"
+            fi
+            
+            echo "Development cleanup completed"
+
+      - uses: actions/checkout@v4
+        if: steps.should_deploy.outputs.deploy == 'true'
+        with:
+          ref: ${{ steps.should_deploy.outputs.branch }}
+
+      - name: Set safe branch name and instance info
+        if: steps.should_deploy.outputs.deploy == 'true'
+        id: prepare
+        run: |
+          branch="${{ steps.should_deploy.outputs.branch }}"
+          safe_branch=$(echo "$branch" | tr '/' '-' | tr '[:upper:]' '[:lower:]')
+          echo "safe_branch=$safe_branch" >> $GITHUB_OUTPUT
+          echo "Branch: $branch -> Safe: $safe_branch"
+          echo "Instance: ${{ matrix.instance }}"
+
+      - name: Modify HTML with instance name
+        if: steps.should_deploy.outputs.deploy == 'true'
+        run: |
+          instance_name="${{ secrets[format('{0}_PAGE_NAME', matrix.instance)] }}"
+          branch="${{ steps.should_deploy.outputs.branch }}"
+          
+          # Default to matrix.instance if secret is not set
+          if [ -z "$instance_name" ]; then
+            instance_name="${{ matrix.instance }}"
+          fi
+          
+          echo "Using instance name: $instance_name"
+          echo "Branch: $branch"
+
+          ls
+          
+          # Modify the HTML title to include instance name and branch
+          sed -i "s|<title>Real-time Location Tracker</title>|<title>Real-time Location Tracker - $instance_name (DEV: $branch)</title>|g" ./static/index.html
+          
+          # Also update the h1 header to show the instance
+          sed -i "s|<h1>🌐 Real-time Location Tracker</h1>|<h1>🌐 Real-time Location Tracker - $instance_name (DEV)</h1>|g" ./static/index.html
+          
+          echo "HTML modifications completed"
+
+      - name: Build Docker image
+        if: steps.should_deploy.outputs.deploy == 'true'
+        run: |
+          branch="${{ steps.should_deploy.outputs.branch }}"
+          safe_branch="${{ steps.prepare.outputs.safe_branch }}"
+          base_path="/dev/$branch"
+          echo "Building Docker image for dev branch: $branch with BASE_PATH: $base_path"
+          docker build \
+            --build-arg VERSION=${safe_branch}-$(git rev-parse --short HEAD) \
+            --build-arg BASE_PATH="$base_path" \
+            -t location-tracker:${safe_branch} \
+            .
+          docker save location-tracker:${safe_branch} > location-tracker-${safe_branch}.tar
+          echo "Docker image saved: location-tracker-${safe_branch}.tar"
+
+      - name: Stop existing dev container
+        if: steps.should_deploy.outputs.deploy == 'true'
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
+          username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
+          key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
+          script: |
+            safe_branch="${{ steps.prepare.outputs.safe_branch }}"
+            container_name="location-tracker-${safe_branch}"
+            echo "Cleaning up existing dev deployment: $container_name"
+            
+            # Stop and remove existing dev container
+            if docker ps -a --format '{{.Names}}' | grep -q "^${container_name}$"; then
+              echo "Stopping existing container: $container_name"
+              docker stop $container_name || echo "Container was not running"
+              docker rm $container_name || echo "Failed to remove container"
+            fi
+            
+            # Remove existing dev image
+            if docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "^location-tracker:${safe_branch}$"; then
+              echo "Removing old image: location-tracker:${safe_branch}"
+              docker rmi location-tracker:${safe_branch} || echo "Failed to remove image"
+            fi
+            
+            # Check for and free port 8081 (dev port)
+            if sudo lsof -i :8081 2>/dev/null; then
+              echo "Found processes using port 8081, attempting to terminate..."
+              sudo lsof -i :8081 | awk 'NR>1 {print $2}' | xargs -r sudo kill -9 || echo "Failed to terminate some processes"
+              sleep 2
+            fi
+            
+            mkdir -p /home/ec2-user/certs
+            echo "Dev cleanup completed"
+
+      - name: Upload Docker image
+        if: steps.should_deploy.outputs.deploy == 'true'
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
+          username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
+          key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
+          source: location-tracker-${{ steps.prepare.outputs.safe_branch }}.tar
+          target: /tmp/
+
+      - name: Deploy SSL certificates
+        if: steps.should_deploy.outputs.deploy == 'true'
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
+          username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
+          key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
+          script: |
+            mkdir -p /home/ec2-user/certs
+            if [ -n "${{ secrets[format('{0}_SSL_CERT', matrix.instance)] }}" ]; then
+              echo "Deploying SSL certificate for development branch..."
+              echo "${{ secrets[format('{0}_SSL_CERT', matrix.instance)] }}" > /home/ec2-user/certs/server.crt
+              chmod 644 /home/ec2-user/certs/server.crt
+            fi
+            if [ -n "${{ secrets[format('{0}_SSL_KEY', matrix.instance)] }}" ]; then
+              echo "Deploying SSL private key for development branch..."
+              echo "${{ secrets[format('{0}_SSL_KEY', matrix.instance)] }}" > /home/ec2-user/certs/server.key
+              chmod 600 /home/ec2-user/certs/server.key
+            fi
+
+      - name: Update unified Nginx configuration with development branch
+        if: steps.should_deploy.outputs.deploy == 'true'
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
+          username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
+          key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
+          script: |
+            branch="${{ steps.should_deploy.outputs.branch }}"
+            safe_branch="${{ steps.prepare.outputs.safe_branch }}"
+            domain="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}"
+            nginx_location="/dev/$branch"
+            
+            echo "Adding development branch to unified Nginx configuration: $branch"
+            echo "Safe branch name: $safe_branch"
+            echo "Nginx location: $nginx_location"
+            
+            # Backup existing configuration
+            sudo cp /etc/nginx/conf.d/location-tracker-unified.conf /etc/nginx/conf.d/location-tracker-unified.conf.backup
+            
+            # Check if unified config exists, create basic one if needed
+            if [ ! -f "/etc/nginx/conf.d/location-tracker-unified.conf" ]; then
+              echo "Creating basic unified configuration..."
+              sudo tee /etc/nginx/conf.d/location-tracker-unified.conf > /dev/null <<EOF
+            # Unified configuration for main, dev, and feature branches
+            server {
+                listen 80;
+                server_name $domain;
+                
+                # Main application (root path)
+                location / {
+                    if (-f /etc/ssl/certs/location-tracker.crt) {
+                        return 301 https://\$server_name\$request_uri;
+                    }
+                    proxy_pass http://127.0.0.1:8080;
+                    proxy_http_version 1.1;
+                    proxy_set_header Upgrade \$http_upgrade;
+                    proxy_set_header Connection 'upgrade';
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
+                    proxy_cache_bypass \$http_upgrade;
+                }
+                
+                # WebSocket for main app
+                location /ws {
+                    if (-f /etc/ssl/certs/location-tracker.crt) {
+                        return 301 https://\$server_name\$request_uri;
+                    }
+                    proxy_pass http://127.0.0.1:8080/ws;
+                    proxy_http_version 1.1;
+                    proxy_set_header Upgrade \$http_upgrade;
+                    proxy_set_header Connection "Upgrade";
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
+                }
+            
+                # DEV_LOCATIONS_HTTP_PLACEHOLDER
+                # FEATURE_LOCATIONS_HTTP_PLACEHOLDER
+            }
+            
+            # HTTPS server block
+            server {
+                listen 443 ssl;
+                http2 on;
+                server_name $domain;
+                
+                ssl_certificate /etc/ssl/certs/location-tracker.crt;
+                ssl_certificate_key /etc/ssl/private/location-tracker.key;
+                ssl_protocols TLSv1.2 TLSv1.3;
+                ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384;
+                ssl_prefer_server_ciphers off;
+                ssl_session_cache shared:SSL:10m;
+                ssl_session_timeout 10m;
+                
+                add_header X-Frame-Options DENY;
+                add_header X-Content-Type-Options nosniff;
+                add_header X-XSS-Protection "1; mode=block";
+                add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+                add_header Referrer-Policy "strict-origin-when-cross-origin";
+                
+                # Main application (root path)
+                location / {
+                    proxy_pass http://127.0.0.1:8080;
+                    proxy_http_version 1.1;
+                    proxy_set_header Upgrade \$http_upgrade;
+                    proxy_set_header Connection 'upgrade';
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
+                    proxy_cache_bypass \$http_upgrade;
+                }
+                
+                # WebSocket for main app
+                location /ws {
+                    proxy_pass http://127.0.0.1:8080/ws;
+                    proxy_http_version 1.1;
+                    proxy_set_header Upgrade \$http_upgrade;
+                    proxy_set_header Connection "Upgrade";
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
+                }
+                
+                # DEV_LOCATIONS_HTTPS_PLACEHOLDER
+                # FEATURE_LOCATIONS_HTTPS_PLACEHOLDER
+            }
+            EOF
+            fi
+            
+            # Remove any existing dev location blocks for this specific branch
+            echo "Removing existing configuration for dev branch: $nginx_location"
+            sudo sed -i "/# Dev branch.*$(echo "$nginx_location" | sed 's/[[\.*^$(){}?+|/]/\\&/g')/,/# End dev branch.*$(echo "$nginx_location" | sed 's/[[\.*^$(){}?+|/]/\\&/g')/d" /etc/nginx/conf.d/location-tracker-unified.conf
+            sudo sed -i "/# Dev branch HTTPS.*$(echo "$nginx_location" | sed 's/[[\.*^$(){}?+|/]/\\&/g')/,/# End dev branch HTTPS.*$(echo "$nginx_location" | sed 's/[[\.*^$(){}?+|/]/\\&/g')/d" /etc/nginx/conf.d/location-tracker-unified.conf
+            
+            # Create dev location blocks
+            cat > /tmp/dev_locations_http.txt <<EOF
+                # Dev branch $nginx_location
+                location $nginx_location/ {
+                    if (-f /etc/ssl/certs/location-tracker.crt) {
+                        return 301 https://\$server_name\$request_uri;
+                    }
+                    proxy_pass http://127.0.0.1:8081/;
+                    proxy_http_version 1.1;
+                    proxy_set_header Upgrade \$http_upgrade;
+                    proxy_Set_header Connection 'upgrade';
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
+                    proxy_cache_bypass \$http_upgrade;
+                }
+                
+                location $nginx_location/ws {
+                    if (-f /etc/ssl/certs/location-tracker.crt) {
+                        return 301 https://\$server_name\$request_uri;
+                    }
+                    proxy_pass http://127.0.0.1:8081/ws;
+                    proxy_http_version 1.1;
+                    proxy_set_header Upgrade \$http_upgrade;
+                    proxy_set_header Connection "Upgrade";
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_Set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
+                }
+                # End dev branch $nginx_location
+            EOF
+            
+            cat > /tmp/dev_locations_https.txt <<EOF
+                # Dev branch HTTPS $nginx_location
+                location $nginx_location/ {
+                    proxy_pass http://127.0.0.1:8081/;
+                    proxy_http_version 1.1;
+                    proxy_Set_header Upgrade \$http_upgrade;
+                    proxy_set_header Connection 'upgrade';
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_Set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_Set_header X-Forwarded-Proto \$scheme;
+                    proxy_cache_bypass \$http_upgrade;
+                }
+                
+                location $nginx_location/ws {
+                    proxy_pass http://127.0.0.1:8081/ws;
+                    proxy_http_version 1.1;
+                    proxy_Set_header Upgrade \$http_upgrade;
+                    proxy_Set_header Connection "Upgrade";
+                    proxy_Set_header Host \$host;
+                    proxy_Set_header X-Real-IP \$remote_addr;
+                    proxy_Set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_Set_header X-Forwarded-Proto \$scheme;
+                }
+                # End dev branch HTTPS $nginx_location
+            EOF
+            
+            # Replace placeholders with dev locations
+            echo "Updating HTTP server block..."
+            if sudo grep -q "# DEV_LOCATIONS_HTTP_PLACEHOLDER" /etc/nginx/conf.d/location-tracker-unified.conf; then
+                sudo sed -i '/# DEV_LOCATIONS_HTTP_PLACEHOLDER/{
+                    r /tmp/dev_locations_http.txt
+                    d
+                }' /etc/nginx/conf.d/location-tracker-unified.conf
+            else
+                echo "No HTTP dev placeholder found - adding locations before feature placeholder"
+                sudo sed -i '/# FEATURE_LOCATIONS_HTTP_PLACEHOLDER/i\
+            # DEV_LOCATIONS_HTTP_PLACEHOLDER' /etc/nginx/conf.d/location-tracker-unified.conf
+                sudo sed -i '/# DEV_LOCATIONS_HTTP_PLACEHOLDER/{
+                    r /tmp/dev_locations_http.txt
+                    d
+                }' /etc/nginx/conf.d/location-tracker-unified.conf
+            fi
+            
+            echo "Updating HTTPS server block..."
+            if sudo grep -q "# DEV_LOCATIONS_HTTPS_PLACEHOLDER" /etc/nginx/conf.d/location-tracker-unified.conf; then
+                sudo sed -i '/# DEV_LOCATIONS_HTTPS_PLACEHOLDER/{
+                    r /tmp/dev_locations_https.txt
+                    d
+                }' /etc/nginx/conf.d/location-tracker-unified.conf
+            else
+                echo "No HTTPS dev placeholder found - adding locations before feature placeholder"
+                sudo sed -i '/# FEATURE_LOCATIONS_HTTPS_PLACEHOLDER/i\
+            # DEV_LOCATIONS_HTTPS_PLACEHOLDER' /etc/nginx/conf.d/location-tracker-unified.conf
+                sudo sed -i '/# DEV_LOCATIONS_HTTPS_PLACEHOLDER/{
+                    r /tmp/dev_locations_https.txt
+                    d
+                }' /etc/nginx/conf.d/location-tracker-unified.conf
+            fi
+            
+            # Clean up temporary files
+            rm -f /tmp/dev_locations_http.txt /tmp/dev_locations_https.txt
+            
+            echo "Configuration updated successfully"
+            echo "Dev branch locations added to unified configuration"
+            
+            # Test configuration
+            echo "Testing nginx configuration..."
+            if sudo nginx -t; then
+                echo "Nginx configuration test passed"
+                sudo systemctl reload nginx
+                echo "Nginx configuration updated successfully"
+                
+                # Verify the configuration was applied correctly
+                echo "Verifying configuration contains dev branch locations:"
+                if sudo grep -q "location $nginx_location/" /etc/nginx/conf.d/location-tracker-unified.conf; then
+                    echo "✅ Dev branch location blocks found in configuration"
+                else
+                    echo "❌ Dev branch location blocks NOT found in configuration"
+                fi
+            else
+                echo "ERROR: Nginx configuration test failed"
+                echo "Configuration file content:"
+                sudo cat /etc/nginx/conf.d/location-tracker-unified.conf
+                sudo nginx -t
+                
+                # Restore backup
+                if [ -f "/etc/nginx/conf.d/location-tracker-unified.conf.backup" ]; then
+                    echo "Restoring backup configuration..."
+                    sudo cp /etc/nginx/conf.d/location-tracker-unified.conf.backup /etc/nginx/conf.d/location-tracker-unified.conf
+                fi
+                exit 1
+            fi
+
+      - name: Load and start Docker container
+        if: steps.should_deploy.outputs.deploy == 'true'
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
+          username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
+          key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
+          script: |
+            branch="${{ steps.should_deploy.outputs.branch }}"
+            safe_branch="${{ steps.prepare.outputs.safe_branch }}"
+            container_name="location-tracker-${safe_branch}"
+            echo "Loading and starting Docker container: $container_name"
+            
+            if [ -f "/tmp/location-tracker-${safe_branch}.tar" ]; then
+              echo "Loading Docker image from tar file..."
+              docker load < /tmp/location-tracker-${safe_branch}.tar
+            else
+              echo "ERROR: Docker image tar file not found"
+              exit 1
+            fi
+            
+            echo "Starting Docker container..."
+            docker run -d \
+              --name $container_name \
+              --restart unless-stopped \
+              -p 8081:8080 \
+              -p 5052:5052/udp \
+              -e DB_HOST="${{ secrets[format('{0}_DB_HOST', matrix.instance)] }}" \
+              -e DB_NAME="${{ secrets[format('{0}_DB_NAME', matrix.instance)] }}" \
+              -e DB_USER="${{ secrets[format('{0}_DB_USER', matrix.instance)] }}" \
+              -e DB_PASSWORD="${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}" \
+              -e DB_SSLMODE=require \
+              -e PORT=8080 \
+              -e UDP_PORT=5052 \
+              -e DOMAIN="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}" \
+              -e AUTO_TLS=false \
+              -e DISABLE_TLS=true \
+              -e BASE_PATH="/dev/$branch" \
+              location-tracker:${safe_branch}
+            
+            echo "Waiting for container to start..."
+            sleep 30
+            
+            if docker ps --format '{{.Names}}' | grep -q "^${container_name}$"; then
+              echo "Container started successfully: $container_name"
+            else
+              echo "ERROR: Container failed to start"
+              docker logs $container_name
+              exit 1
+            fi
+            
+            rm -f /tmp/location-tracker-${safe_branch}.tar
+
+      - name: Health check and verification
+        if: steps.should_deploy.outputs.deploy == 'true'
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
+          username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
+          key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
+          script: |
+            branch="${{ steps.should_deploy.outputs.branch }}"
+            safe_branch="${{ steps.prepare.outputs.safe_branch }}"
+            container_name="location-tracker-${safe_branch}"
+            instance_name="${{ secrets[format('{0}_INSTANCE_NAME', matrix.instance)] }}"
+            
+            # Default to matrix.instance if secret is not set
+            if [ -z "$instance_name" ]; then
+              instance_name="${{ matrix.instance }}"
+            fi
+            
+            echo "=== Final Health Check ==="
+            echo "Instance: $instance_name"
+            echo "Development branch: $branch"
+            echo "Container: $container_name"
+            
+            max_attempts=5
+            attempt=1
+            while [ $attempt -le $max_attempts ]; do
+              echo "Health check attempt $attempt/$max_attempts..."
+              if curl -f -s http://localhost:8081/api/health; then
+                echo "Health check PASSED"
+                echo "=== Development Branch Deployment Successful ==="
+                echo "Instance: $instance_name"
+                echo "Development branch: $branch"
+                echo "Container: $container_name"
+                if [ -f /etc/ssl/certs/location-tracker.crt ]; then
+                  echo "Public URL: https://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/dev/$branch"
+                else
+                  echo "Public URL: http://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/dev/$branch"
+                fi
+                exit 0
+              else
+                echo "Health check failed (attempt $attempt/$max_attempts)"
+                if [ $attempt -lt $max_attempts ]; then
+                  sleep 10
+                fi
+              fi
+              attempt=$((attempt + 1))
+            done
+            
+            echo "ERROR: All health checks failed"
+            docker logs --tail 50 $container_name
+            exit 1

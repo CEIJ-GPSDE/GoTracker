@@ -218,7 +218,7 @@ jobs:
                     remaining_branch=$(echo "$remaining_safe_branch" | sed 's/-/\//g')
                     
                     # Get container port (assume 8081 for feature branches)
-                    container_port="8081"
+                    container_port="8082"
                     
                     echo "Adding configuration for container: $remaining_container_name, branch: $remaining_branch, port: $container_port"
                     
@@ -323,26 +323,26 @@ jobs:
               echo "WARNING: Unified Nginx configuration file not found"
             fi
             
-            # Check if port 8081 is still in use
-            echo "Checking if port 8081 is still in use..."
-            if sudo lsof -i :8081 2>/dev/null; then
-              echo "WARNING: Port 8081 still in use by:"
-              sudo lsof -i :8081
+            # Check if port 8082 is still in use
+            echo "Checking if port 8082 is still in use..."
+            if sudo lsof -i :8082 2>/dev/null; then
+              echo "WARNING: Port 8082 still in use by:"
+              sudo lsof -i :8082
               echo "Attempting to terminate processes..."
-              sudo lsof -i :8081 | awk 'NR>1 {print $2}' | xargs -r sudo kill -9 || echo "Failed to terminate some processes"
+              sudo lsof -i :8082 | awk 'NR>1 {print $2}' | xargs -r sudo kill -9 || echo "Failed to terminate some processes"
             else
-              echo "✅ Port 8081 is now free"
+              echo "✅ Port 8082 is now free"
             fi
             
-            # Check if port 5052 is still in use
-            echo "Checking if port 5052 is still in use..."
-            if sudo lsof -i :5052 2>/dev/null; then
-              echo "WARNING: Port 5052 still in use by:"
-              sudo lsof -i :5052
+            # Check if port 5053 is still in use
+            echo "Checking if port 5053 is still in use..."
+            if sudo lsof -i :5053 2>/dev/null; then
+              echo "WARNING: Port 5053 still in use by:"
+              sudo lsof -i :5053
               echo "Attempting to terminate processes..."
-              sudo lsof -i :5052 | awk 'NR>1 {print $2}' | xargs -r sudo kill -9 || echo "Failed to terminate some processes"
+              sudo lsof -i :5053 | awk 'NR>1 {print $2}' | xargs -r sudo kill -9 || echo "Failed to terminate some processes"
             else
-              echo "✅ Port 5052 is now free"
+              echo "✅ Port 5053 is now free"
             fi
             
             # Clean up database entries for this instance if possible
@@ -457,10 +457,10 @@ jobs:
               docker rmi location-tracker:${safe_branch} || echo "Failed to remove image"
             fi
             
-            # Check for and free port 8081
-            if sudo lsof -i :8081 2>/dev/null; then
-              echo "Found processes using port 8081, attempting to terminate..."
-              sudo lsof -i :8081 | awk 'NR>1 {print $2}' | xargs -r sudo kill -9 || echo "Failed to terminate some processes"
+            # Check for and free port 8082 (feature port)
+            if sudo lsof -i :8082 2>/dev/null; then
+              echo "Found processes using port 8082, attempting to terminate..."
+              sudo lsof -i :8082 | awk 'NR>1 {print $2}' | xargs -r sudo kill -9 || echo "Failed to terminate some processes"
               sleep 2
             fi
             
@@ -559,7 +559,7 @@ jobs:
                     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
                     proxy_set_header X-Forwarded-Proto \$scheme;
                 }
-            
+                # DEV_LOCATIONS_HTTP_PLACEHOLDER
                 # FEATURE_LOCATIONS_HTTP_PLACEHOLDER
             }
             
@@ -607,7 +607,7 @@ jobs:
                     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
                     proxy_set_header X-Forwarded-Proto \$scheme;
                 }
-                
+                # DEV_LOCATIONS_HTTPS_PLACEHOLDER
                 # FEATURE_LOCATIONS_HTTPS_PLACEHOLDER
             }
             EOF
@@ -625,7 +625,7 @@ jobs:
                     if (-f /etc/ssl/certs/location-tracker.crt) {
                         return 301 https://\$server_name\$request_uri;
                     }
-                    proxy_pass http://127.0.0.1:8081/;
+                    proxy_pass http://127.0.0.1:8082/;
                     proxy_http_version 1.1;
                     proxy_set_header Upgrade \$http_upgrade;
                     proxy_set_header Connection 'upgrade';
@@ -640,7 +640,7 @@ jobs:
                     if (-f /etc/ssl/certs/location-tracker.crt) {
                         return 301 https://\$server_name\$request_uri;
                     }
-                    proxy_pass http://127.0.0.1:8081/ws;
+                    proxy_pass http://127.0.0.1:8082/ws;
                     proxy_http_version 1.1;
                     proxy_set_header Upgrade \$http_upgrade;
                     proxy_set_header Connection "Upgrade";
@@ -655,7 +655,7 @@ jobs:
             cat > /tmp/feature_locations_https.txt <<EOF
                 # Feature branch HTTPS $nginx_location
                 location $nginx_location/ {
-                    proxy_pass http://127.0.0.1:8081/;
+                    proxy_pass http://127.0.0.1:8082/;
                     proxy_http_version 1.1;
                     proxy_set_header Upgrade \$http_upgrade;
                     proxy_set_header Connection 'upgrade';
@@ -667,7 +667,7 @@ jobs:
                 }
                 
                 location $nginx_location/ws {
-                    proxy_pass http://127.0.0.1:8081/ws;
+                    proxy_pass http://127.0.0.1:8082/ws;
                     proxy_http_version 1.1;
                     proxy_set_header Upgrade \$http_upgrade;
                     proxy_set_header Connection "Upgrade";
@@ -766,15 +766,15 @@ jobs:
             docker run -d \
               --name $container_name \
               --restart unless-stopped \
-              -p 8081:8080 \
-              -p 5052:5052/udp \
+              -p 8082:8080 \
+              -p 5053:5053/udp \
               -e DB_HOST="${{ secrets[format('{0}_DB_HOST', matrix.instance)] }}" \
               -e DB_NAME="${{ secrets[format('{0}_DB_NAME', matrix.instance)] }}" \
               -e DB_USER="${{ secrets[format('{0}_DB_USER', matrix.instance)] }}" \
               -e DB_PASSWORD="${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}" \
               -e DB_SSLMODE=require \
               -e PORT=8080 \
-              -e UDP_PORT=5052 \
+              -e UDP_PORT=5053 \
               -e DOMAIN="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}" \
               -e AUTO_TLS=false \
               -e DISABLE_TLS=true \
@@ -821,7 +821,7 @@ jobs:
             attempt=1
             while [ $attempt -le $max_attempts ]; do
               echo "Health check attempt $attempt/$max_attempts..."
-              if curl -f -s http://localhost:8081/api/health; then
+              if curl -f -s http://localhost:8082/api/health; then
                 echo "Health check PASSED"
                 echo "=== Feature Branch Deployment Successful ==="
                 echo "Instance: $instance_name"
