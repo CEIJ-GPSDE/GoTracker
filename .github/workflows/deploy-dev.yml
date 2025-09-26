@@ -36,15 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        include:
-          - instance: EC2_1
-            deploy: ${{ github.event.inputs.deploy_to_EC2_1 }}
-          - instance: EC2_2
-            deploy: ${{ github.event.inputs.deploy_to_EC2_2 }}
-          - instance: EC2_3
-            deploy: ${{ github.event.inputs.deploy_to_EC2_3 }}
-          - instance: EC2_4
-            deploy: ${{ github.event.inputs.deploy_to_EC2_4 }}
+        instance: [EC2_1, EC2_2, EC2_3, EC2_4]
       fail-fast: false
     steps:
       - name: Determine deployment
@@ -99,9 +91,28 @@ jobs:
                 ;;
             esac
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "deploy=${{ matrix.deploy }}" >> $GITHUB_OUTPUT
+            # Handle manual deployment - check each instance individually
+            case "${{ matrix.instance }}" in
+              "EC2_1")
+                deploy_flag="${{ github.event.inputs.deploy_to_EC2_1 }}"
+                ;;
+              "EC2_2")
+                deploy_flag="${{ github.event.inputs.deploy_to_EC2_2 }}"
+                ;;
+              "EC2_3")
+                deploy_flag="${{ github.event.inputs.deploy_to_EC2_3 }}"
+                ;;
+              "EC2_4")
+                deploy_flag="${{ github.event.inputs.deploy_to_EC2_4 }}"
+                ;;
+              *)
+                deploy_flag="false"
+                ;;
+            esac
+            
+            echo "deploy=$deploy_flag" >> $GITHUB_OUTPUT
             echo "branch=${{ github.event.inputs.branch }}" >> $GITHUB_OUTPUT
-            echo "Deploying ${{ matrix.instance }}: ${{ matrix.deploy }} (manual trigger for ${{ github.event.inputs.branch }})"
+            echo "Manual deployment - ${{ matrix.instance }}: $deploy_flag (branch: ${{ github.event.inputs.branch }})"
           else
             echo "deploy=false" >> $GITHUB_OUTPUT
             echo "Unknown event type, skipping deployment"
@@ -122,7 +133,7 @@ jobs:
             branch="${{ steps.should_deploy.outputs.branch }}"
             safe_branch=$(echo "$branch" | tr '/' '-' | tr '[:upper:]' '[:lower:]')
             container_name="location-tracker-${safe_branch}"
-            nginx_location="/dev/$branch"
+            nginx_location="/test"
             
             echo "=== Cleaning up development branch deployment: $branch ==="
             echo "Container name: $container_name"
@@ -152,6 +163,20 @@ jobs:
             # Clean up any leftover tar files
             echo "Cleaning up temporary files..."
             rm -f /tmp/location-tracker-${safe_branch}.tar || echo "No tar file to clean up"
+            
+            # Remove the modular nginx configuration file
+            echo "Removing nginx configuration file..."
+            sudo rm -f /etc/nginx/conf.d/location-tracker/dev-${safe_branch}.conf
+            echo "Development branch nginx configuration removed"
+            
+            # Reload nginx to apply changes
+            if sudo nginx -t; then
+              sudo systemctl reload nginx
+              echo "✅ Nginx configuration reloaded after cleanup"
+            else
+              echo "WARNING: Nginx configuration test failed after cleanup"
+              sudo nginx -t
+            fi
             
             # Check if port 8081 is still in use
             echo "Checking if port 8081 is still in use..."
@@ -221,7 +246,7 @@ jobs:
         run: |
           branch="${{ steps.should_deploy.outputs.branch }}"
           safe_branch="${{ steps.prepare.outputs.safe_branch }}"
-          base_path="/dev/$branch"
+          base_path="/test"
           echo "Building Docker image for dev branch: $branch with BASE_PATH: $base_path"
           docker build \
             --build-arg VERSION=${safe_branch}-$(git rev-parse --short HEAD) \
@@ -306,7 +331,7 @@ jobs:
           script: |
             branch="${{ steps.should_deploy.outputs.branch }}"
             safe_branch="${{ steps.prepare.outputs.safe_branch }}"
-            nginx_location="/test"
+            nginx_location="/dev/$branch"
             
             echo "Creating modular configuration for development branch: $branch"
             echo "Safe branch name: $safe_branch"
@@ -315,7 +340,7 @@ jobs:
             # Ensure the modular configuration directory exists
             sudo mkdir -p /etc/nginx/conf.d/location-tracker
             
-            # Remove ALL existing dev configurations (only one dev branch can run at /test)
+            # Remove ALL existing dev configurations (only one dev branch can run at /dev)
             sudo rm -f /etc/nginx/conf.d/location-tracker/dev-*.conf
             
             # Create development branch configuration file
@@ -368,6 +393,7 @@ jobs:
               sudo nginx -t
               exit 1
             fi
+            
       - name: Load and start Docker container
         if: steps.should_deploy.outputs.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
@@ -405,7 +431,7 @@ jobs:
               -e DOMAIN="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}" \
               -e AUTO_TLS=false \
               -e DISABLE_TLS=true \
-              -e BASE_PATH="/dev/$branch" \
+              -e BASE_PATH="/test" \
               location-tracker:${safe_branch}
             
             echo "Waiting for container to start..."
@@ -455,9 +481,9 @@ jobs:
                 echo "Development branch: $branch"
                 echo "Container: $container_name"
                 if [ -f /etc/ssl/certs/location-tracker.crt ]; then
-                  echo "Public URL: https://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/dev/$branch"
+                  echo "Public URL: https://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test"
                 else
-                  echo "Public URL: http://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/dev/$branch"
+                  echo "Public URL: http://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test"
                 fi
                 exit 0
               else
@@ -472,4 +498,3 @@ jobs:
             echo "ERROR: All health checks failed"
             docker logs --tail 50 $container_name
             exit 1
-            
