@@ -306,7 +306,7 @@ jobs:
             branch="${{ steps.should_deploy.outputs.branch }}"
             safe_branch="${{ steps.prepare.outputs.safe_branch }}"
             domain="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}"
-            nginx_location="/dev/$branch"
+            nginx_location="/test"
             
             echo "Adding development branch to unified Nginx configuration: $branch"
             echo "Safe branch name: $safe_branch"
