@@ -565,6 +565,35 @@
                 max-height: calc(100vh - 10px);
             }
         }
+
+        .pulse-marker {
+            width: 20px;
+            height: 20px;
+            background: #ef4444; /* red */
+            border-radius: 50%;
+            position: relative;
+            z-index: 9999;   /* ✅ always above */
+        }
+
+        .pulse-marker::after {
+            content: "";
+            width: 20px;
+            height: 20px;
+            background: #ef4444;
+            border-radius: 50%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            animation: pulse 2s infinite;
+            opacity: 0.6;
+            z-index: -1;  /* glow behind */
+        }   
+        
+        @keyframes pulse {
+          0%   { transform: scale(1);   opacity: 0.6; }
+          50%  { transform: scale(2);   opacity: 0; }
+          100% { transform: scale(1);   opacity: 0.6; }
+        }
     </style>
 </head>
 <body>
@@ -1175,7 +1204,7 @@ class LocationTracker {
                 this.updateRouteForDevice();
                 
                 if (this.locations.length > 0) {
-                    this.updateMapMarker(this.locations[0]);
+                    this.updateMapMarker(this.locations[0], true);
                     if (this.isTrackingLatest) {
                         this.centerMapOnLatestLocation();
                     }
@@ -1221,13 +1250,13 @@ class LocationTracker {
         }
     }
 
-    updateMapMarker(location) {
+        updateMapMarker(location, isLatest = false) {
         const deviceId = location.device_id;
-        
+
         if (this.markers.has(deviceId)) {
             this.markers.get(deviceId).remove();
         }
-        
+
         const popupContent = `
             <div style="font-family: system-ui; min-width: 200px;">
                 <h4 style="margin: 0 0 10px 0; color: #374151;">${deviceId}</h4>
@@ -1242,12 +1271,22 @@ class LocationTracker {
             </div>
         `;
 
-        const marker = new maplibregl.Marker({
-            color: this.getDeviceColor(deviceId)
-        })
-        .setLngLat([location.longitude, location.latitude])
-        .setPopup(new maplibregl.Popup().setHTML(popupContent))
-        .addTo(this.map);
+        let marker;
+        if (isLatest) {
+            const el = document.createElement('div');
+            el.className = 'pulse-marker';   // ✅ pulsing latest
+            marker = new maplibregl.Marker({ element: el })
+                .setLngLat([location.longitude, location.latitude])
+                .setPopup(new maplibregl.Popup().setHTML(popupContent))
+                .addTo(this.map);
+        } else {
+            marker = new maplibregl.Marker({
+                color: this.getDeviceColor(deviceId)
+            })
+            .setLngLat([location.longitude, location.latitude])
+            .setPopup(new maplibregl.Popup().setHTML(popupContent))
+            .addTo(this.map);
+        }
 
         this.markers.set(deviceId, marker);
     }
