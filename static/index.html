@@ -425,6 +425,31 @@
             border-color: #667eea; 
             box-shadow: 0 0 0 3px rgba(102,126,234,0.1); 
         }
+        .control-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 6px 10px;
+          border-radius: 6px;
+          font-size: 14px;
+          color: #374151; /* gray-700 */
+          background: #f9fafb; /* gray-50 */
+          margin-bottom: 6px;
+          cursor: pointer;
+          transition: background 0.2s, color 0.2s;
+        }
+
+        .control-item:hover {
+          background: #f3f4f6; /* gray-100 */
+        }
+
+        .control-item input[type="checkbox"] {
+          accent-color: #3b82f6; /* blue-500 */
+          width: 16px;
+          height: 16px;
+          cursor: pointer;
+        }
+
 
         .btn { 
             background: linear-gradient(135deg, #667eea, #764ba2); 
@@ -720,12 +745,13 @@
                         </div>
                         <button class="btn" onclick="locationTracker.refreshData()">Refresh Data</button>
                     </div>
-                    <div class="control-group">
-                      <label style="display:flex; align-items:center; gap:6px;">
+                    <div class="control-item">
+                      <label style="display:flex; align-items:center; gap:6px; cursor:pointer; width:100%;">
                         <input type="checkbox" id="toggle-trace-dots">
-                        Show trace dots
+                        <span>Show trace dots</span>
                       </label>
                     </div>
+
 
                 </div>
             </div>
@@ -778,7 +804,7 @@ class LocationTracker {
         this.timeFilter = null;
         this.suppressUserInteraction = false;
         this.traceMarkers = [];
-
+        this.showTraceDots = false;
 
         this.config = {
             basePath: '${BASE_PATH}' || '',
@@ -1059,16 +1085,10 @@ class LocationTracker {
         });
 
         document.getElementById('toggle-trace-dots').addEventListener('change', (e) => {
-            const show = e.target.checked;
-            this.traceMarkers.forEach(marker => {
-                const el = marker.getElement();
-                if (show) {
-                    el.classList.add('always-visible');
-                } else {
-                    el.classList.remove('always-visible');
-                }
-            });
+            this.showTraceDots = e.target.checked;  // ✅ save state
+            this.applyTraceDotsVisibility();
         });
+
 
 
         // Quick range buttons
@@ -1112,6 +1132,21 @@ class LocationTracker {
             }
         });
     }
+
+    applyTraceDotsVisibility() {
+        this.traceMarkers.forEach(marker => {
+            const el = marker.getElement();
+            if (this.showTraceDots) {
+                el.classList.add('always-visible');
+            } else {
+                el.classList.remove('always-visible');
+            }
+        });
+
+        // sync UI if needed
+        document.getElementById('toggle-trace-dots').checked = this.showTraceDots;
+    }
+
 
     setQuickTimeRange(hours) {
         const now = new Date();
@@ -1194,6 +1229,7 @@ class LocationTracker {
             ? this.locations.filter(loc => loc.device_id === this.selectedDevice)
             : this.locations;
         locs.forEach(loc => this.createTraceMarker(loc));
+        this.applyTraceDotsVisibility();
     }
 
     updateRouteForFiltered() {
@@ -1203,6 +1239,7 @@ class LocationTracker {
         // ✅ add per-point markers
         this.clearTraceMarkers();
         this.filteredLocations.forEach(loc => this.createTraceMarker(loc));
+        this.applyTraceDotsVisibility();
     }
 
 
