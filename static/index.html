@@ -749,6 +749,8 @@ class LocationTracker {
         this.isHistoryMode = false;
         this.timeFilter = null;
         this.suppressUserInteraction = false;
+        this.traceMarkers = [];
+
 
         this.config = {
             basePath: '${BASE_PATH}' || '',
@@ -921,6 +923,45 @@ class LocationTracker {
             }
         });
     }
+
+    createTraceMarker(location) {
+        const popupContent = `
+            <div style="font-family: system-ui; min-width: 200px;">
+                <h4 style="margin: 0 0 10px 0; color: #374151;">${location.device_id}</h4>
+                <div style="font-size: 12px; color: #6b7280; margin-bottom: 5px;">
+                    <strong>Coordinates:</strong><br>
+                    ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}
+                </div>
+                <div style="font-size: 12px; color: #6b7280;">
+                    <strong>Time:</strong><br>
+                    ${new Date(location.timestamp).toLocaleString()}
+                </div>
+            </div>
+        `;
+
+        const el = document.createElement('div');
+        el.style.width = "10px";
+        el.style.height = "10px";
+        el.style.borderRadius = "50%";
+        el.style.background = "#3b82f6"; // blue dots for trace
+        el.style.border = "2px solid white";
+        el.style.boxShadow = "0 0 4px rgba(0,0,0,0.3)";
+        el.style.cursor = "pointer";
+
+        const marker = new maplibregl.Marker({ element: el })
+            .setLngLat([location.longitude, location.latitude])
+            .setPopup(new maplibregl.Popup().setHTML(popupContent))
+            .addTo(this.map);
+
+        this.traceMarkers.push(marker);
+    }
+
+    clearTraceMarkers() {
+        this.traceMarkers.forEach(m => m.remove());
+        this.traceMarkers = [];
+    }
+
+
 
     initializeTimePickers() {
         const now = new Date();
@@ -1112,18 +1153,24 @@ class LocationTracker {
             this.routeCoords = this.locations.map(loc => [loc.longitude, loc.latitude]);
         }
         this.updateRouteLine();
+    
+        // ✅ add per-point markers
+        this.clearTraceMarkers();
+        const locs = this.selectedDevice
+            ? this.locations.filter(loc => loc.device_id === this.selectedDevice)
+            : this.locations;
+        locs.forEach(loc => this.createTraceMarker(loc));
     }
-
+    
     updateRouteForFiltered() {
         this.routeCoords = this.filteredLocations.map(loc => [loc.longitude, loc.latitude]);
         this.updateRouteLine();
-        
-        // Clear existing markers and add markers for filtered locations
-        this.clearAllMarkers();
-        this.filteredLocations.forEach(location => {
-            this.updateMapMarker(location);
-        });
+    
+        // ✅ add per-point markers
+        this.clearTraceMarkers();
+        this.filteredLocations.forEach(loc => this.createTraceMarker(loc));
     }
+
 
     fitMapToLocations(locations) {
         if (locations.length === 0) return;
