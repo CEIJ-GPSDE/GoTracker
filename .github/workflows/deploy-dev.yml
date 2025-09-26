@@ -331,7 +331,7 @@ jobs:
           script: |
             branch="${{ steps.should_deploy.outputs.branch }}"
             safe_branch="${{ steps.prepare.outputs.safe_branch }}"
-            nginx_location="/dev/$branch"
+            nginx_location="/test"
             
             echo "Creating modular configuration for development branch: $branch"
             echo "Safe branch name: $safe_branch"
