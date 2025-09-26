@@ -472,3 +472,4 @@ jobs:
             echo "ERROR: All health checks failed"
             docker logs --tail 50 $container_name
             exit 1
+            
