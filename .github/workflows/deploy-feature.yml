@@ -100,7 +100,7 @@ jobs:
               sudo nginx -t
             fi
             
-            # Check if ports are still in use and clean up...
+            # Check if port 8082 is still in use
             echo "Checking if port 8082 is still in use..."
             if sudo lsof -i :8082 2>/dev/null; then
               echo "WARNING: Port 8082 still in use by:"
@@ -111,7 +111,37 @@ jobs:
               echo "✅ Port 8082 is now free"
             fi
             
-            echo "=== Feature branch cleanup completed ==="
+            # Check if port 5053 is still in use
+            echo "Checking if port 5053 is still in use..."
+            if sudo lsof -i :5053 2>/dev/null; then
+              echo "WARNING: Port 5053 still in use by:"
+              sudo lsof -i :5053
+              echo "Attempting to terminate processes..."
+              sudo lsof -i :5053 | awk 'NR>1 {print $2}' | xargs -r sudo kill -9 || echo "Failed to terminate some processes"
+            else
+              echo "✅ Port 5053 is now free"
+            fi
+            
+            # Clean up database entries for this instance if possible
+            echo "Checking for database cleanup opportunities..."
+            if docker ps --format '{{.Names}}' | grep -q "^location-tracker-main$"; then
+              echo "Main container is running, attempting to clean leader election entries..."
+              # Try to remove any stale leader election entries for this instance
+              main_container_id=$(docker ps --format '{{.ID}}' --filter "name=location-tracker-main")
+              if [ ! -z "$main_container_id" ]; then
+                docker exec $main_container_id sh -c '
+                  if command -v psql >/dev/null; then
+                    echo "Cleaning up potential stale leader election entries..."
+                    # Remove any entries older than 1 minute (they should be refreshed every 5 seconds)
+                    PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c "DELETE FROM leader_election WHERE last_heartbeat < NOW() - INTERVAL '\''1 minute'\'';" || echo "Could not clean leader election table"
+                  fi
+                ' || echo "Could not access database for cleanup"
+              fi
+            else
+              echo "Main container not running, skipping database cleanup"
+            fi
+            
+            echo "=== Cleanup Summary ==="
             echo "✅ Docker container stopped and removed"
             echo "✅ Docker image removed"
             echo "✅ Nginx configuration file removed"
@@ -119,6 +149,11 @@ jobs:
             echo "✅ Temporary files cleaned"
             echo ""
             echo "Feature branch '$branch' has been completely cleaned up from ${{ matrix.instance }}"
+            echo "Configuration is ready for future deploy-feature runs"
+            
+            # Show current running containers
+            echo "=== Current Running Location Tracker Containers ==="
+            docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep location-tracker || echo "No location tracker containers running"
 
       - uses: actions/checkout@v4
         if: matrix.deploy == 'true'
