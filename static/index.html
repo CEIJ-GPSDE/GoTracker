@@ -1054,17 +1054,24 @@ class LocationTracker {
         this.isHistoryMode = !this.isHistoryMode;
         const btn = document.getElementById('history-mode-btn');
         const controls = document.getElementById('historical-controls');
-        
+        const trackBtn = document.getElementById('track-latest-btn');
+
         if (this.isHistoryMode) {
             btn.style.background = 'linear-gradient(135deg, #dc2626, #b91c1c)';
             btn.querySelector('span:last-child').textContent = 'Live Mode';
             controls.classList.add('active');
-            this.toggleTracking(false); // Disable tracking in history mode
+            trackBtn.style.display = 'none';
+            this.toggleTracking(false);
+            // do not clear live data, just stop updating
+            // history rendering uses filteredLocations
+            this.updateRouteForFiltered();
         } else {
             btn.style.background = 'linear-gradient(135deg, #3b82f6, #1d4ed8)';
             btn.querySelector('span:last-child').textContent = 'History Mode';
             controls.classList.remove('active');
-            this.clearTimeFilter();
+            trackBtn.style.display = 'flex';
+            // resume live updates
+            this.updateRouteForDevice();
         }
     }
 
@@ -1352,6 +1359,9 @@ class LocationTracker {
         console.log('Received location update:', location);
         
         // Only process new locations if not in history mode
+        if (this.isHistoryMode) {
+            return;
+        }
         if (!this.isHistoryMode) {
             this.locations.unshift(location);
             
@@ -1366,18 +1376,16 @@ class LocationTracker {
             this.updateStatistics();
             
             if (this.selectedDevice === '' || this.selectedDevice === location.device_id) {
-                this.routeCoords.unshift([location.longitude, location.latitude]);
-                if (this.routeCoords.length > this.historyLimit) {
-                    this.routeCoords = this.routeCoords.slice(0, this.historyLimit);
-                }
-                this.updateRouteLine();
-                
+                 this.locations.unshift(location);
+                this.updateMapMarker(location, true);
+                this.updateRouteForDevice();        
                 if (this.isTrackingLatest && !this.userInteracted) {
                     this.centerMapOnLocation(location);
                 }
 
             }
         }
+
     }
 
         updateMapMarker(location, isLatest = false) {
