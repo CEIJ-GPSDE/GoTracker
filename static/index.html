@@ -476,7 +476,6 @@
             box-shadow: 0 5px 15px rgba(107, 114, 128, 0.4);
         }
 
-        .stats { }
         .stat-item { 
             display: flex; 
             justify-content: space-between; 
@@ -1057,7 +1056,7 @@ class LocationTracker {
         const controls = document.getElementById('historical-controls');
         const trackBtn = document.getElementById('track-latest-btn');
 
-        if (this.isHistoryMode) {
+        if (this.isHistoryMode) {        
             btn.style.background = 'linear-gradient(135deg, #dc2626, #b91c1c)';
             btn.querySelector('span:last-child').textContent = 'Live Mode';
             controls.classList.add('active');
@@ -1077,12 +1076,26 @@ class LocationTracker {
             btn.querySelector('span:last-child').textContent = 'History Mode';
             controls.classList.remove('active');
             trackBtn.style.display = 'flex';
-            // resume live updates
-            while (this.liveUpdateQueue.length > 0) {
-                const loc = this.liveUpdateQueue.shift();
-                this.applyLocationUpdate(loc);
+
+            // ✅ resume live updates
+            this.updateRouteForDevice();
+
+            // ✅ reapply pulse immediately
+            if (this.locations.length > 0) {
+                const latest = this.locations[0];
+                this.updateMapMarker(latest, true);
+                this.applyPulseVisibility();
             }
+        
+            // ✅ redraw trace markers immediately
+            this.clearTraceMarkers();
+            const locs = this.selectedDevice
+                ? this.locations.filter(loc => loc.device_id === this.selectedDevice)
+                : this.locations;
+            locs.forEach(loc => this.createTraceMarker(loc));
+            this.applyTraceDotsVisibility();
         }
+
     }
 
     setupEventListeners() {
