@@ -1,6 +1,9 @@
 name: Deploy Development Branch
 
 on:
+  push:
+    branches:
+      - 'dev/**'
   workflow_dispatch:
     inputs:
       branch:
@@ -23,12 +26,7 @@ on:
         description: "Deploy to EC2_4"
         type: boolean
         default: false
-  push:
-    branches:
-      - 'dev/cesar'
-      - 'dev/Barrios'
-      - 'dev/uribe'
-      - 'dev/carmona'
+
 
 jobs:
   deploy-development:
