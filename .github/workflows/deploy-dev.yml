@@ -30,7 +30,6 @@ on:
       - 'dev/uribe'
       - 'dev/carmona'
 
-
 jobs:
   deploy-development:
     runs-on: ubuntu-latest
@@ -47,11 +46,30 @@ jobs:
             deploy: ${{ github.event.inputs.deploy_to_EC2_4 }}
       fail-fast: false
     steps:
+      - name: Validate inputs for workflow_dispatch
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [ -z "${{ github.event.inputs.branch }}" ]; then
+            echo "ERROR: Branch input is required for manual deployment"
+            exit 1
+          fi
+          # Check if at least one EC2 instance is selected
+          if [ "${{ github.event.inputs.deploy_to_EC2_1 }}" != "true" ] && \
+             [ "${{ github.event.inputs.deploy_to_EC2_2 }}" != "true" ] && \
+             [ "${{ github.event.inputs.deploy_to_EC2_3 }}" != "true" ] && \
+             [ "${{ github.event.inputs.deploy_to_EC2_4 }}" != "true" ]; then
+            echo "ERROR: At least one EC2 instance must be selected for deployment"
+            exit 1
+          fi
+          echo "Input validation passed: branch=${{ github.event.inputs.branch }}"
+
       - name: Determine deployment
         id: should_deploy
         run: |
+          echo "Event: ${{ github.event_name }}"
+          echo "Matrix instance: ${{ matrix.instance }}"
+          echo "Matrix deploy: ${{ matrix.deploy }}"
           if [ "${{ github.event_name }}" = "push" ]; then
-            # Auto-deploy specific dev branches to their assigned instances
             case "${{ github.ref_name }}" in
               "dev/cesar")
                 if [ "${{ matrix.instance }}" = "EC2_1" ]; then
@@ -101,15 +119,17 @@ jobs:
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "deploy=${{ matrix.deploy }}" >> $GITHUB_OUTPUT
             echo "branch=${{ github.event.inputs.branch }}" >> $GITHUB_OUTPUT
-            echo "Deploying ${{ matrix.instance }}: ${{ matrix.deploy }} (manual trigger for ${{ github.event.inputs.branch }})"
+            echo "Manual deployment for branch: ${{ github.event.inputs.branch }} to ${{ matrix.instance }} (deploy: ${{ matrix.deploy }})"
           else
             echo "deploy=false" >> $GITHUB_OUTPUT
             echo "Unknown event type, skipping deployment"
           fi
+          echo "Final deploy decision: ${{ steps.should_deploy.outputs.deploy }}"
+          echo "Selected branch: ${{ steps.should_deploy.outputs.branch }}"
 
       - name: Skip unchecked instances
         if: steps.should_deploy.outputs.deploy != 'true'
-        run: echo "Skipping ${{ matrix.instance }} - not selected for deployment"
+        run: echo "Skipping ${{ matrix.instance }} - not selected for deployment (deploy: ${{ steps.should_deploy.outputs.deploy }})"
 
       - name: Cleanup development branch deployment
         if: steps.should_deploy.outputs.deploy == 'true'
