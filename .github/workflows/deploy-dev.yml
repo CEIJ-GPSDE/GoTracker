@@ -1,12 +1,6 @@
 name: Deploy Development Branch
 
 on:
-  push:
-    branches:
-      - 'dev/cesar'
-      - 'dev/Barrios'
-      - 'dev/uribe'
-      - 'dev/carmona'
   workflow_dispatch:
     inputs:
       branch:
@@ -29,6 +23,13 @@ on:
         description: "Deploy to EC2_4"
         type: boolean
         default: false
+  push:
+    branches:
+      - 'dev/cesar'
+      - 'dev/Barrios'
+      - 'dev/uribe'
+      - 'dev/carmona'
+
 
 jobs:
   deploy-development:
@@ -152,21 +153,7 @@ jobs:
             echo "Cleaning up temporary files..."
             rm -f /tmp/location-tracker-${safe_branch}.tar || echo "No tar file to clean up"
             
-            # Remove the modular nginx configuration file
-            echo "Removing nginx configuration file..."
-            sudo rm -f /etc/nginx/conf.d/location-tracker/dev-${safe_branch}.conf
-            echo "Development branch nginx configuration removed"
-            
-            # Reload nginx to apply changes
-            if sudo nginx -t; then
-              sudo systemctl reload nginx
-              echo "✅ Nginx configuration reloaded after cleanup"
-            else
-              echo "WARNING: Nginx configuration test failed after cleanup"
-              sudo nginx -t
-            fi
-            
-            # Check if ports are still in use and clean up...
+            # Check if port 8081 is still in use
             echo "Checking if port 8081 is still in use..."
             if sudo lsof -i :8081 2>/dev/null; then
               echo "WARNING: Port 8081 still in use by:"
@@ -175,6 +162,17 @@ jobs:
               sudo lsof -i :8081 | awk 'NR>1 {print $2}' | xargs -r sudo kill -9 || echo "Failed to terminate some processes"
             else
               echo "✅ Port 8081 is now free"
+            fi
+            
+            # Check if port 5052 is still in use  
+            echo "Checking if port 5052 is still in use..."
+            if sudo lsof -i :5052 2>/dev/null; then
+              echo "WARNING: Port 5052 still in use by:"
+              sudo lsof -i :5052
+              echo "Attempting to terminate processes..."
+              sudo lsof -i :5052 | awk 'NR>1 {print $2}' | xargs -r sudo kill -9 || echo "Failed to terminate some processes"
+            else
+              echo "✅ Port 5052 is now free"
             fi
             
             echo "Development cleanup completed"
@@ -370,7 +368,6 @@ jobs:
               sudo nginx -t
               exit 1
             fi
-
       - name: Load and start Docker container
         if: steps.should_deploy.outputs.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
