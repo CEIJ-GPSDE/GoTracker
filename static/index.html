@@ -748,6 +748,7 @@ class LocationTracker {
         this.routeCoords = [];
         this.isHistoryMode = false;
         this.timeFilter = null;
+        this.suppressUserInteraction = false;
 
         this.config = {
             basePath: '${BASE_PATH}' || '',
@@ -789,12 +790,18 @@ class LocationTracker {
         this.map.addControl(new maplibregl.FullscreenControl(), 'bottom-left');
 
         this.map.on('dragstart', () => {
-            this.handleUserInteraction();
+            if (!this.suppressUserInteraction) this.handleUserInteraction();
         });
 
         this.map.on('zoomstart', () => {
-            this.handleUserInteraction();
+            if (!this.suppressUserInteraction) this.handleUserInteraction();
         });
+
+        // also guard movestart (covers programmatic zoom/move cases from some browsers)
+        this.map.on('movestart', () => {
+            if (!this.suppressUserInteraction) this.handleUserInteraction();
+        });
+
 
         this.map.on('load', () => {
             this.initializeRouteLine();
@@ -862,6 +869,9 @@ class LocationTracker {
     }
 
     handleUserInteraction() {
+        // ignore programmatic moves
+        if (this.suppressUserInteraction) return;
+
         if (!this.userInteracted) {
             this.userInteracted = true;
             if (this.isTrackingLatest) {
@@ -973,11 +983,13 @@ class LocationTracker {
     setupEventListeners() {
         // Track Latest button
         document.getElementById('track-latest-btn').addEventListener('click', () => {
-            this.userInteracted = false;
+            this.userInteracted = false;          // reset manual override
+            this.suppressUserInteraction = false; // ensure programmatic moves are allowed
             this.selectedLocationIndex = -1;
-            this.toggleTracking(true);
+            this.toggleTracking(true);            // force tracking ON
             this.updateLocationSelection();
         });
+
 
         // History Mode button
         document.getElementById('history-mode-btn').addEventListener('click', () => {
@@ -1307,13 +1319,25 @@ class LocationTracker {
     }
 
     centerMapOnLocation(location) {
+        // still mark that the user has not manually interacted
         this.userInteracted = false;
+
+        // indicate the upcoming move is programmatic so event handlers ignore it
+        this.suppressUserInteraction = true;
+
         this.map.flyTo({
             center: [location.longitude, location.latitude],
             zoom: Math.max(this.map.getZoom(), 12),
-            duration: 1000
+            duration: 800
+        });
+
+        // clear suppression when the programmatic move finishes
+        this.map.once('moveend', () => {
+            // tiny delay to let chained events settle
+            setTimeout(() => { this.suppressUserInteraction = false; }, 50);
         });
     }
+
 
     selectLocation(locationIndex) {
         this.selectedLocationIndex = locationIndex;
