@@ -129,7 +129,8 @@ jobs:
 
       - name: Skip unchecked instances
         if: steps.should_deploy.outputs.deploy != 'true'
-        run: echo "Skipping ${{ matrix.instance }} - not selected for deployment (deploy: ${{ steps.should_deploy.outputs.deploy }})"
+        run: |
+          echo "Skipping ${{ matrix.instance }} - not selected for deployment (deploy: ${{ steps.should_deploy.outputs.deploy }})"
 
       - name: Cleanup development branch deployment
         if: steps.should_deploy.outputs.deploy == 'true'
