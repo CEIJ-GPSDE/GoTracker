@@ -1072,39 +1072,36 @@ class LocationTracker {
                 }
             });
         } else {
-                btn.style.background = 'linear-gradient(135deg, #3b82f6, #1d4ed8)';
-                btn.querySelector('span:last-child').textContent = 'History Mode';
-                controls.classList.remove('active');
-                trackBtn.style.display = 'flex';
-
-                // resume live updates
-                this.updateRouteForDevice();
-
-                if (this.locations.length > 0) {
-                    const latest = this.locations[0];
-                
-                    // Force reapply pulse
-                    this.updateMapMarker(latest, true);
-                    this.applyPulseVisibility();
-                
-                    // make sure the element is visible again
-                    const marker = this.markers.get(latest.device_id);
-                    if (marker) {
-                        const el = marker.getElement();
-                        if (el && el.classList.contains('pulse-marker')) {
-                            el.style.display = 'block';
-                        }
-                    }
-                }
+            btn.style.background = 'linear-gradient(135deg, #3b82f6, #1d4ed8)';
+            btn.querySelector('span:last-child').textContent = 'History Mode';
+            controls.classList.remove('active');
+            trackBtn.style.display = 'flex';
+        
+            // resume live updates
+            this.updateRouteForDevice();
+        
+            if (this.locations.length > 0) {
+                const latest = this.locations[0];
             
-                // redraw trace markers immediately
-                this.clearTraceMarkers();
-                const locs = this.selectedDevice
-                    ? this.locations.filter(loc => loc.device_id === this.selectedDevice)
-                    : this.locations;
-                locs.forEach(loc => this.createTraceMarker(loc));
-                this.applyTraceDotsVisibility();
+                // Clear existing marker and recreate with pulse
+                const existingMarker = this.markers.get(latest.device_id);
+                if (existingMarker) {
+                    existingMarker.remove();
+                    this.markers.delete(latest.device_id);
+                }
+                
+                // Create new pulsing marker
+                this.updateMapMarker(latest, true);
             }
+        
+            // redraw trace markers immediately
+            this.clearTraceMarkers();
+            const locs = this.selectedDevice
+                ? this.locations.filter(loc => loc.device_id === this.selectedDevice)
+                : this.locations;
+            locs.forEach(loc => this.createTraceMarker(loc));
+            this.applyTraceDotsVisibility();
+        }
 
     }
 
