@@ -637,6 +637,26 @@
         .trace-marker.always-visible {
           opacity: 1 !important;    /* forced visible */
         }
+
+        .trace-marker.start-point {
+          background: #10b981; /* green for start */
+          width: 14px;
+          height: 14px;
+          border: 3px solid white;
+          box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+          opacity: 1 !important;
+          z-index: 1001;
+        }
+
+        .trace-marker.end-point {
+          background: #ef4444; /* red for end */
+          width: 14px;
+          height: 14px;
+          border: 3px solid white;
+          box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+          opacity: 1 !important;
+          z-index: 1001;
+        }
     </style>
 </head>
 <body>
@@ -1011,10 +1031,14 @@ class LocationTracker {
         });
     }
 
-    createTraceMarker(location) {
+    createTraceMarker(location, isStart = false, isEnd = false) {
         const popupContent = `
             <div style="font-family: system-ui; min-width: 200px;">
-                <h4 style="margin: 0 0 10px 0; color: #374151;">${location.device_id}</h4>
+                <h4 style="margin: 0 0 10px 0; color: #374151;">
+                    ${location.device_id}
+                    ${isStart ? ' <span style="color: #10b981; font-size: 12px;">(START)</span>' : ''}
+                    ${isEnd ? ' <span style="color: #ef4444; font-size: 12px;">(END)</span>' : ''}
+                </h4>
                 <div style="font-size: 12px; color: #6b7280; margin-bottom: 5px;">
                     <strong>Coordinates:</strong><br>
                     ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}
@@ -1028,6 +1052,12 @@ class LocationTracker {
 
         const el = document.createElement('div');
         el.className = 'trace-marker';
+        
+        if (isStart) {
+            el.classList.add('start-point');
+        } else if (isEnd) {
+            el.classList.add('end-point');
+        }
 
         const marker = new maplibregl.Marker({ element: el })
             .setLngLat([location.longitude, location.latitude])
@@ -1226,15 +1256,44 @@ class LocationTracker {
     openHistoryConfigPopup() {
         const historyConfigPopup = document.getElementById('history-config-popup');
         
-        // Sync the popup inputs with current values or defaults
-        const startTime = document.getElementById('start-time-popup');
-        const endTime = document.getElementById('end-time-popup');
-        
-        if (!startTime.value || !endTime.value) {
-            this.initializeTimePickersPopup();
+        // Ensure popup exists
+        if (!historyConfigPopup) {
+            console.error('History config popup not found');
+            return;
         }
         
-        historyConfigPopup.classList.add('active');
+        // Initialize time pickers if not set
+        this.initializeTimePickersPopup();
+        
+        // Force a small delay to ensure DOM is ready
+        setTimeout(() => {
+            historyConfigPopup.classList.add('active');
+            
+            // Verify content is loaded
+            const controlsContainer = document.getElementById('historical-controls-popup');
+            if (!controlsContainer) {
+                console.error('Historical controls container not found');
+                return;
+            }
+            
+            // Ensure all buttons are properly attached
+            const quickRangeBtns = controlsContainer.querySelectorAll('.quick-range-btn');
+            quickRangeBtns.forEach(btn => {
+                // Re-attach event listeners if needed
+                if (!btn.hasEventListener) {
+                    btn.addEventListener('click', (e) => {
+                        const hours = parseInt(e.target.dataset.hours);
+                        this.setQuickTimeRange(hours);
+                        
+                        // Update active state
+                        quickRangeBtns.forEach(b => b.classList.remove('active'));
+                        e.target.classList.add('active');
+                    });
+                    btn.hasEventListener = true;
+                }
+            });
+            
+        }, 50);
     }
 
     initializeTimePickersPopup() {
@@ -1331,7 +1390,13 @@ class LocationTracker {
         const locs = this.selectedDevice
             ? this.locations.filter(loc => loc.device_id === this.selectedDevice)
             : this.locations;
-        locs.forEach(loc => this.createTraceMarker(loc));
+        
+        locs.forEach((loc, index) => {
+            const isStart = index === locs.length - 1; // oldest (last in array)
+            const isEnd = index === 0; // newest (first in array)
+            this.createTraceMarker(loc, isStart, isEnd);
+        });
+        
         this.applyTraceDotsVisibility();
     }
 
@@ -1340,9 +1405,11 @@ class LocationTracker {
         this.updateRouteLine();
     
         this.clearTraceMarkers();
-        this.filteredLocations.forEach(loc => {
-            this.updateMapMarker(loc, false); 
-            this.createTraceMarker(loc);
+        this.filteredLocations.forEach((loc, index) => {
+            this.updateMapMarker(loc, false);
+            const isStart = index === this.filteredLocations.length - 1; // oldest
+            const isEnd = index === 0; // newest
+            this.createTraceMarker(loc, isStart, isEnd);
         });
     
         this.applyTraceDotsVisibility();
