@@ -667,6 +667,10 @@
                     <span>⚙️</span>
                     <span>Configure</span>
                 </button>
+                <button id="live-mode-btn" class="history-btn" style="display: none; background: linear-gradient(135deg, #dc2626, #b91c1c);">
+                    <span>📍</span>
+                    <span>Live Mode</span>
+                </button>
                 <button id="menu-toggle-btn" class="menu-toggle-btn">
                     <span>⚙️</span>
                     <span>Menu</span>
@@ -1082,13 +1086,16 @@ class LocationTracker {
         this.isHistoryMode = !this.isHistoryMode;
         const historyBtn = document.getElementById('history-mode-btn');
         const historyConfigBtn = document.getElementById('history-config-btn');
+        const liveModeBtn = document.getElementById('live-mode-btn');
         const trackBtn = document.getElementById('track-latest-btn');
 
         if (this.isHistoryMode) {        
+            // Hide history mode button, show config and live mode buttons
             historyBtn.style.display = 'none';
             historyConfigBtn.style.display = 'flex';
-            historyConfigBtn.querySelector('span:last-child').textContent = 'Configure';
+            liveModeBtn.style.display = 'flex';
             trackBtn.style.display = 'none';
+            
             this.toggleTracking(false);
             this.updateRouteForFiltered();
             this.markers.forEach(marker => {
@@ -1098,8 +1105,10 @@ class LocationTracker {
                 }
             });
         } else {
+            // Show history mode button, hide config and live mode buttons
             historyBtn.style.display = 'flex';
             historyConfigBtn.style.display = 'none';
+            liveModeBtn.style.display = 'none';
             trackBtn.style.display = 'flex';
 
             // resume live updates
@@ -1141,6 +1150,11 @@ class LocationTracker {
 
         // History Mode button
         document.getElementById('history-mode-btn').addEventListener('click', () => {
+            this.toggleHistoryMode();
+        });
+
+        // Live Mode button (appears in history mode)
+        document.getElementById('live-mode-btn').addEventListener('click', () => {
             this.toggleHistoryMode();
         });
 
