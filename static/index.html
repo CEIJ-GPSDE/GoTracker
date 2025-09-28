@@ -1374,18 +1374,36 @@ class LocationTracker {
         }, 50);
     }
     setupConfigPopupEvents(popup) {
+        // Remove any existing event listeners to avoid duplicates
+        const existingApplyBtn = popup.querySelector('#apply-time-filter-popup');
+        if (existingApplyBtn) {
+            existingApplyBtn.replaceWith(existingApplyBtn.cloneNode(true));
+        }
+
+        const existingClearBtn = popup.querySelector('#clear-time-filter-popup');
+        if (existingClearBtn) {
+            existingClearBtn.replaceWith(existingClearBtn.cloneNode(true));
+        }
+
         const controlsContainer = popup.querySelector('#historical-controls-popup');
         if (!controlsContainer) return;
 
-        // Add validation on time input changes
+        // Get fresh references after potential cloning
         const startInput = popup.querySelector('#start-time-popup');
         const endInput = popup.querySelector('#end-time-popup');
+        const applyBtn = popup.querySelector('#apply-time-filter-popup');
+        const clearBtn = popup.querySelector('#clear-time-filter-popup');
 
         if (startInput && endInput) {
-            startInput.addEventListener('change', () => this.validateTimeFilter());
-            endInput.addEventListener('change', () => this.validateTimeFilter());
-            startInput.addEventListener('input', () => this.validateTimeFilter());
-            endInput.addEventListener('input', () => this.validateTimeFilter());
+            const validateAndUpdate = () => {
+                console.log('Validating time filter...');
+                this.validateTimeFilter();
+            };
+
+            startInput.addEventListener('change', validateAndUpdate);
+            endInput.addEventListener('change', validateAndUpdate);
+            startInput.addEventListener('input', validateAndUpdate);
+            endInput.addEventListener('input', validateAndUpdate);
         }
 
         // Quick range buttons
@@ -1401,9 +1419,9 @@ class LocationTracker {
         });
 
         // Apply button
-        const applyBtn = popup.querySelector('#apply-time-filter-popup');
         if (applyBtn) {
             applyBtn.addEventListener('click', () => {
+                console.log('Apply button clicked');
                 if (this.validateTimeFilter()) {
                     this.applyTimeFilterFromPopup();
                 }
@@ -1411,7 +1429,6 @@ class LocationTracker {
         }
 
         // Clear button
-        const clearBtn = popup.querySelector('#clear-time-filter-popup');
         if (clearBtn) {
             clearBtn.addEventListener('click', () => this.clearTimeFilter());
         }
@@ -1494,7 +1511,7 @@ class LocationTracker {
     updateTimeFilterIndicator() {
         const indicator = document.getElementById('time-filter-indicator');
         const textElement = document.getElementById('time-filter-text');
-        
+
         if (this.isHistoryMode) {
             if (this.timeFilter) {
                 const startStr = this.timeFilter.start.toLocaleDateString() + ' ' + 
@@ -1535,7 +1552,7 @@ class LocationTracker {
     ensureConfigPopupIntegrity() {
         const historyConfigPopup = document.getElementById('history-config-popup');
         if (!historyConfigPopup) return;
-        
+
         // Check if the popup body has been corrupted
         const popupBody = historyConfigPopup.querySelector('.popup-body');
         if (!popupBody || popupBody.offsetHeight === 0) {
@@ -1563,6 +1580,7 @@ class LocationTracker {
                                             <input type="datetime-local" id="end-time-popup">
                                         </div>
                                     </div>
+                                    <div class="validation-error" id="validation-error"></div>
                                     <button class="btn" id="apply-time-filter-popup">Apply Time Filter</button>
                                     <button class="btn secondary" id="clear-time-filter-popup">Clear Filter</button>
                                 </div>
@@ -1603,17 +1621,24 @@ class LocationTracker {
     }
 
     applyTimeFilterFromPopup() {
+        console.log('applyTimeFilterFromPopup called');
+
         if (!this.validateTimeFilter()) {
+            console.log('Validation failed, not applying filter');
             return;
         }
-        
+
         const startTime = new Date(document.getElementById('start-time-popup').value);
         const endTime = new Date(document.getElementById('end-time-popup').value);
-        
+
+        console.log('Applying time filter:', { start: startTime, end: endTime });
+
         this.timeFilter = { start: startTime, end: endTime };
+        console.log('timeFilter set to:', this.timeFilter);
+
         this.updateTimeFilterIndicator();
         this.loadHistoricalData();
-        
+
         // Close the popup
         document.getElementById('history-config-popup').classList.remove('active');
     }
