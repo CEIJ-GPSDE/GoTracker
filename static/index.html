@@ -1151,28 +1151,23 @@ class LocationTracker {
             historyConfigBtn.style.display = 'none';
             liveModeBtn.style.display = 'none';
             trackBtn.style.display = 'flex';
-        
+
             // Clear historical data and restore live mode
             this.clearAllMarkers();
             this.clearTraceMarkers();
             this.filteredLocations = [];
             this.timeFilter = null;
-            
-            // Process any queued live updates that arrived during history mode
-            while (this.liveUpdateQueue.length > 0) {
-                const queuedUpdate = this.liveUpdateQueue.shift();
-                this.applyLocationUpdate(queuedUpdate);
-            }
-            
+
             // Restore live mode display
             this.updateRouteForDevice();
             this.displayLocations();
-        
+
             if (this.locations.length > 0) {
                 const latest = this.locations[0];
                 this.updateMapMarker(latest, true);
             }
         }
+    }
 
     setupEventListeners() {
         // Track Latest button
@@ -1389,7 +1384,7 @@ class LocationTracker {
             // In live mode, reload live data
             this.loadInitialData();
         }
-
+        
         // Close the popup if open
         document.getElementById('history-config-popup').classList.remove('active');
     }
