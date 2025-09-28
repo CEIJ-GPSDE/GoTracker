@@ -760,8 +760,8 @@
                     <span>History Mode</span>
                 </button>
                 <button id="history-config-btn" class="history-btn" style="display: none;">
-                    <span>⚙️</span>
-                    <span>Configure</span>
+                    <span>📅</span>
+                    <span>History Settings</span>
                 </button>
                 <button id="live-mode-btn" class="history-btn" style="display: none; background: linear-gradient(135deg, #dc2626, #b91c1c);">
                     <span>📍</span>
@@ -1537,7 +1537,7 @@ class LocationTracker {
                               this.timeFilter.end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                 textElement.innerHTML = `<div>Filter: ${startStr}</div><div>to ${endStr}</div>`;
             } else {
-                textElement.innerHTML = '<div>No time filter applied</div><div>Configure in History settings</div>';
+                textElement.innerHTML = '<div>No time filter applied</div><div>Configure in History Settings</div>';
                 indicator.classList.add('no-filter');
             }
             indicator.classList.add('show');
