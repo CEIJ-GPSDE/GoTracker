@@ -734,7 +734,7 @@
                             <label for="history-limit">History Limit:</label>
                             <input type="number" id="history-limit" value="50" min="10" max="500">
                         </div>
-                        <button class="btn" onclick="locationTracker.refreshData()">Refresh Data</button>
+                        <button class="btn" id="refresh-data-btn" onclick="locationTracker.refreshData()">Refresh Data</button>
                     </div>
                     <div class="control-item">
                       <label style="display:flex; align-items:center; gap:6px; cursor:pointer; width:100%;">
@@ -867,6 +867,7 @@ class LocationTracker {
             this.connectWebSocket();
             this.startStatsPolling();
             this.initializeTimePickers();
+            this.updateRefreshButtonState();
         } catch (error) {
             console.error('Failed to initialize app:', error);
             this.showError('Failed to initialize application');
@@ -1167,6 +1168,7 @@ class LocationTracker {
                 this.updateMapMarker(latest, true);
             }
         }
+        this.updateRefreshButtonState();
     }
 
     setupEventListeners() {
@@ -1220,7 +1222,22 @@ class LocationTracker {
             }
         });
     }
-
+    updateRefreshButtonState() {
+        const refreshBtn = document.getElementById('refresh-data-btn');
+        if (refreshBtn) {
+            if (this.isHistoryMode) {
+                refreshBtn.disabled = true;
+                refreshBtn.style.opacity = '0.5';
+                refreshBtn.style.cursor = 'not-allowed';
+                refreshBtn.textContent = 'Refresh Data (Historical Mode)';
+            } else {
+                refreshBtn.disabled = false;
+                refreshBtn.style.opacity = '1';
+                refreshBtn.style.cursor = 'pointer';
+                refreshBtn.textContent = 'Refresh Data';
+            }
+        }
+    }
     applyTraceDotsVisibility() {
         this.traceMarkers.forEach(marker => {
             const el = marker.getElement();
@@ -1433,24 +1450,32 @@ class LocationTracker {
             this.routeCoords = this.locations.map(loc => [loc.longitude, loc.latitude]);
         }
         this.updateRouteLine();
-
         // Only show trace markers in history mode
         if (this.isHistoryMode) {
             this.clearTraceMarkers();
             const locs = this.selectedDevice
                 ? this.locations.filter(loc => loc.device_id === this.selectedDevice)
                 : this.locations;
-            
             locs.forEach((loc, index) => {
                 const isStart = index === locs.length - 1; // oldest (last in array)
                 const isEnd = index === 0; // newest (first in array)
                 this.createTraceMarker(loc, isStart, isEnd);
             });
-            
+
             this.applyTraceDotsVisibility();
         } else {
-            // In live mode, clear all trace markers
+            // In live mode, create trace markers for the trace dots functionality
             this.clearTraceMarkers();
+            const locs = this.selectedDevice
+                ? this.locations.filter(loc => loc.device_id === this.selectedDevice)
+                : this.locations;
+
+            locs.forEach((loc, index) => {
+                // Don't mark as start/end in live mode, just regular trace markers
+                this.createTraceMarker(loc, false, false);
+            });
+
+            this.applyTraceDotsVisibility();
         }
     }
 
