@@ -664,6 +664,48 @@
           opacity: 1 !important;
           z-index: 1001;
         }
+        /* Add these new styles */
+        .filter-popup {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+            z-index: 10001;
+            display: none;
+            max-width: 300px;
+        }
+
+        .filter-popup.show {
+            display: block;
+        }
+
+        .btn:disabled {
+            background: linear-gradient(135deg, #9ca3af, #6b7280);
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: none !important;
+        }
+
+        .btn:disabled:hover {
+            transform: none !important;
+            box-shadow: none !important;
+        }
+
+        .validation-error {
+            color: #ef4444;
+            font-size: 12px;
+            margin-top: 5px;
+            display: none;
+        }
+
+        .validation-error.show {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -812,6 +854,7 @@
                                     <input type="datetime-local" id="end-time-popup">
                                 </div>
                             </div>
+                            <div class="validation-error" id="validation-error"></div>
                             <button class="btn" id="apply-time-filter-popup">Apply Time Filter</button>
                             <button class="btn secondary" id="clear-time-filter-popup">Clear Filter</button>
                         </div>
@@ -820,6 +863,13 @@
             </div>
         </div>
     </div>
+</div>
+
+<!-- Empty Results Popup -->
+<div class="filter-popup" id="empty-results-popup">
+    <h3 style="margin: 0 0 10px 0; color: #374151;">No Results Found</h3>
+    <p style="margin: 0 0 15px 0; color: #6b7280;">The selected time range contains no location data.</p>
+    <button class="btn" onclick="locationTracker.closeEmptyResultsPopup()">OK</button>
 </div>
 
 <script>
@@ -845,6 +895,8 @@ class LocationTracker {
         this.traceMarkers = [];
         this.showTraceDots = false;
         this.liveUpdateQueue = []; 
+        this.persistedTimeFilter = null;
+        this.lastAppliedFilter = null;
 
         this.config = {
             basePath: '${BASE_PATH}' || '',
@@ -1121,54 +1173,67 @@ class LocationTracker {
     }
 
     toggleHistoryMode() {
-        this.isHistoryMode = !this.isHistoryMode;
-        const historyBtn = document.getElementById('history-mode-btn');
-        const historyConfigBtn = document.getElementById('history-config-btn');
-        const liveModeBtn = document.getElementById('live-mode-btn');
-        const trackBtn = document.getElementById('track-latest-btn');
+       this.isHistoryMode = !this.isHistoryMode;
+       const historyBtn = document.getElementById('history-mode-btn');
+       const historyConfigBtn = document.getElementById('history-config-btn');
+       const liveModeBtn = document.getElementById('live-mode-btn');
+       const trackBtn = document.getElementById('track-latest-btn');
 
-        if (this.isHistoryMode) {        
-            // Hide history mode button, show config and live mode buttons
-            historyBtn.style.display = 'none';
-            historyConfigBtn.style.display = 'flex';
-            liveModeBtn.style.display = 'flex';
-            trackBtn.style.display = 'none';
+       if (this.isHistoryMode) {        
+           // Hide history mode button, show config and live mode buttons
+           historyBtn.style.display = 'none';
+           historyConfigBtn.style.display = 'flex';
+           liveModeBtn.style.display = 'flex';
+           trackBtn.style.display = 'none';
+           
+           this.toggleTracking(false);
+           
+           // Clear all live markers and route when entering history mode
+           this.clearAllMarkers();
+           this.clearTraceMarkers();
+           this.routeCoords = [];
+           this.updateRouteLine();
+           
+           // Restore persisted filter if it exists
+           if (this.persistedTimeFilter) {
+               this.timeFilter = { ...this.persistedTimeFilter };
+               this.restoreTimePickerValues();
+               this.loadHistoricalData();
+           } else {
+               // Initialize with empty filtered locations (user needs to apply time filter)
+               this.filteredLocations = [];
+               this.displayFilteredLocations();
+           }
+           
+       } else {
+           // Store current filter before leaving history mode
+           if (this.timeFilter) {
+               this.persistedTimeFilter = { ...this.timeFilter };
+           }
+           
+           // Show history mode button, hide config and live mode buttons
+           historyBtn.style.display = 'flex';
+           historyConfigBtn.style.display = 'none';
+           liveModeBtn.style.display = 'none';
+           trackBtn.style.display = 'flex';
 
-            this.toggleTracking(false);
+           // Clear historical data and restore live mode
+           this.clearAllMarkers();
+           this.clearTraceMarkers();
+           this.filteredLocations = [];
+           
+           // Restore live mode display
+           this.updateRouteForDevice();
+           this.displayLocations();
 
-            // Clear all live markers and route when entering history mode
-            this.clearAllMarkers();
-            this.clearTraceMarkers();
-            this.routeCoords = [];
-            this.updateRouteLine();
-
-            // Initialize with empty filtered locations (user needs to apply time filter)
-            this.filteredLocations = [];
-            this.displayFilteredLocations();
-
-        } else {
-            // Show history mode button, hide config and live mode buttons
-            historyBtn.style.display = 'flex';
-            historyConfigBtn.style.display = 'none';
-            liveModeBtn.style.display = 'none';
-            trackBtn.style.display = 'flex';
-
-            // Clear historical data and restore live mode
-            this.clearAllMarkers();
-            this.clearTraceMarkers();
-            this.filteredLocations = [];
-            this.timeFilter = null;
-
-            // Restore live mode display
-            this.updateRouteForDevice();
-            this.displayLocations();
-
-            if (this.locations.length > 0) {
-                const latest = this.locations[0];
-                this.updateMapMarker(latest, true);
-            }
-        }
-        this.updateRefreshButtonState();
+           if (this.locations.length > 0) {
+               const latest = this.locations[0];
+               this.updateMapMarker(latest, true);
+           }
+       }
+       
+       // Update refresh button state based on current mode
+       this.updateRefreshButtonState();
     }
 
     setupEventListeners() {
@@ -1180,7 +1245,6 @@ class LocationTracker {
             this.toggleTracking(true);
             this.updateLocationSelection();
         });
-
         // History Mode button
         document.getElementById('history-mode-btn').addEventListener('click', () => {
             this.toggleHistoryMode();
@@ -1273,32 +1337,131 @@ class LocationTracker {
         }, 50);
     }
     setupConfigPopupEvents(popup) {
-       const controlsContainer = popup.querySelector('#historical-controls-popup');
-       if (!controlsContainer) return;
-       
-       // Quick range buttons
-       controlsContainer.querySelectorAll('.quick-range-btn').forEach(btn => {
-           btn.addEventListener('click', (e) => {
-               const hours = parseInt(e.target.dataset.hours);
-               this.setQuickTimeRange(hours);
-               controlsContainer.querySelectorAll('.quick-range-btn').forEach(b => b.classList.remove('active'));
-               e.target.classList.add('active');
-           });
-       });
-       
-       // Apply button
-       const applyBtn = popup.querySelector('#apply-time-filter-popup');
-       if (applyBtn) {
-           applyBtn.addEventListener('click', () => this.applyTimeFilterFromPopup());
-       }
-       
-       // Clear button
-       const clearBtn = popup.querySelector('#clear-time-filter-popup');
-       if (clearBtn) {
-           clearBtn.addEventListener('click', () => this.clearTimeFilter());
-       }
+        const controlsContainer = popup.querySelector('#historical-controls-popup');
+        if (!controlsContainer) return;
+
+        // Add validation on time input changes
+        const startInput = popup.querySelector('#start-time-popup');
+        const endInput = popup.querySelector('#end-time-popup');
+
+        if (startInput && endInput) {
+            startInput.addEventListener('change', () => this.validateTimeFilter());
+            endInput.addEventListener('change', () => this.validateTimeFilter());
+            startInput.addEventListener('input', () => this.validateTimeFilter());
+            endInput.addEventListener('input', () => this.validateTimeFilter());
+        }
+
+        // Quick range buttons
+        controlsContainer.querySelectorAll('.quick-range-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const hours = parseInt(e.target.dataset.hours);
+                this.setQuickTimeRange(hours);
+                controlsContainer.querySelectorAll('.quick-range-btn').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                // Validate after setting quick range
+                setTimeout(() => this.validateTimeFilter(), 100);
+            });
+        });
+
+        // Apply button
+        const applyBtn = popup.querySelector('#apply-time-filter-popup');
+        if (applyBtn) {
+            applyBtn.addEventListener('click', () => {
+                if (this.validateTimeFilter()) {
+                    this.applyTimeFilterFromPopup();
+                }
+            });
+        }
+
+        // Clear button
+        const clearBtn = popup.querySelector('#clear-time-filter-popup');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => this.clearTimeFilter());
+        }
+
+        // Initial validation
+        setTimeout(() => this.validateTimeFilter(), 200);
     }
-    // Add this new method after openHistoryConfigPopup()
+    // Add this method after setupConfigPopupEvents
+    restoreTimePickerValues() {
+        if (this.persistedTimeFilter) {
+            document.getElementById('start-time-popup').value = this.formatDateTimeLocal(this.persistedTimeFilter.start);
+            document.getElementById('end-time-popup').value = this.formatDateTimeLocal(this.persistedTimeFilter.end);
+        }
+    }
+
+    validateTimeFilter() {
+        const startInput = document.getElementById('start-time-popup');
+        const endInput = document.getElementById('end-time-popup');
+        const errorElement = document.getElementById('validation-error');
+        const applyBtn = document.getElementById('apply-time-filter-popup');
+
+        if (!startInput.value || !endInput.value) {
+            this.showValidationError('Both start and end times are required', applyBtn, errorElement);
+            return false;
+        }
+
+        const startTime = new Date(startInput.value);
+        const endTime = new Date(endInput.value);
+        const now = new Date();
+
+        // Check if dates are valid
+        if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
+            this.showValidationError('Invalid date format', applyBtn, errorElement);
+            return false;
+        }
+
+        // Check if start is after end
+        if (startTime >= endTime) {
+            this.showValidationError('Start time must be before end time', applyBtn, errorElement);
+            return false;
+        }
+
+        // Check if end time is in the future
+        if (endTime > now) {
+            this.showValidationError('End time cannot be in the future', applyBtn, errorElement);
+            return false;
+        }
+
+        // Check if time range is too large (more than 1 year)
+        const maxDuration = 365 * 24 * 60 * 60 * 1000; // 1 year in milliseconds
+        if (endTime.getTime() - startTime.getTime() > maxDuration) {
+            this.showValidationError('Time range cannot exceed 1 year', applyBtn, errorElement);
+            return false;
+        }
+
+        // Check if time range is too small (less than 1 minute)
+        const minDuration = 60 * 1000; // 1 minute in milliseconds
+        if (endTime.getTime() - startTime.getTime() < minDuration) {
+            this.showValidationError('Time range must be at least 1 minute', applyBtn, errorElement);
+            return false;
+        }
+
+        // All validations passed
+        this.clearValidationError(applyBtn, errorElement);
+        return true;
+    }
+
+    showValidationError(message, button, errorElement) {
+        errorElement.textContent = message;
+        errorElement.classList.add('show');
+        button.disabled = true;
+        button.title = message;
+    }
+
+    clearValidationError(button, errorElement) {
+        errorElement.classList.remove('show');
+        button.disabled = false;
+        button.title = '';
+    }
+
+    showEmptyResultsPopup() {
+        document.getElementById('empty-results-popup').classList.add('show');
+    }
+
+    closeEmptyResultsPopup() {
+        document.getElementById('empty-results-popup').classList.remove('show');
+    }
     ensureConfigPopupIntegrity() {
         const historyConfigPopup = document.getElementById('history-config-popup');
         if (!historyConfigPopup) return;
@@ -1408,29 +1571,32 @@ class LocationTracker {
 
     async loadHistoricalData() {
         if (!this.timeFilter) return;
-
+        
         try {
             const startTimestamp = this.timeFilter.start.toISOString();
             const endTimestamp = this.timeFilter.end.toISOString();
-
+            
             let url = `${this.config.apiBaseUrl}/api/locations/range?start=${startTimestamp}&end=${endTimestamp}`;
             if (this.selectedDevice) {
                 url += `&device=${encodeURIComponent(this.selectedDevice)}`;
             }
-
+        
             const response = await fetch(url);
             if (response.ok) {
                 const locations = await response.json();
                 this.filteredLocations = locations || [];
-
+                
                 // Clear all existing markers before showing historical data
                 this.clearAllMarkers();
-
+                
                 this.displayFilteredLocations();
                 this.updateRouteForFiltered();
-
+                
                 if (this.filteredLocations.length > 0) {
                     this.fitMapToLocations(this.filteredLocations);
+                } else {
+                    // Show popup for empty results
+                    this.showEmptyResultsPopup();
                 }
             } else {
                 console.error('Failed to load historical data:', response.status);
@@ -1440,7 +1606,6 @@ class LocationTracker {
             this.showError('Failed to load historical data');
         }
     }
-
     updateRouteForDevice() {
         if (this.selectedDevice) {
             this.routeCoords = this.locations
