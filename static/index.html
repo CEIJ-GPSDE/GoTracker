@@ -229,8 +229,12 @@
             padding: 0;
             max-height: calc(90vh - 100px);
             overflow-y: auto;
+            min-height: 200px !important;
         }
-
+        .history-config-content {
+            display: block !important;
+            min-height: 200px;
+        }
         .menu-tabs {
             display: flex;
             background: #f8fafc;
@@ -338,7 +342,10 @@
             border-color: #3b82f6;
             background: rgba(239, 246, 255, 0.9);
         }
-
+        #history-config-popup .popup-body {
+            display: block !important;
+            min-height: 300px !important;
+        }
         .time-range-controls {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -1249,36 +1256,47 @@ class LocationTracker {
             console.error('History config popup not found');
             return;
         }
-
+        
         // Initialize time pickers
         this.initializeTimePickersPopup();
-
+        
+        // Force proper display before showing
+        const popupBody = historyConfigPopup.querySelector('.popup-body');
+        const configContent = historyConfigPopup.querySelector('.history-config-content');
+        
+        if (popupBody) {
+            popupBody.style.display = 'block';
+            popupBody.style.minHeight = '300px';
+        }
+        
+        if (configContent) {
+            configContent.style.display = 'block';
+            configContent.style.minHeight = '200px';
+        }
+        
         // Show popup
         historyConfigPopup.classList.add('active');
-
-        // Set up quick range buttons with proper scoping - only within the config popup
+        
+        // Set up quick range buttons
         setTimeout(() => {
-            // Ensure we only target buttons within the specific popup
             const controlsContainer = historyConfigPopup.querySelector('#historical-controls-popup');
             if (!controlsContainer) {
                 console.error('Historical controls container not found in popup');
                 return;
             }
-
+            
             const quickRangeBtns = controlsContainer.querySelectorAll('.quick-range-btn');
-
-            // Remove any existing event listeners and add new ones
+            
             quickRangeBtns.forEach(btn => {
-                // Clone node to remove all event listeners
+                // Remove existing listeners
                 const newBtn = btn.cloneNode(true);
                 btn.parentNode.replaceChild(newBtn, btn);
-
+                
                 // Add fresh event listener
                 newBtn.addEventListener('click', (e) => {
                     const hours = parseInt(e.target.dataset.hours);
                     this.setQuickTimeRange(hours);
-
-                    // Update active state within this specific popup only
+                    
                     controlsContainer.querySelectorAll('.quick-range-btn').forEach(b => b.classList.remove('active'));
                     e.target.classList.add('active');
                 });
