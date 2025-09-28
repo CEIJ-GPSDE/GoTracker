@@ -1205,15 +1205,6 @@ class LocationTracker {
             this.applyTraceDotsVisibility();
         });
 
-        
-        // Time filter buttons (now in popup)
-        document.getElementById('apply-time-filter-popup').addEventListener('click', () => {
-            this.applyTimeFilterFromPopup();
-        });
-
-        document.getElementById('clear-time-filter-popup').addEventListener('click', () => {
-            this.clearTimeFilter();
-        });
 
         // Device filter
         document.getElementById('device-filter').addEventListener('change', (e) => {
@@ -1277,7 +1268,7 @@ class LocationTracker {
         // Show popup
         historyConfigPopup.classList.add('active');
         
-        // Set up quick range buttons
+        // Set up ALL button events within the popup
         setTimeout(() => {
             const controlsContainer = historyConfigPopup.querySelector('#historical-controls-popup');
             if (!controlsContainer) {
@@ -1285,14 +1276,12 @@ class LocationTracker {
                 return;
             }
             
+            // Handle quick range buttons
             const quickRangeBtns = controlsContainer.querySelectorAll('.quick-range-btn');
-            
             quickRangeBtns.forEach(btn => {
-                // Remove existing listeners
                 const newBtn = btn.cloneNode(true);
                 btn.parentNode.replaceChild(newBtn, btn);
                 
-                // Add fresh event listener
                 newBtn.addEventListener('click', (e) => {
                     const hours = parseInt(e.target.dataset.hours);
                     this.setQuickTimeRange(hours);
@@ -1301,9 +1290,31 @@ class LocationTracker {
                     e.target.classList.add('active');
                 });
             });
+            
+            // Handle Apply Time Filter button
+            const applyBtn = historyConfigPopup.querySelector('#apply-time-filter-popup');
+            if (applyBtn) {
+                const newApplyBtn = applyBtn.cloneNode(true);
+                applyBtn.parentNode.replaceChild(newApplyBtn, applyBtn);
+                
+                newApplyBtn.addEventListener('click', () => {
+                    this.applyTimeFilterFromPopup();
+                });
+            }
+            
+            // Handle Clear Time Filter button
+            const clearBtn = historyConfigPopup.querySelector('#clear-time-filter-popup');
+            if (clearBtn) {
+                const newClearBtn = clearBtn.cloneNode(true);
+                clearBtn.parentNode.replaceChild(newClearBtn, clearBtn);
+                
+                newClearBtn.addEventListener('click', () => {
+                    this.clearTimeFilter();
+                });
+            }
+            
         }, 100);
     }
-
     initializeTimePickersPopup() {
         const now = new Date();
         const endTime = new Date(now);
