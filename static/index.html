@@ -1359,7 +1359,12 @@ class LocationTracker {
             console.error('History config popup not found');
             return;
         }
-
+        const closeBtn = historyConfigPopup.querySelector('#history-config-close');
+        if (closeBtn) {
+            closeBtn.onclick = () => {
+                historyConfigPopup.classList.remove('active');
+            };
+        }
         // Initialize time pickers with current filter or defaults
         if (this.timeFilter) {
             document.getElementById('start-time-popup').value = this.formatDateTimeLocal(this.timeFilter.start);
@@ -1377,54 +1382,65 @@ class LocationTracker {
         }, 50);
     }
     setupConfigPopupEvents(popup) {
+        // Remove any existing event listeners to avoid duplicates
+        const existingApplyBtn = popup.querySelector('#apply-time-filter-popup');
+        if (existingApplyBtn) {
+            existingApplyBtn.replaceWith(existingApplyBtn.cloneNode(true));
+        }
+
+        const existingClearBtn = popup.querySelector('#clear-time-filter-popup');
+        if (existingClearBtn) {
+            existingClearBtn.replaceWith(existingClearBtn.cloneNode(true));
+        }
+
         const controlsContainer = popup.querySelector('#historical-controls-popup');
         if (!controlsContainer) return;
-        
-        // Get references without cloning
+
+        // Get fresh references after potential cloning
         const startInput = popup.querySelector('#start-time-popup');
         const endInput = popup.querySelector('#end-time-popup');
         const applyBtn = popup.querySelector('#apply-time-filter-popup');
         const clearBtn = popup.querySelector('#clear-time-filter-popup');
-        
-        // Remove existing listeners by setting new ones
+
         if (startInput && endInput) {
             const validateAndUpdate = () => {
                 console.log('Validating time filter...');
                 this.validateTimeFilter();
             };
-        
-            startInput.onchange = validateAndUpdate;
-            endInput.onchange = validateAndUpdate;
-            startInput.oninput = validateAndUpdate;
-            endInput.oninput = validateAndUpdate;
+
+            startInput.addEventListener('change', validateAndUpdate);
+            endInput.addEventListener('change', validateAndUpdate);
+            startInput.addEventListener('input', validateAndUpdate);
+            endInput.addEventListener('input', validateAndUpdate);
         }
-    
+
         // Quick range buttons
         controlsContainer.querySelectorAll('.quick-range-btn').forEach(btn => {
-            btn.onclick = (e) => {
+            btn.addEventListener('click', (e) => {
                 const hours = parseInt(e.target.dataset.hours);
                 this.setQuickTimeRange(hours);
                 controlsContainer.querySelectorAll('.quick-range-btn').forEach(b => b.classList.remove('active'));
                 e.target.classList.add('active');
+                // Validate after setting quick range
                 setTimeout(() => this.validateTimeFilter(), 100);
-            };
+            });
         });
-    
+
         // Apply button
         if (applyBtn) {
-            applyBtn.onclick = () => {
+            applyBtn.addEventListener('click', () => {
                 console.log('Apply button clicked');
                 if (this.validateTimeFilter()) {
                     this.applyTimeFilterFromPopup();
                 }
-            };
+            });
         }
-    
+
         // Clear button
         if (clearBtn) {
-            clearBtn.onclick = () => this.clearTimeFilter();
+            clearBtn.addEventListener('click', () => this.clearTimeFilter());
         }
-    
+
         // Initial validation
         setTimeout(() => this.validateTimeFilter(), 200);
     }
