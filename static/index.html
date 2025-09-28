@@ -1132,48 +1132,47 @@ class LocationTracker {
             historyConfigBtn.style.display = 'flex';
             liveModeBtn.style.display = 'flex';
             trackBtn.style.display = 'none';
-            
+
             this.toggleTracking(false);
-            this.updateRouteForFiltered();
-            this.markers.forEach(marker => {
-                const el = marker.getElement();
-                if (el && el.classList.contains('pulse-marker')) {
-                    el.style.display = 'none';
-                }
-            });
+
+            // Clear all live markers and route when entering history mode
+            this.clearAllMarkers();
+            this.clearTraceMarkers();
+            this.routeCoords = [];
+            this.updateRouteLine();
+
+            // Initialize with empty filtered locations (user needs to apply time filter)
+            this.filteredLocations = [];
+            this.displayFilteredLocations();
+
         } else {
             // Show history mode button, hide config and live mode buttons
             historyBtn.style.display = 'flex';
             historyConfigBtn.style.display = 'none';
             liveModeBtn.style.display = 'none';
             trackBtn.style.display = 'flex';
-
-            // resume live updates
+        
+            // Clear historical data and restore live mode
+            this.clearAllMarkers();
+            this.clearTraceMarkers();
+            this.filteredLocations = [];
+            this.timeFilter = null;
+            
+            // Process any queued live updates that arrived during history mode
+            while (this.liveUpdateQueue.length > 0) {
+                const queuedUpdate = this.liveUpdateQueue.shift();
+                this.applyLocationUpdate(queuedUpdate);
+            }
+            
+            // Restore live mode display
             this.updateRouteForDevice();
-
+            this.displayLocations();
+        
             if (this.locations.length > 0) {
                 const latest = this.locations[0];
-            
-                // Clear existing marker and recreate with pulse
-                const existingMarker = this.markers.get(latest.device_id);
-                if (existingMarker) {
-                    existingMarker.remove();
-                    this.markers.delete(latest.device_id);
-                }
-                
-                // Create new pulsing marker
                 this.updateMapMarker(latest, true);
             }
-        
-            // redraw trace markers immediately
-            this.clearTraceMarkers();
-            const locs = this.selectedDevice
-                ? this.locations.filter(loc => loc.device_id === this.selectedDevice)
-                : this.locations;
-            locs.forEach(loc => this.createTraceMarker(loc));
-            this.applyTraceDotsVisibility();
         }
-    }
 
     setupEventListeners() {
         // Track Latest button
@@ -1376,9 +1375,21 @@ class LocationTracker {
 
     clearTimeFilter() {
         this.timeFilter = null;
+        this.filteredLocations = [];
         document.querySelectorAll('.quick-range-btn').forEach(btn => btn.classList.remove('active'));
-        this.loadInitialData();
         
+        if (this.isHistoryMode) {
+            // In history mode, clear everything when filter is cleared
+            this.clearAllMarkers();
+            this.clearTraceMarkers();
+            this.routeCoords = [];
+            this.updateRouteLine();
+            this.displayFilteredLocations(); // Will show "No locations found"
+        } else {
+            // In live mode, reload live data
+            this.loadInitialData();
+        }
+
         // Close the popup if open
         document.getElementById('history-config-popup').classList.remove('active');
     }
@@ -1445,9 +1456,17 @@ class LocationTracker {
     }
 
     updateRouteForFiltered() {
+        // Only use filtered locations for historical mode
+        if (!this.isHistoryMode || this.filteredLocations.length === 0) {
+            this.routeCoords = [];
+            this.updateRouteLine();
+            this.clearTraceMarkers();
+            return;
+        }
+
         this.routeCoords = this.filteredLocations.map(loc => [loc.longitude, loc.latitude]);
         this.updateRouteLine();
-    
+
         this.clearTraceMarkers();
         this.filteredLocations.forEach((loc, index) => {
             this.updateMapMarker(loc, false);
@@ -1455,7 +1474,7 @@ class LocationTracker {
             const isEnd = index === 0; // newest
             this.createTraceMarker(loc, isStart, isEnd);
         });
-    
+
         this.applyTraceDotsVisibility();
     }
 
