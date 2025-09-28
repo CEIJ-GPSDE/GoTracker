@@ -1395,7 +1395,7 @@ class LocationTracker {
         try {
             const startTimestamp = this.timeFilter.start.toISOString();
             const endTimestamp = this.timeFilter.end.toISOString();
-            
+
             let url = `${this.config.apiBaseUrl}/api/locations/range?start=${startTimestamp}&end=${endTimestamp}`;
             if (this.selectedDevice) {
                 url += `&device=${encodeURIComponent(this.selectedDevice)}`;
@@ -1405,9 +1405,13 @@ class LocationTracker {
             if (response.ok) {
                 const locations = await response.json();
                 this.filteredLocations = locations || [];
+
+                // Clear all existing markers before showing historical data
+                this.clearAllMarkers();
+
                 this.displayFilteredLocations();
                 this.updateRouteForFiltered();
-                
+
                 if (this.filteredLocations.length > 0) {
                     this.fitMapToLocations(this.filteredLocations);
                 }
@@ -1464,7 +1468,6 @@ class LocationTracker {
 
         this.clearTraceMarkers();
         this.filteredLocations.forEach((loc, index) => {
-            this.updateMapMarker(loc, false);
             const isStart = index === this.filteredLocations.length - 1; // oldest
             const isEnd = index === 0; // newest
             this.createTraceMarker(loc, isStart, isEnd);
