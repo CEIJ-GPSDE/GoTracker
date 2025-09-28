@@ -1198,18 +1198,7 @@ class LocationTracker {
             this.applyTraceDotsVisibility();
         });
 
-        // Quick range buttons (now in popup)
-        document.querySelectorAll('.quick-range-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const hours = parseInt(e.target.dataset.hours);
-                this.setQuickTimeRange(hours);
-                
-                // Update active state
-                document.querySelectorAll('.quick-range-btn').forEach(b => b.classList.remove('active'));
-                e.target.classList.add('active');
-            });
-        });
-
+        
         // Time filter buttons (now in popup)
         document.getElementById('apply-time-filter-popup').addEventListener('click', () => {
             this.applyTimeFilterFromPopup();
@@ -1255,45 +1244,39 @@ class LocationTracker {
 
     openHistoryConfigPopup() {
         const historyConfigPopup = document.getElementById('history-config-popup');
-        
-        // Ensure popup exists
+
         if (!historyConfigPopup) {
             console.error('History config popup not found');
             return;
         }
-        
-        // Initialize time pickers if not set
+
+        // Initialize time pickers
         this.initializeTimePickersPopup();
-        
-        // Force a small delay to ensure DOM is ready
+
+        // Show popup
+        historyConfigPopup.classList.add('active');
+
+        // Set up quick range buttons with proper event delegation
         setTimeout(() => {
-            historyConfigPopup.classList.add('active');
-            
-            // Verify content is loaded
-            const controlsContainer = document.getElementById('historical-controls-popup');
-            if (!controlsContainer) {
-                console.error('Historical controls container not found');
-                return;
-            }
-            
-            // Ensure all buttons are properly attached
-            const quickRangeBtns = controlsContainer.querySelectorAll('.quick-range-btn');
+            const quickRangeBtns = historyConfigPopup.querySelectorAll('.quick-range-btn');
+
+            // Remove any existing event listeners and add new ones
             quickRangeBtns.forEach(btn => {
-                // Re-attach event listeners if needed
-                if (!btn.hasEventListener) {
-                    btn.addEventListener('click', (e) => {
-                        const hours = parseInt(e.target.dataset.hours);
-                        this.setQuickTimeRange(hours);
-                        
-                        // Update active state
-                        quickRangeBtns.forEach(b => b.classList.remove('active'));
-                        e.target.classList.add('active');
-                    });
-                    btn.hasEventListener = true;
-                }
+                // Clone node to remove all event listeners
+                const newBtn = btn.cloneNode(true);
+                btn.parentNode.replaceChild(newBtn, btn);
+
+                // Add fresh event listener
+                newBtn.addEventListener('click', (e) => {
+                    const hours = parseInt(e.target.dataset.hours);
+                    this.setQuickTimeRange(hours);
+
+                    // Update active state within popup only
+                    historyConfigPopup.querySelectorAll('.quick-range-btn').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                });
             });
-            
-        }, 50);
+        }, 100);
     }
 
     initializeTimePickersPopup() {
@@ -1386,18 +1369,24 @@ class LocationTracker {
         }
         this.updateRouteLine();
 
-        this.clearTraceMarkers();
-        const locs = this.selectedDevice
-            ? this.locations.filter(loc => loc.device_id === this.selectedDevice)
-            : this.locations;
-        
-        locs.forEach((loc, index) => {
-            const isStart = index === locs.length - 1; // oldest (last in array)
-            const isEnd = index === 0; // newest (first in array)
-            this.createTraceMarker(loc, isStart, isEnd);
-        });
-        
-        this.applyTraceDotsVisibility();
+        // Only show trace markers in history mode
+        if (this.isHistoryMode) {
+            this.clearTraceMarkers();
+            const locs = this.selectedDevice
+                ? this.locations.filter(loc => loc.device_id === this.selectedDevice)
+                : this.locations;
+            
+            locs.forEach((loc, index) => {
+                const isStart = index === locs.length - 1; // oldest (last in array)
+                const isEnd = index === 0; // newest (first in array)
+                this.createTraceMarker(loc, isStart, isEnd);
+            });
+            
+            this.applyTraceDotsVisibility();
+        } else {
+            // In live mode, clear all trace markers
+            this.clearTraceMarkers();
+        }
     }
 
     updateRouteForFiltered() {
@@ -1503,7 +1492,15 @@ class LocationTracker {
                 this.displayLocations();
                 this.updateStatistics();
                 
-                this.updateRouteForDevice();
+                // Only update route line on initial load, don't create trace markers
+                if (this.selectedDevice) {
+                    this.routeCoords = this.locations
+                        .filter(loc => loc.device_id === this.selectedDevice)
+                        .map(loc => [loc.longitude, loc.latitude]);
+                } else {
+                    this.routeCoords = this.locations.map(loc => [loc.longitude, loc.latitude]);
+                }
+                this.updateRouteLine();
                 
                 if (this.locations.length > 0) {
                     this.updateMapMarker(this.locations[0], true);
