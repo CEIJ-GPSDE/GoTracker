@@ -105,7 +105,23 @@
         .history-btn:hover {
             box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4);
         }
+        .time-filter-indicator {
+            position: absolute;
+            top: 80px;
+            right: 20px;
+            background: rgba(59, 130, 246, 0.95);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            z-index: 1000;
+            display: none;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
 
+        .time-filter-indicator.show {
+            display: block;
+        }
         .menu-toggle-btn:hover {
             box-shadow: 0 8px 20px rgba(139, 92, 246, 0.4);
         }
@@ -685,15 +701,17 @@
         }
 
         .btn:disabled {
-            background: linear-gradient(135deg, #9ca3af, #6b7280);
-            cursor: not-allowed;
+            background: linear-gradient(135deg, #9ca3af, #6b7280) !important;
+            cursor: not-allowed !important;
             transform: none !important;
             box-shadow: none !important;
+            opacity: 0.6 !important;
         }
 
         .btn:disabled:hover {
             transform: none !important;
             box-shadow: none !important;
+            background: linear-gradient(135deg, #9ca3af, #6b7280) !important;
         }
 
         .validation-error {
@@ -744,6 +762,10 @@
                     <span>⚙️</span>
                     <span>Menu</span>
                 </button>
+            </div>
+            <div class="time-filter-indicator" id="time-filter-indicator">
+                <div>Filter Active:</div>
+                <div id="time-filter-text">-</div>
             </div>
             <div id="map"></div>
         </div>
@@ -1185,32 +1207,34 @@ class LocationTracker {
            historyConfigBtn.style.display = 'flex';
            liveModeBtn.style.display = 'flex';
            trackBtn.style.display = 'none';
-           
+
            this.toggleTracking(false);
-           
+
            // Clear all live markers and route when entering history mode
            this.clearAllMarkers();
            this.clearTraceMarkers();
            this.routeCoords = [];
            this.updateRouteLine();
-           
+
            // Restore persisted filter if it exists
            if (this.persistedTimeFilter) {
                this.timeFilter = { ...this.persistedTimeFilter };
                this.restoreTimePickerValues();
+               this.updateTimeFilterIndicator();
                this.loadHistoricalData();
            } else {
                // Initialize with empty filtered locations (user needs to apply time filter)
                this.filteredLocations = [];
                this.displayFilteredLocations();
+               this.updateTimeFilterIndicator();
            }
-           
+
        } else {
            // Store current filter before leaving history mode
            if (this.timeFilter) {
                this.persistedTimeFilter = { ...this.timeFilter };
            }
-           
+
            // Show history mode button, hide config and live mode buttons
            historyBtn.style.display = 'flex';
            historyConfigBtn.style.display = 'none';
@@ -1221,17 +1245,24 @@ class LocationTracker {
            this.clearAllMarkers();
            this.clearTraceMarkers();
            this.filteredLocations = [];
-           
+           this.updateTimeFilterIndicator();
+
            // Restore live mode display
            this.updateRouteForDevice();
            this.displayLocations();
+
+           // Process any queued live updates
+           while (this.liveUpdateQueue.length > 0) {
+               const queuedLocation = this.liveUpdateQueue.shift();
+               this.applyLocationUpdate(queuedLocation);
+           }
 
            if (this.locations.length > 0) {
                const latest = this.locations[0];
                this.updateMapMarker(latest, true);
            }
        }
-       
+
        // Update refresh button state based on current mode
        this.updateRefreshButtonState();
     }
@@ -1396,13 +1427,18 @@ class LocationTracker {
         const errorElement = document.getElementById('validation-error');
         const applyBtn = document.getElementById('apply-time-filter-popup');
 
-        if (!startInput.value || !endInput.value) {
+        if (!startInput || !endInput) return false;
+
+        const startValue = startInput.value;
+        const endValue = endInput.value;
+
+        if (!startValue || !endValue) {
             this.showValidationError('Both start and end times are required', applyBtn, errorElement);
             return false;
         }
 
-        const startTime = new Date(startInput.value);
-        const endTime = new Date(endInput.value);
+        const startTime = new Date(startValue);
+        const endTime = new Date(endValue);
         const now = new Date();
 
         // Check if dates are valid
@@ -1417,23 +1453,30 @@ class LocationTracker {
             return false;
         }
 
-        // Check if end time is in the future
-        if (endTime > now) {
+        // Check if end time is in the future (with 1 minute tolerance)
+        if (endTime > new Date(now.getTime() + 60000)) {
             this.showValidationError('End time cannot be in the future', applyBtn, errorElement);
             return false;
         }
 
         // Check if time range is too large (more than 1 year)
-        const maxDuration = 365 * 24 * 60 * 60 * 1000; // 1 year in milliseconds
+        const maxDuration = 365 * 24 * 60 * 60 * 1000;
         if (endTime.getTime() - startTime.getTime() > maxDuration) {
             this.showValidationError('Time range cannot exceed 1 year', applyBtn, errorElement);
             return false;
         }
 
         // Check if time range is too small (less than 1 minute)
-        const minDuration = 60 * 1000; // 1 minute in milliseconds
+        const minDuration = 60 * 1000;
         if (endTime.getTime() - startTime.getTime() < minDuration) {
             this.showValidationError('Time range must be at least 1 minute', applyBtn, errorElement);
+            return false;
+        }
+
+        // Check if start time is too far in the past (more than 10 years)
+        const tenYearsAgo = new Date(now.getTime() - 10 * 365 * 24 * 60 * 60 * 1000);
+        if (startTime < tenYearsAgo) {
+            this.showValidationError('Start time cannot be more than 10 years ago', applyBtn, errorElement);
             return false;
         }
 
@@ -1441,7 +1484,21 @@ class LocationTracker {
         this.clearValidationError(applyBtn, errorElement);
         return true;
     }
-
+    updateTimeFilterIndicator() {
+        const indicator = document.getElementById('time-filter-indicator');
+        const textElement = document.getElementById('time-filter-text');
+        
+        if (this.timeFilter && this.isHistoryMode) {
+            const startStr = this.timeFilter.start.toLocaleDateString() + ' ' + 
+                            this.timeFilter.start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            const endStr = this.timeFilter.end.toLocaleDateString() + ' ' + 
+                          this.timeFilter.end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            textElement.textContent = `${startStr} to ${endStr}`;
+            indicator.classList.add('show');
+        } else {
+            indicator.classList.remove('show');
+        }
+    }
     showValidationError(message, button, errorElement) {
         errorElement.textContent = message;
         errorElement.classList.add('show');
@@ -1533,15 +1590,15 @@ class LocationTracker {
     }
 
     applyTimeFilterFromPopup() {
+        if (!this.validateTimeFilter()) {
+            return;
+        }
+        
         const startTime = new Date(document.getElementById('start-time-popup').value);
         const endTime = new Date(document.getElementById('end-time-popup').value);
         
-        if (startTime > endTime) {
-            alert('Start time must be before end time');
-            return;
-        }
-
         this.timeFilter = { start: startTime, end: endTime };
+        this.updateTimeFilterIndicator();
         this.loadHistoricalData();
         
         // Close the popup
@@ -1550,9 +1607,11 @@ class LocationTracker {
 
     clearTimeFilter() {
         this.timeFilter = null;
+        this.persistedTimeFilter = null;
         this.filteredLocations = [];
+        this.updateTimeFilterIndicator();
         document.querySelectorAll('.quick-range-btn').forEach(btn => btn.classList.remove('active'));
-        
+
         if (this.isHistoryMode) {
             // In history mode, clear everything when filter is cleared
             this.clearAllMarkers();
@@ -1564,7 +1623,7 @@ class LocationTracker {
             // In live mode, reload live data
             this.loadInitialData();
         }
-        
+
         // Close the popup if open
         document.getElementById('history-config-popup').classList.remove('active');
     }
@@ -1596,7 +1655,7 @@ class LocationTracker {
                     this.fitMapToLocations(this.filteredLocations);
                 } else {
                     // Show popup for empty results
-                    this.showEmptyResultsPopup();
+                    setTimeout(() => this.showEmptyResultsPopup(), 500);
                 }
             } else {
                 console.error('Failed to load historical data:', response.status);
