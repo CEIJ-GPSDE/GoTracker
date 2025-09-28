@@ -1241,79 +1241,98 @@ class LocationTracker {
     }
 
     openHistoryConfigPopup() {
+        // First ensure popup integrity
+        this.ensureConfigPopupIntegrity();
+
         const historyConfigPopup = document.getElementById('history-config-popup');
-        
         if (!historyConfigPopup) {
             console.error('History config popup not found');
             return;
         }
-        
+
         // Initialize time pickers
         this.initializeTimePickersPopup();
-        
-        // Force proper display before showing
-        const popupBody = historyConfigPopup.querySelector('.popup-body');
-        const configContent = historyConfigPopup.querySelector('.history-config-content');
-        
-        if (popupBody) {
-            popupBody.style.display = 'block';
-            popupBody.style.minHeight = '300px';
-        }
-        
-        if (configContent) {
-            configContent.style.display = 'block';
-            configContent.style.minHeight = '200px';
-        }
-        
+
         // Show popup
         historyConfigPopup.classList.add('active');
-        
-        // Set up ALL button events within the popup
+
+        // Set up events after a brief delay
         setTimeout(() => {
-            const controlsContainer = historyConfigPopup.querySelector('#historical-controls-popup');
-            if (!controlsContainer) {
-                console.error('Historical controls container not found in popup');
-                return;
-            }
+            this.setupConfigPopupEvents(historyConfigPopup);
+        }, 50);
+    }
+    setupConfigPopupEvents(popup) {
+       const controlsContainer = popup.querySelector('#historical-controls-popup');
+       if (!controlsContainer) return;
+       
+       // Quick range buttons
+       controlsContainer.querySelectorAll('.quick-range-btn').forEach(btn => {
+           btn.addEventListener('click', (e) => {
+               const hours = parseInt(e.target.dataset.hours);
+               this.setQuickTimeRange(hours);
+               controlsContainer.querySelectorAll('.quick-range-btn').forEach(b => b.classList.remove('active'));
+               e.target.classList.add('active');
+           });
+       });
+       
+       // Apply button
+       const applyBtn = popup.querySelector('#apply-time-filter-popup');
+       if (applyBtn) {
+           applyBtn.addEventListener('click', () => this.applyTimeFilterFromPopup());
+       }
+       
+       // Clear button
+       const clearBtn = popup.querySelector('#clear-time-filter-popup');
+       if (clearBtn) {
+           clearBtn.addEventListener('click', () => this.clearTimeFilter());
+       }
+    }
+    // Add this new method after openHistoryConfigPopup()
+    ensureConfigPopupIntegrity() {
+        const historyConfigPopup = document.getElementById('history-config-popup');
+        if (!historyConfigPopup) return;
+        
+        // Check if the popup body has been corrupted
+        const popupBody = historyConfigPopup.querySelector('.popup-body');
+        if (!popupBody || popupBody.offsetHeight === 0) {
+            // Restore the popup structure
+            const newContent = `
+                <div class="popup-body" style="min-height: 300px; display: block;">
+                    <div class="history-config-content" style="padding: 30px; display: block;">
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="historical-controls active" id="historical-controls-popup">
+                                    <div class="quick-ranges">
+                                        <button class="quick-range-btn" data-hours="1">1h</button>
+                                        <button class="quick-range-btn" data-hours="6">6h</button>
+                                        <button class="quick-range-btn" data-hours="24">24h</button>
+                                        <button class="quick-range-btn" data-hours="168">1w</button>
+                                        <button class="quick-range-btn" data-hours="0">All</button>
+                                    </div>
+                                    <div class="time-range-controls">
+                                        <div class="control-group">
+                                            <label for="start-time-popup">From:</label>
+                                            <input type="datetime-local" id="start-time-popup">
+                                        </div>
+                                        <div class="control-group">
+                                            <label for="end-time-popup">To:</label>
+                                            <input type="datetime-local" id="end-time-popup">
+                                        </div>
+                                    </div>
+                                    <button class="btn" id="apply-time-filter-popup">Apply Time Filter</button>
+                                    <button class="btn secondary" id="clear-time-filter-popup">Clear Filter</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
             
-            // Handle quick range buttons
-            const quickRangeBtns = controlsContainer.querySelectorAll('.quick-range-btn');
-            quickRangeBtns.forEach(btn => {
-                const newBtn = btn.cloneNode(true);
-                btn.parentNode.replaceChild(newBtn, btn);
-                
-                newBtn.addEventListener('click', (e) => {
-                    const hours = parseInt(e.target.dataset.hours);
-                    this.setQuickTimeRange(hours);
-                    
-                    controlsContainer.querySelectorAll('.quick-range-btn').forEach(b => b.classList.remove('active'));
-                    e.target.classList.add('active');
-                });
-            });
-            
-            // Handle Apply Time Filter button
-            const applyBtn = historyConfigPopup.querySelector('#apply-time-filter-popup');
-            if (applyBtn) {
-                const newApplyBtn = applyBtn.cloneNode(true);
-                applyBtn.parentNode.replaceChild(newApplyBtn, applyBtn);
-                
-                newApplyBtn.addEventListener('click', () => {
-                    this.applyTimeFilterFromPopup();
-                });
-            }
-            
-            // Handle Clear Time Filter button
-            const clearBtn = historyConfigPopup.querySelector('#clear-time-filter-popup');
-            if (clearBtn) {
-                const newClearBtn = clearBtn.cloneNode(true);
-                clearBtn.parentNode.replaceChild(newClearBtn, clearBtn);
-                
-                newClearBtn.addEventListener('click', () => {
-                    this.clearTimeFilter();
-                });
-            }
-            
-        }, 100);
+            // Replace corrupted content
+            const popupContent = historyConfigPopup.querySelector('.popup-content');
+            const header = popupContent.querySelector('.popup-header');
+            popupContent.innerHTML = header.outerHTML + newContent;
+        }
     }
     initializeTimePickersPopup() {
         const now = new Date();
