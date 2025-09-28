@@ -1244,7 +1244,7 @@ class LocationTracker {
 
     openHistoryConfigPopup() {
         const historyConfigPopup = document.getElementById('history-config-popup');
-
+        
         if (!historyConfigPopup) {
             console.error('History config popup not found');
             return;
@@ -1256,9 +1256,16 @@ class LocationTracker {
         // Show popup
         historyConfigPopup.classList.add('active');
 
-        // Set up quick range buttons with proper event delegation
+        // Set up quick range buttons with proper scoping - only within the config popup
         setTimeout(() => {
-            const quickRangeBtns = historyConfigPopup.querySelectorAll('.quick-range-btn');
+            // Ensure we only target buttons within the specific popup
+            const controlsContainer = historyConfigPopup.querySelector('#historical-controls-popup');
+            if (!controlsContainer) {
+                console.error('Historical controls container not found in popup');
+                return;
+            }
+
+            const quickRangeBtns = controlsContainer.querySelectorAll('.quick-range-btn');
 
             // Remove any existing event listeners and add new ones
             quickRangeBtns.forEach(btn => {
@@ -1271,8 +1278,8 @@ class LocationTracker {
                     const hours = parseInt(e.target.dataset.hours);
                     this.setQuickTimeRange(hours);
 
-                    // Update active state within popup only
-                    historyConfigPopup.querySelectorAll('.quick-range-btn').forEach(b => b.classList.remove('active'));
+                    // Update active state within this specific popup only
+                    controlsContainer.querySelectorAll('.quick-range-btn').forEach(b => b.classList.remove('active'));
                     e.target.classList.add('active');
                 });
             });
@@ -1501,7 +1508,7 @@ class LocationTracker {
                     this.routeCoords = this.locations.map(loc => [loc.longitude, loc.latitude]);
                 }
                 this.updateRouteLine();
-                
+
                 if (this.locations.length > 0) {
                     this.updateMapMarker(this.locations[0], true);
                     if (this.isTrackingLatest) {
@@ -1697,7 +1704,7 @@ class LocationTracker {
             container.innerHTML = '<div class="loading">No locations found</div>';
             return;
         }
-        
+
         container.innerHTML = locations.slice(0, this.historyLimit).map((location, index) => `
             <div class="location-item ${index === 0 ? 'latest' : ''} ${index === this.selectedLocationIndex ? 'selected' : ''}" 
                  onclick="locationTracker.selectLocation(${index})">
@@ -1706,6 +1713,11 @@ class LocationTracker {
                 <div class="timestamp">${new Date(location.timestamp).toLocaleString()}</div>
             </div>
         `).join('');
+        
+        // Clean up any event listeners that might interfere with popups
+        // Remove any orphaned quick-range-btn elements that might have been created
+        const orphanedButtons = container.querySelectorAll('.quick-range-btn');
+        orphanedButtons.forEach(btn => btn.remove());
     }
 
     displayFilteredLocations() {
