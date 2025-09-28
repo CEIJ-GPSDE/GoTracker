@@ -942,6 +942,7 @@ class LocationTracker {
             this.startStatsPolling();
             this.initializeTimePickers();
             this.updateRefreshButtonState();
+            this.updateTimeFilterIndicator(); // Add this line
         } catch (error) {
             console.error('Failed to initialize app:', error);
             this.showError('Failed to initialize application');
@@ -1356,8 +1357,13 @@ class LocationTracker {
             return;
         }
 
-        // Initialize time pickers
-        this.initializeTimePickersPopup();
+        // Initialize time pickers with current filter or defaults
+        if (this.timeFilter) {
+            document.getElementById('start-time-popup').value = this.formatDateTimeLocal(this.timeFilter.start);
+            document.getElementById('end-time-popup').value = this.formatDateTimeLocal(this.timeFilter.end);
+        } else {
+            this.initializeTimePickersPopup();
+        }
 
         // Show popup
         historyConfigPopup.classList.add('active');
@@ -1418,6 +1424,7 @@ class LocationTracker {
         if (this.persistedTimeFilter) {
             document.getElementById('start-time-popup').value = this.formatDateTimeLocal(this.persistedTimeFilter.start);
             document.getElementById('end-time-popup').value = this.formatDateTimeLocal(this.persistedTimeFilter.end);
+            this.updateTimeFilterIndicator(); // Add this line
         }
     }
 
@@ -1488,12 +1495,18 @@ class LocationTracker {
         const indicator = document.getElementById('time-filter-indicator');
         const textElement = document.getElementById('time-filter-text');
         
-        if (this.timeFilter && this.isHistoryMode) {
-            const startStr = this.timeFilter.start.toLocaleDateString() + ' ' + 
-                            this.timeFilter.start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            const endStr = this.timeFilter.end.toLocaleDateString() + ' ' + 
-                          this.timeFilter.end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            textElement.textContent = `${startStr} to ${endStr}`;
+        if (this.isHistoryMode) {
+            if (this.timeFilter) {
+                const startStr = this.timeFilter.start.toLocaleDateString() + ' ' + 
+                                this.timeFilter.start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                const endStr = this.timeFilter.end.toLocaleDateString() + ' ' + 
+                              this.timeFilter.end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                textElement.textContent = `${startStr} to ${endStr}`;
+                indicator.style.background = 'rgba(59, 130, 246, 0.95)';
+            } else {
+                textElement.textContent = 'No time filter applied';
+                indicator.style.background = 'rgba(156, 163, 175, 0.95)';
+            }
             indicator.classList.add('show');
         } else {
             indicator.classList.remove('show');
@@ -1634,7 +1647,7 @@ class LocationTracker {
         try {
             const startTimestamp = this.timeFilter.start.toISOString();
             const endTimestamp = this.timeFilter.end.toISOString();
-            
+
             let url = `${this.config.apiBaseUrl}/api/locations/range?start=${startTimestamp}&end=${endTimestamp}`;
             if (this.selectedDevice) {
                 url += `&device=${encodeURIComponent(this.selectedDevice)}`;
@@ -1644,13 +1657,13 @@ class LocationTracker {
             if (response.ok) {
                 const locations = await response.json();
                 this.filteredLocations = locations || [];
-                
+
                 // Clear all existing markers before showing historical data
                 this.clearAllMarkers();
-                
+
                 this.displayFilteredLocations();
                 this.updateRouteForFiltered();
-                
+
                 if (this.filteredLocations.length > 0) {
                     this.fitMapToLocations(this.filteredLocations);
                 } else {
@@ -1812,16 +1825,9 @@ class LocationTracker {
                 this.updateDevicesList();
                 this.displayLocations();
                 this.updateStatistics();
-                
-                // Only update route line on initial load, don't create trace markers
-                if (this.selectedDevice) {
-                    this.routeCoords = this.locations
-                        .filter(loc => loc.device_id === this.selectedDevice)
-                        .map(loc => [loc.longitude, loc.latitude]);
-                } else {
-                    this.routeCoords = this.locations.map(loc => [loc.longitude, loc.latitude]);
-                }
-                this.updateRouteLine();
+
+                // Update route and create trace markers
+                this.updateRouteForDevice(); // This will create trace markers
 
                 if (this.locations.length > 0) {
                     this.updateMapMarker(this.locations[0], true);
@@ -1901,7 +1907,7 @@ class LocationTracker {
 
     applyLocationUpdate(location) {
         this.locations.unshift(location);
-    
+        
         // prevent uncontrolled growth
         if (this.locations.length > this.historyLimit * 2) {
             this.locations = this.locations.slice(0, this.historyLimit);
@@ -1914,7 +1920,7 @@ class LocationTracker {
     
         if (this.selectedDevice === '' || this.selectedDevice === location.device_id) {
             this.updateMapMarker(location, !this.isHistoryMode);
-            this.updateRouteForDevice();
+            this.updateRouteForDevice(); // This will recreate trace markers
             if (this.isTrackingLatest && !this.userInteracted) {
                 this.centerMapOnLocation(location);
             }
