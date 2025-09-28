@@ -253,10 +253,6 @@
             overflow-y: auto;
             min-height: 200px !important;
         }
-        .history-config-content {
-            display: block !important;
-            min-height: 200px;
-        }
         .menu-tabs {
             display: flex;
             background: #f8fafc;
@@ -772,10 +768,6 @@
                     <span>Menu</span>
                 </button>
             </div>
-            <div class="time-filter-indicator" id="time-filter-indicator">
-                <div>Filter Active:</div>
-                <div id="time-filter-text">-</div>
-            </div>
             <div id="map"></div>
         </div>
     </div>
@@ -927,17 +919,12 @@ class LocationTracker {
         this.showTraceDots = false;
         this.liveUpdateQueue = []; 
         this.persistedTimeFilter = null;
-        this.lastAppliedFilter = null;
         this.selectedLocationMarker = null; // Add this line
-        this.liveUpdateQueue = []; 
-        this.persistedTimeFilter = null;
-        this.lastAppliedFilter = null;
 
         this.config = {
-            basePath: '${BASE_PATH}' || '',
             apiBaseUrl: window.location.origin + ('${BASE_PATH}' || ''),
             wsUrl: `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}${'${BASE_PATH}' || ''}/ws`,
-            mapStyle: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
+            mapStyle: 'https://openmaptiles.github.io/osm-bright-gl-style/style.json',
             defaultCenter: [-74.0060, 40.7128],
             defaultZoom: 10
         };
