@@ -107,20 +107,26 @@
         }
         .time-filter-indicator {
             position: absolute;
-            top: 80px;
-            right: 20px;
+            top: 60px;
+            left: 20px;
             background: rgba(59, 130, 246, 0.95);
+            backdrop-filter: blur(10px);
             color: white;
             padding: 8px 12px;
-            border-radius: 8px;
+            border-radius: 10px;
             font-size: 12px;
             z-index: 1000;
             display: none;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            margin-top: 10px;
         }
 
         .time-filter-indicator.show {
             display: block;
+        }
+
+        .time-filter-indicator.no-filter {
+            background: rgba(156, 163, 175, 0.95);
         }
         .menu-toggle-btn:hover {
             box-shadow: 0 8px 20px rgba(139, 92, 246, 0.4);
@@ -741,6 +747,9 @@
                     <span>Connecting...</span>
                 </div>
             </div>
+            <div class="time-filter-indicator" id="time-filter-indicator">
+                <div id="time-filter-text">-</div>
+            </div>
             <div class="map-controls">
                 <button id="track-latest-btn" class="track-btn enabled">
                     <div class="track-icon"></div>
@@ -916,6 +925,10 @@ class LocationTracker {
         this.suppressUserInteraction = false;
         this.traceMarkers = [];
         this.showTraceDots = false;
+        this.liveUpdateQueue = []; 
+        this.persistedTimeFilter = null;
+        this.lastAppliedFilter = null;
+        this.selectedLocationMarker = null; // Add this line
         this.liveUpdateQueue = []; 
         this.persistedTimeFilter = null;
         this.lastAppliedFilter = null;
@@ -1196,76 +1209,79 @@ class LocationTracker {
     }
 
     toggleHistoryMode() {
-       this.isHistoryMode = !this.isHistoryMode;
-       const historyBtn = document.getElementById('history-mode-btn');
-       const historyConfigBtn = document.getElementById('history-config-btn');
-       const liveModeBtn = document.getElementById('live-mode-btn');
-       const trackBtn = document.getElementById('track-latest-btn');
-
-       if (this.isHistoryMode) {        
-           // Hide history mode button, show config and live mode buttons
-           historyBtn.style.display = 'none';
-           historyConfigBtn.style.display = 'flex';
-           liveModeBtn.style.display = 'flex';
-           trackBtn.style.display = 'none';
-
-           this.toggleTracking(false);
-
-           // Clear all live markers and route when entering history mode
-           this.clearAllMarkers();
-           this.clearTraceMarkers();
-           this.routeCoords = [];
-           this.updateRouteLine();
-
-           // Restore persisted filter if it exists
-           if (this.persistedTimeFilter) {
-               this.timeFilter = { ...this.persistedTimeFilter };
-               this.restoreTimePickerValues();
-               this.updateTimeFilterIndicator();
-               this.loadHistoricalData();
-           } else {
-               // Initialize with empty filtered locations (user needs to apply time filter)
-               this.filteredLocations = [];
-               this.displayFilteredLocations();
-               this.updateTimeFilterIndicator();
-           }
-
-       } else {
-           // Store current filter before leaving history mode
-           if (this.timeFilter) {
-               this.persistedTimeFilter = { ...this.timeFilter };
-           }
-
-           // Show history mode button, hide config and live mode buttons
-           historyBtn.style.display = 'flex';
-           historyConfigBtn.style.display = 'none';
-           liveModeBtn.style.display = 'none';
-           trackBtn.style.display = 'flex';
-
-           // Clear historical data and restore live mode
-           this.clearAllMarkers();
-           this.clearTraceMarkers();
-           this.filteredLocations = [];
-           this.updateTimeFilterIndicator();
-
-           // Restore live mode display
-           this.updateRouteForDevice();
-           this.displayLocations();
-
-           // Process any queued live updates
-           while (this.liveUpdateQueue.length > 0) {
-               const queuedLocation = this.liveUpdateQueue.shift();
-               this.applyLocationUpdate(queuedLocation);
-           }
-
-           if (this.locations.length > 0) {
-               const latest = this.locations[0];
-               this.updateMapMarker(latest, true);
-           }
-       }
-
-       // Update refresh button state based on current mode
-       this.updateRefreshButtonState();
+        this.isHistoryMode = !this.isHistoryMode;
+        const historyBtn = document.getElementById('history-mode-btn');
+        const historyConfigBtn = document.getElementById('history-config-btn');
+        const liveModeBtn = document.getElementById('live-mode-btn');
+        const trackBtn = document.getElementById('track-latest-btn');
+        // Clear any selected location markers when switching modes
+        this.clearSelectedLocationMarker();
+        this.selectedLocationIndex = -1;
+        if (this.isHistoryMode) {        
+            // Hide history mode button, show config and live mode buttons
+            historyBtn.style.display = 'none';
+            historyConfigBtn.style.display = 'flex';
+            liveModeBtn.style.display = 'flex';
+            trackBtn.style.display = 'none';
+        
+            this.toggleTracking(false);
+        
+            // Clear all live markers and route when entering history mode
+            this.clearAllMarkers();
+            this.clearTraceMarkers();
+            this.routeCoords = [];
+            this.updateRouteLine();
+        
+            // Restore persisted filter if it exists
+            if (this.persistedTimeFilter) {
+                this.timeFilter = { ...this.persistedTimeFilter };
+                this.restoreTimePickerValues();
+                this.updateTimeFilterIndicator();
+                this.loadHistoricalData();
+            } else {
+                // Initialize with empty filtered locations (user needs to apply time filter)
+                this.filteredLocations = [];
+                this.displayFilteredLocations();
+                this.updateTimeFilterIndicator();
+            }
+           
+        } else {
+            // Store current filter before leaving history mode
+            if (this.timeFilter) {
+                this.persistedTimeFilter = { ...this.timeFilter };
+            }
+           
+            // Show history mode button, hide config and live mode buttons
+            historyBtn.style.display = 'flex';
+            historyConfigBtn.style.display = 'none';
+            liveModeBtn.style.display = 'none';
+            trackBtn.style.display = 'flex';
+           
+            // Clear historical data and restore live mode
+            this.clearAllMarkers();
+            this.clearTraceMarkers();
+            this.filteredLocations = [];
+            this.updateTimeFilterIndicator();
+           
+            // Restore live mode display
+            this.updateRouteForDevice();
+            this.displayLocations();
+           
+            // Process any queued live updates
+            while (this.liveUpdateQueue.length > 0) {
+                const queuedLocation = this.liveUpdateQueue.shift();
+                this.applyLocationUpdate(queuedLocation);
+            }
+           
+            if (this.locations.length > 0) {
+                const latest = this.locations[0];
+                this.updateMapMarker(latest, true);
+            }
+        }
+    
+        // Update refresh button state based on current mode
+        this.updateRefreshButtonState();
+        this.updateLocationSelection();
     }
 
     setupEventListeners() {
@@ -1511,18 +1527,18 @@ class LocationTracker {
     updateTimeFilterIndicator() {
         const indicator = document.getElementById('time-filter-indicator');
         const textElement = document.getElementById('time-filter-text');
-
+        
         if (this.isHistoryMode) {
+            indicator.classList.remove('no-filter');
             if (this.timeFilter) {
                 const startStr = this.timeFilter.start.toLocaleDateString() + ' ' + 
                                 this.timeFilter.start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                 const endStr = this.timeFilter.end.toLocaleDateString() + ' ' + 
                               this.timeFilter.end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                textElement.textContent = `${startStr} to ${endStr}`;
-                indicator.style.background = 'rgba(59, 130, 246, 0.95)';
+                textElement.innerHTML = `<div>Filter: ${startStr}</div><div>to ${endStr}</div>`;
             } else {
-                textElement.textContent = 'No time filter applied';
-                indicator.style.background = 'rgba(156, 163, 175, 0.95)';
+                textElement.innerHTML = '<div>No time filter applied</div><div>Configure in History settings</div>';
+                indicator.classList.add('no-filter');
             }
             indicator.classList.add('show');
         } else {
@@ -1988,20 +2004,85 @@ class LocationTracker {
     }
 
     selectLocation(locationIndex) {
-        this.selectedLocationIndex = locationIndex;
-        this.userInteracted = false;
-        
-        if (locationIndex >= 0) {
-            this.toggleTracking(false);
-            const locations = this.isHistoryMode ? this.filteredLocations : this.getFilteredLocations();
-            const location = locations[locationIndex];
-            if (location) {
-                this.centerMapOnLocation(location);
-                this.updateMapMarker(location);
+            this.selectedLocationIndex = locationIndex;
+            this.userInteracted = false;
+
+            if (locationIndex >= 0) {
+                this.toggleTracking(false);
+                const locations = this.isHistoryMode ? this.filteredLocations : this.getFilteredLocations();
+                const location = locations[locationIndex];
+                if (location) {
+                    this.centerMapOnLocation(location);
+                    // Create a temporary marker for the selected location, don't interfere with the latest marker
+                    this.showSelectedLocationMarker(location);
+                }
+            } else {
+                // Clear any selected location marker when deselecting
+                this.clearSelectedLocationMarker();
             }
+
+            this.updateLocationSelection();
         }
+
+    showSelectedLocationMarker(location) {
+        // Remove existing selected marker if any
+        this.clearSelectedLocationMarker();
+
+        const popupContent = `
+            <div style="font-family: system-ui; min-width: 200px;">
+                <h4 style="margin: 0 0 10px 0; color: #374151;">${location.device_id} <span style="color: #f59e0b; font-size: 12px;">(SELECTED)</span></h4>
+                <div style="font-size: 12px; color: #6b7280; margin-bottom: 5px;">
+                    <strong>Coordinates:</strong><br>
+                    ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}
+                </div>
+                <div style="font-size: 12px; color: #6b7280;">
+                    <strong>Time:</strong><br>
+                    ${new Date(location.timestamp).toLocaleString()}
+                </div>
+                <button onclick="locationTracker.clearSelectedLocation()" style="margin-top: 10px; background: #ef4444; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                    Clear Selection
+                </button>
+            </div>
+        `;
         
+        // Create a distinct marker for selected locations
+        const el = document.createElement('div');
+        el.className = 'selected-location-marker';
+        el.style.cssText = `
+            width: 20px;
+            height: 20px;
+            background: #f59e0b;
+            border: 3px solid white;
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(245, 158, 11, 0.6);
+            cursor: pointer;
+            z-index: 1002;
+        `;
+        
+        this.selectedLocationMarker = new maplibregl.Marker({ element: el })
+            .setLngLat([location.longitude, location.latitude])
+            .setPopup(new maplibregl.Popup().setHTML(popupContent))
+            .addTo(this.map);
+        
+        // Auto-show popup
+        this.selectedLocationMarker.togglePopup();
+    }
+
+    clearSelectedLocationMarker() {
+        if (this.selectedLocationMarker) {
+            this.selectedLocationMarker.remove();
+            this.selectedLocationMarker = null;
+        }
+    }
+
+    clearSelectedLocation() {
+        this.selectedLocationIndex = -1;
+        this.clearSelectedLocationMarker();
         this.updateLocationSelection();
+        // Re-enable tracking if we were tracking before
+        if (!this.userInteracted) {
+            this.toggleTracking(true);
+        }
     }
 
     getFilteredLocations() {
