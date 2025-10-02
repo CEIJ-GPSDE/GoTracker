@@ -105,7 +105,29 @@
         .history-btn:hover {
             box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4);
         }
+        .time-filter-indicator {
+            position: absolute;
+            top: 60px;
+            left: 20px;
+            background: rgba(59, 130, 246, 0.95);
+            backdrop-filter: blur(10px);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 10px;
+            font-size: 12px;
+            z-index: 1000;
+            display: none;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            margin-top: 10px;
+        }
 
+        .time-filter-indicator.show {
+            display: block;
+        }
+
+        .time-filter-indicator.no-filter {
+            background: rgba(156, 163, 175, 0.95);
+        }
         .menu-toggle-btn:hover {
             box-shadow: 0 8px 20px rgba(139, 92, 246, 0.4);
         }
@@ -229,8 +251,8 @@
             padding: 0;
             max-height: calc(90vh - 100px);
             overflow-y: auto;
+            min-height: 200px !important;
         }
-
         .menu-tabs {
             display: flex;
             background: #f8fafc;
@@ -338,7 +360,10 @@
             border-color: #3b82f6;
             background: rgba(239, 246, 255, 0.9);
         }
-
+        #history-config-popup .popup-body {
+            display: block !important;
+            min-height: 300px !important;
+        }
         .time-range-controls {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -425,6 +450,30 @@
             border-color: #667eea; 
             box-shadow: 0 0 0 3px rgba(102,126,234,0.1); 
         }
+        .control-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 6px 10px;
+          border-radius: 6px;
+          font-size: 14px;
+          color: #374151; /* gray-700 */
+          background: #f9fafb; /* gray-50 */
+          margin-bottom: 6px;
+          cursor: pointer;
+          transition: background 0.2s, color 0.2s;
+        }
+
+        .control-item:hover {
+          background: #f3f4f6; /* gray-100 */
+        }
+
+        .control-item input[type="checkbox"] {
+          accent-color: #3b82f6; /* blue-500 */
+          width: 16px;
+          height: 16px;
+          cursor: pointer;
+        }
 
         .btn { 
             background: linear-gradient(135deg, #667eea, #764ba2); 
@@ -451,7 +500,6 @@
             box-shadow: 0 5px 15px rgba(107, 114, 128, 0.4);
         }
 
-        .stats { }
         .stat-item { 
             display: flex; 
             justify-content: space-between; 
@@ -565,6 +613,119 @@
                 max-height: calc(100vh - 10px);
             }
         }
+
+        .pulse-marker {
+            width: 20px;
+            height: 20px;
+            background: #ef4444; /* red */
+            border-radius: 50%;
+            position: relative;
+            z-index: 9999;   /* always above */
+        }
+
+        .pulse-marker::after {
+            content: "";
+            width: 20px;
+            height: 20px;
+            background: #ef4444;
+            border-radius: 50%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            animation: pulse 2s infinite;
+            opacity: 0.6;
+            z-index: -1;  /* glow behind */
+        }   
+        
+        @keyframes pulse {
+          0%   { transform: scale(1);   opacity: 0.6; }
+          50%  { transform: scale(2);   opacity: 0; }
+          100% { transform: scale(1);   opacity: 0.6; }
+        }
+
+        .trace-marker {
+          width: 10px;
+          height: 10px;
+          border-radius: 50%;
+          background: #3b82f6; /* blue */
+          border: 2px solid white;
+          box-shadow: 0 0 4px rgba(0,0,0,0.3);
+          cursor: pointer;
+          opacity: 0;               /* hidden by default */
+          transition: opacity 0.2s;
+        }
+
+        .trace-marker:hover {
+          opacity: 1;               /* show when hovered */
+        }
+
+        .trace-marker.always-visible {
+          opacity: 1 !important;    /* forced visible */
+        }
+
+        .trace-marker.start-point {
+          background: #10b981; /* green for start */
+          width: 14px;
+          height: 14px;
+          border: 3px solid white;
+          box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+          opacity: 1 !important;
+          z-index: 1001;
+        }
+
+        .trace-marker.end-point {
+          background: #ef4444; /* red for end */
+          width: 14px;
+          height: 14px;
+          border: 3px solid white;
+          box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+          opacity: 1 !important;
+          z-index: 1001;
+        }
+        /* Add these new styles */
+        .filter-popup {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+            z-index: 10001;
+            display: none;
+            max-width: 300px;
+        }
+
+        .filter-popup.show {
+            display: block;
+        }
+
+        .btn:disabled {
+            background: linear-gradient(135deg, #9ca3af, #6b7280) !important;
+            cursor: not-allowed !important;
+            transform: none !important;
+            box-shadow: none !important;
+            opacity: 0.6 !important;
+        }
+
+        .btn:disabled:hover {
+            transform: none !important;
+            box-shadow: none !important;
+            background: linear-gradient(135deg, #9ca3af, #6b7280) !important;
+        }
+
+        .validation-error {
+            color: #ef4444;
+            font-size: 12px;
+            margin-top: 5px;
+            display: none;
+        }
+
+        .validation-error.show {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -582,6 +743,9 @@
                     <span>Connecting...</span>
                 </div>
             </div>
+            <div class="time-filter-indicator" id="time-filter-indicator">
+                <div id="time-filter-text">-</div>
+            </div>
             <div class="map-controls">
                 <button id="track-latest-btn" class="track-btn enabled">
                     <div class="track-icon"></div>
@@ -590,6 +754,14 @@
                 <button id="history-mode-btn" class="history-btn">
                     <span>📅</span>
                     <span>History Mode</span>
+                </button>
+                <button id="history-config-btn" class="history-btn" style="display: none;">
+                    <span>📅</span>
+                    <span>History Settings</span>
+                </button>
+                <button id="live-mode-btn" class="history-btn" style="display: none; background: linear-gradient(135deg, #dc2626, #b91c1c);">
+                    <span>📍</span>
+                    <span>Live Mode</span>
                 </button>
                 <button id="menu-toggle-btn" class="menu-toggle-btn">
                     <span>⚙️</span>
@@ -601,7 +773,7 @@
     </div>
 </div>
 
-<!-- Popup Menu -->
+<!-- Main Menu Popup -->
 <div class="popup-menu" id="popup-menu">
     <div class="popup-content">
         <div class="popup-header">
@@ -610,37 +782,30 @@
         </div>
         <div class="popup-body">
             <div class="menu-tabs">
-                <button class="tab-button active" data-tab="historical">📅 Historical View</button>
+                <button class="tab-button active" data-tab="controls">⚙️ Controls</button>
                 <button class="tab-button" data-tab="locations">📍 Locations</button>
-                <button class="tab-button" data-tab="controls">⚙️ Controls</button>
                 <button class="tab-button" data-tab="stats">📊 Statistics</button>
             </div>
             
-            <!-- Historical Tab -->
-            <div class="tab-content active" id="historical-tab">
+            <!-- Controls Tab -->
+            <div class="tab-content active" id="controls-tab">
                 <div class="card">
                     <div class="card-body">
-                        <div class="historical-controls" id="historical-controls">
-                            <div class="quick-ranges">
-                                <button class="quick-range-btn" data-hours="1">1h</button>
-                                <button class="quick-range-btn" data-hours="6">6h</button>
-                                <button class="quick-range-btn" data-hours="24">24h</button>
-                                <button class="quick-range-btn" data-hours="168">1w</button>
-                                <button class="quick-range-btn" data-hours="0">All</button>
-                            </div>
-                            <div class="time-range-controls">
-                                <div class="control-group">
-                                    <label for="start-time">From:</label>
-                                    <input type="datetime-local" id="start-time">
-                                </div>
-                                <div class="control-group">
-                                    <label for="end-time">To:</label>
-                                    <input type="datetime-local" id="end-time">
-                                </div>
-                            </div>
-                            <button class="btn" id="apply-time-filter">Apply Time Filter</button>
-                            <button class="btn secondary" id="clear-time-filter">Clear Filter</button>
+                        <div class="control-group">
+                            <label for="device-filter">Filter by Device:</label>
+                            <select id="device-filter"><option value="">All Devices</option></select>
                         </div>
+                        <div class="control-group">
+                            <label for="history-limit">History Limit:</label>
+                            <input type="number" id="history-limit" value="50" min="10" max="500">
+                        </div>
+                        <button class="btn" id="refresh-data-btn" onclick="locationTracker.refreshData()">Refresh Data</button>
+                    </div>
+                    <div class="control-item">
+                      <label style="display:flex; align-items:center; gap:6px; cursor:pointer; width:100%;">
+                        <input type="checkbox" id="toggle-trace-dots">
+                        <span>Show trace dots</span>
+                      </label>
                     </div>
                 </div>
             </div>
@@ -652,23 +817,6 @@
                         <div class="location-list" id="location-list">
                             <div class="loading"><div class="spinner"></div>Loading locations...</div>
                         </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Controls Tab -->
-            <div class="tab-content" id="controls-tab">
-                <div class="card">
-                    <div class="card-body">
-                        <div class="control-group">
-                            <label for="device-filter">Filter by Device:</label>
-                            <select id="device-filter"><option value="">All Devices</option></select>
-                        </div>
-                        <div class="control-group">
-                            <label for="history-limit">History Limit:</label>
-                            <input type="number" id="history-limit" value="50" min="10" max="500">
-                        </div>
-                        <button class="btn" onclick="locationTracker.refreshData()">Refresh Data</button>
                     </div>
                 </div>
             </div>
@@ -700,6 +848,53 @@
     </div>
 </div>
 
+<!-- History Configuration Popup -->
+<div class="popup-menu" id="history-config-popup">
+    <div class="popup-content">
+        <div class="popup-header">
+            <h2>📅 Historical View Configuration</h2>
+            <button class="popup-close" id="history-config-close">×</button>
+        </div>
+        <div class="popup-body">
+            <div class="tab-content active">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="historical-controls active" id="historical-controls-popup">
+                            <div class="quick-ranges">
+                                <button class="quick-range-btn" data-hours="1">1h</button>
+                                <button class="quick-range-btn" data-hours="6">6h</button>
+                                <button class="quick-range-btn" data-hours="24">24h</button>
+                                <button class="quick-range-btn" data-hours="168">1w</button>
+                                <button class="quick-range-btn" data-hours="0">All</button>
+                            </div>
+                            <div class="time-range-controls">
+                                <div class="control-group">
+                                    <label for="start-time-popup">From:</label>
+                                    <input type="datetime-local" id="start-time-popup">
+                                </div>
+                                <div class="control-group">
+                                    <label for="end-time-popup">To:</label>
+                                    <input type="datetime-local" id="end-time-popup">
+                                </div>
+                            </div>
+                            <div class="validation-error" id="validation-error"></div>
+                            <button class="btn" id="apply-time-filter-popup">Apply Time Filter</button>
+                            <button class="btn secondary" id="clear-time-filter-popup">Clear Filter</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Empty Results Popup -->
+<div class="filter-popup" id="empty-results-popup">
+    <h3 style="margin: 0 0 10px 0; color: #374151;">No Results Found</h3>
+    <p style="margin: 0 0 15px 0; color: #6b7280;">The selected time range contains no location data.</p>
+    <button class="btn" onclick="locationTracker.closeEmptyResultsPopup()">OK</button>
+</div>
+
 <script>
 class LocationTracker {
     constructor() {
@@ -719,9 +914,14 @@ class LocationTracker {
         this.routeCoords = [];
         this.isHistoryMode = false;
         this.timeFilter = null;
+        this.suppressUserInteraction = false;
+        this.traceMarkers = [];
+        this.showTraceDots = false;
+        this.liveUpdateQueue = []; 
+        this.persistedTimeFilter = null;
+        this.selectedLocationMarker = null; // Add this line
 
         this.config = {
-            basePath: '${BASE_PATH}' || '',
             apiBaseUrl: window.location.origin + ('${BASE_PATH}' || ''),
             wsUrl: `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}${'${BASE_PATH}' || ''}/ws`,
             mapStyle: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
@@ -741,6 +941,8 @@ class LocationTracker {
             this.connectWebSocket();
             this.startStatsPolling();
             this.initializeTimePickers();
+            this.updateRefreshButtonState();
+            this.updateTimeFilterIndicator(); // Add this line
         } catch (error) {
             console.error('Failed to initialize app:', error);
             this.showError('Failed to initialize application');
@@ -760,11 +962,15 @@ class LocationTracker {
         this.map.addControl(new maplibregl.FullscreenControl(), 'bottom-left');
 
         this.map.on('dragstart', () => {
-            this.handleUserInteraction();
+            if (!this.suppressUserInteraction) this.handleUserInteraction();
         });
 
         this.map.on('zoomstart', () => {
-            this.handleUserInteraction();
+            if (!this.suppressUserInteraction) this.handleUserInteraction();
+        });
+
+        this.map.on('movestart', () => {
+            if (!this.suppressUserInteraction) this.handleUserInteraction();
         });
 
         this.map.on('load', () => {
@@ -783,25 +989,42 @@ class LocationTracker {
         const menuToggle = document.getElementById('menu-toggle-btn');
         const popupMenu = document.getElementById('popup-menu');
         const popupClose = document.getElementById('popup-close');
+        
+        // History config popup elements
+        const historyConfigPopup = document.getElementById('history-config-popup');
+        const historyConfigClose = document.getElementById('history-config-close');
+        
         const tabButtons = document.querySelectorAll('.tab-button');
         const tabContents = document.querySelectorAll('.tab-content');
 
-        // Toggle menu
+        // Toggle main menu
         menuToggle.addEventListener('click', () => {
             popupMenu.classList.add('active');
         });
 
-        // Close menu
+        // Close main menu
         const closeMenu = () => {
             popupMenu.classList.remove('active');
         };
 
+        // Close history config popup
+        const closeHistoryConfig = () => {
+            historyConfigPopup.classList.remove('active');
+        };
+
         popupClose.addEventListener('click', closeMenu);
+        historyConfigClose.addEventListener('click', closeHistoryConfig);
 
         // Close when clicking outside content
         popupMenu.addEventListener('click', (e) => {
             if (e.target === popupMenu) {
                 closeMenu();
+            }
+        });
+
+        historyConfigPopup.addEventListener('click', (e) => {
+            if (e.target === historyConfigPopup) {
+                closeHistoryConfig();
             }
         });
 
@@ -824,15 +1047,23 @@ class LocationTracker {
             });
         });
 
-        // Close menu with Escape key
+        // Close menus with Escape key
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && popupMenu.classList.contains('active')) {
-                closeMenu();
+            if (e.key === 'Escape') {
+                if (popupMenu.classList.contains('active')) {
+                    closeMenu();
+                }
+                if (historyConfigPopup.classList.contains('active')) {
+                    closeHistoryConfig();
+                }
             }
         });
     }
 
     handleUserInteraction() {
+        // ignore programmatic moves
+        if (this.suppressUserInteraction) return;
+
         if (!this.userInteracted) {
             this.userInteracted = true;
             if (this.isTrackingLatest) {
@@ -883,13 +1114,54 @@ class LocationTracker {
         });
     }
 
+    createTraceMarker(location, isStart = false, isEnd = false) {
+        const popupContent = `
+            <div style="font-family: system-ui; min-width: 200px;">
+                <h4 style="margin: 0 0 10px 0; color: #374151;">
+                    ${location.device_id}
+                    ${isStart ? ' <span style="color: #10b981; font-size: 12px;">(START)</span>' : ''}
+                    ${isEnd ? ' <span style="color: #ef4444; font-size: 12px;">(END)</span>' : ''}
+                </h4>
+                <div style="font-size: 12px; color: #6b7280; margin-bottom: 5px;">
+                    <strong>Coordinates:</strong><br>
+                    ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}
+                </div>
+                <div style="font-size: 12px; color: #6b7280;">
+                    <strong>Time:</strong><br>
+                    ${new Date(location.timestamp).toLocaleString()}
+                </div>
+            </div>
+        `;
+
+        const el = document.createElement('div');
+        el.className = 'trace-marker';
+        
+        if (isStart) {
+            el.classList.add('start-point');
+        } else if (isEnd) {
+            el.classList.add('end-point');
+        }
+
+        const marker = new maplibregl.Marker({ element: el })
+            .setLngLat([location.longitude, location.latitude])
+            .setPopup(new maplibregl.Popup().setHTML(popupContent))
+            .addTo(this.map);
+
+        this.traceMarkers.push(marker);
+    }
+
+    clearTraceMarkers() {
+        this.traceMarkers.forEach(m => m.remove());
+        this.traceMarkers = [];
+    }
+
     initializeTimePickers() {
         const now = new Date();
         const endTime = new Date(now);
         const startTime = new Date(now - 24 * 60 * 60 * 1000); // 24 hours ago
 
-        document.getElementById('end-time').value = this.formatDateTimeLocal(endTime);
-        document.getElementById('start-time').value = this.formatDateTimeLocal(startTime);
+        document.getElementById('end-time-popup').value = this.formatDateTimeLocal(endTime);
+        document.getElementById('start-time-popup').value = this.formatDateTimeLocal(startTime);
     }
 
     formatDateTimeLocal(date) {
@@ -925,56 +1197,109 @@ class LocationTracker {
 
     toggleHistoryMode() {
         this.isHistoryMode = !this.isHistoryMode;
-        const btn = document.getElementById('history-mode-btn');
-        const controls = document.getElementById('historical-controls');
+        const historyBtn = document.getElementById('history-mode-btn');
+        const historyConfigBtn = document.getElementById('history-config-btn');
+        const liveModeBtn = document.getElementById('live-mode-btn');
+        const trackBtn = document.getElementById('track-latest-btn');
+        // Clear any selected location markers when switching modes
+        this.clearSelectedLocationMarker();
+        this.selectedLocationIndex = -1;
+        if (this.isHistoryMode) {        
+            // Hide history mode button, show config and live mode buttons
+            historyBtn.style.display = 'none';
+            historyConfigBtn.style.display = 'flex';
+            liveModeBtn.style.display = 'flex';
+            trackBtn.style.display = 'none';
         
-        if (this.isHistoryMode) {
-            btn.style.background = 'linear-gradient(135deg, #dc2626, #b91c1c)';
-            btn.querySelector('span:last-child').textContent = 'Live Mode';
-            controls.classList.add('active');
-            this.toggleTracking(false); // Disable tracking in history mode
+            this.toggleTracking(false);
+        
+            // Clear all live markers and route when entering history mode
+            this.clearAllMarkers();
+            this.clearTraceMarkers();
+            this.routeCoords = [];
+            this.updateRouteLine();
+        
+            // Restore persisted filter if it exists
+            if (this.persistedTimeFilter) {
+                this.timeFilter = { ...this.persistedTimeFilter };
+                this.restoreTimePickerValues();
+                this.updateTimeFilterIndicator();
+                this.loadHistoricalData();
+            } else {
+                // Initialize with empty filtered locations (user needs to apply time filter)
+                this.filteredLocations = [];
+                this.displayFilteredLocations();
+                this.updateTimeFilterIndicator();
+            }
+           
         } else {
-            btn.style.background = 'linear-gradient(135deg, #3b82f6, #1d4ed8)';
-            btn.querySelector('span:last-child').textContent = 'History Mode';
-            controls.classList.remove('active');
-            this.clearTimeFilter();
+            // Store current filter before leaving history mode
+            if (this.timeFilter) {
+                this.persistedTimeFilter = { ...this.timeFilter };
+            }
+           
+            // Show history mode button, hide config and live mode buttons
+            historyBtn.style.display = 'flex';
+            historyConfigBtn.style.display = 'none';
+            liveModeBtn.style.display = 'none';
+            trackBtn.style.display = 'flex';
+           
+            // Clear historical data and restore live mode
+            this.clearAllMarkers();
+            this.clearTraceMarkers();
+            this.filteredLocations = [];
+            this.updateTimeFilterIndicator();
+           
+            // Restore live mode display
+            this.updateRouteForDevice();
+            this.displayLocations();
+           
+            // Process any queued live updates
+            while (this.liveUpdateQueue.length > 0) {
+                const queuedLocation = this.liveUpdateQueue.shift();
+                this.applyLocationUpdate(queuedLocation);
+            }
+           
+            if (this.locations.length > 0) {
+                const latest = this.locations[0];
+                this.updateMapMarker(latest, true);
+            }
         }
+    
+        // Update refresh button state based on current mode
+        this.updateRefreshButtonState();
+        this.updateLocationSelection();
     }
 
     setupEventListeners() {
         // Track Latest button
         document.getElementById('track-latest-btn').addEventListener('click', () => {
             this.userInteracted = false;
+            this.suppressUserInteraction = false;
             this.selectedLocationIndex = -1;
-            this.toggleTracking();
+            this.toggleTracking(true);
             this.updateLocationSelection();
         });
-
         // History Mode button
         document.getElementById('history-mode-btn').addEventListener('click', () => {
             this.toggleHistoryMode();
         });
 
-        // Quick range buttons
-        document.querySelectorAll('.quick-range-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const hours = parseInt(e.target.dataset.hours);
-                this.setQuickTimeRange(hours);
-                
-                // Update active state
-                document.querySelectorAll('.quick-range-btn').forEach(b => b.classList.remove('active'));
-                e.target.classList.add('active');
-            });
+        // Live Mode button (appears in history mode)
+        document.getElementById('live-mode-btn').addEventListener('click', () => {
+            this.toggleHistoryMode();
         });
 
-        // Time filter buttons
-        document.getElementById('apply-time-filter').addEventListener('click', () => {
-            this.applyTimeFilter();
+        // History Config button
+        document.getElementById('history-config-btn').addEventListener('click', () => {
+            this.openHistoryConfigPopup();
         });
 
-        document.getElementById('clear-time-filter').addEventListener('click', () => {
-            this.clearTimeFilter();
+        document.getElementById('toggle-trace-dots').addEventListener('change', (e) => {
+            this.showTraceDots = e.target.checked;
+            this.applyTraceDotsVisibility();
         });
+
 
         // Device filter
         document.getElementById('device-filter').addEventListener('change', (e) => {
@@ -996,6 +1321,297 @@ class LocationTracker {
             }
         });
     }
+    updateRefreshButtonState() {
+        const refreshBtn = document.getElementById('refresh-data-btn');
+        if (refreshBtn) {
+            if (this.isHistoryMode) {
+                refreshBtn.disabled = true;
+                refreshBtn.style.opacity = '0.5';
+                refreshBtn.style.cursor = 'not-allowed';
+                refreshBtn.textContent = 'Refresh Data (Historical Mode)';
+            } else {
+                refreshBtn.disabled = false;
+                refreshBtn.style.opacity = '1';
+                refreshBtn.style.cursor = 'pointer';
+                refreshBtn.textContent = 'Refresh Data';
+            }
+        }
+    }
+    applyTraceDotsVisibility() {
+        this.traceMarkers.forEach(marker => {
+            const el = marker.getElement();
+            if (this.showTraceDots) {
+                el.classList.add('always-visible');
+            } else {
+                el.classList.remove('always-visible');
+            }
+        });
+
+        document.getElementById('toggle-trace-dots').checked = this.showTraceDots;
+    }
+
+    openHistoryConfigPopup() {
+        // First ensure popup integrity
+        this.ensureConfigPopupIntegrity();
+
+        const historyConfigPopup = document.getElementById('history-config-popup');
+        if (!historyConfigPopup) {
+            console.error('History config popup not found');
+            return;
+        }
+        const closeBtn = historyConfigPopup.querySelector('#history-config-close');
+        if (closeBtn) {
+            closeBtn.onclick = () => {
+                historyConfigPopup.classList.remove('active');
+            };
+        }
+        // Initialize time pickers with current filter or defaults
+        if (this.timeFilter) {
+            document.getElementById('start-time-popup').value = this.formatDateTimeLocal(this.timeFilter.start);
+            document.getElementById('end-time-popup').value = this.formatDateTimeLocal(this.timeFilter.end);
+        } else {
+            this.initializeTimePickersPopup();
+        }
+
+        // Show popup
+        historyConfigPopup.classList.add('active');
+
+        // Set up events after a brief delay
+        setTimeout(() => {
+            this.setupConfigPopupEvents(historyConfigPopup);
+        }, 50);
+    }
+    setupConfigPopupEvents(popup) {
+        // Remove any existing event listeners to avoid duplicates
+        const existingApplyBtn = popup.querySelector('#apply-time-filter-popup');
+        if (existingApplyBtn) {
+            existingApplyBtn.replaceWith(existingApplyBtn.cloneNode(true));
+        }
+
+        const existingClearBtn = popup.querySelector('#clear-time-filter-popup');
+        if (existingClearBtn) {
+            existingClearBtn.replaceWith(existingClearBtn.cloneNode(true));
+        }
+
+        const controlsContainer = popup.querySelector('#historical-controls-popup');
+        if (!controlsContainer) return;
+
+        // Get fresh references after potential cloning
+        const startInput = popup.querySelector('#start-time-popup');
+        const endInput = popup.querySelector('#end-time-popup');
+        const applyBtn = popup.querySelector('#apply-time-filter-popup');
+        const clearBtn = popup.querySelector('#clear-time-filter-popup');
+
+        if (startInput && endInput) {
+            const validateAndUpdate = () => {
+                console.log('Validating time filter...');
+                this.validateTimeFilter();
+            };
+
+            startInput.addEventListener('change', validateAndUpdate);
+            endInput.addEventListener('change', validateAndUpdate);
+            startInput.addEventListener('input', validateAndUpdate);
+            endInput.addEventListener('input', validateAndUpdate);
+        }
+
+        // Quick range buttons
+        controlsContainer.querySelectorAll('.quick-range-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const hours = parseInt(e.target.dataset.hours);
+                this.setQuickTimeRange(hours);
+                controlsContainer.querySelectorAll('.quick-range-btn').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                // Validate after setting quick range
+                setTimeout(() => this.validateTimeFilter(), 100);
+            });
+        });
+
+        // Apply button
+        if (applyBtn) {
+            applyBtn.addEventListener('click', () => {
+                console.log('Apply button clicked');
+                if (this.validateTimeFilter()) {
+                    this.applyTimeFilterFromPopup();
+                }
+            });
+        }
+
+        // Clear button
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => this.clearTimeFilter());
+        }
+
+        // Initial validation
+        setTimeout(() => this.validateTimeFilter(), 200);
+    }
+    // Add this method after setupConfigPopupEvents
+    restoreTimePickerValues() {
+        if (this.persistedTimeFilter) {
+            document.getElementById('start-time-popup').value = this.formatDateTimeLocal(this.persistedTimeFilter.start);
+            document.getElementById('end-time-popup').value = this.formatDateTimeLocal(this.persistedTimeFilter.end);
+            this.updateTimeFilterIndicator(); // Add this line
+        }
+    }
+
+    validateTimeFilter() {
+        const startInput = document.getElementById('start-time-popup');
+        const endInput = document.getElementById('end-time-popup');
+        const errorElement = document.getElementById('validation-error');
+        const applyBtn = document.getElementById('apply-time-filter-popup');
+
+        if (!startInput || !endInput) return false;
+
+        const startValue = startInput.value;
+        const endValue = endInput.value;
+
+        if (!startValue || !endValue) {
+            this.showValidationError('Both start and end times are required', applyBtn, errorElement);
+            return false;
+        }
+
+        const startTime = new Date(startValue);
+        const endTime = new Date(endValue);
+        const now = new Date();
+
+        // Check if dates are valid
+        if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
+            this.showValidationError('Invalid date format', applyBtn, errorElement);
+            return false;
+        }
+
+        // Check if start is after end
+        if (startTime >= endTime) {
+            this.showValidationError('Start time must be before end time', applyBtn, errorElement);
+            return false;
+        }
+
+        // Check if end time is in the future (with 1 minute tolerance)
+        if (endTime > new Date(now.getTime() + 60000)) {
+            this.showValidationError('End time cannot be in the future', applyBtn, errorElement);
+            return false;
+        }
+
+        // Check if time range is too large (more than 1 year)
+        const maxDuration = 365 * 24 * 60 * 60 * 1000;
+        if (endTime.getTime() - startTime.getTime() > maxDuration) {
+            this.showValidationError('Time range cannot exceed 1 year', applyBtn, errorElement);
+            return false;
+        }
+
+        // Check if time range is too small (less than 1 minute)
+        const minDuration = 60 * 1000;
+        if (endTime.getTime() - startTime.getTime() < minDuration) {
+            this.showValidationError('Time range must be at least 1 minute', applyBtn, errorElement);
+            return false;
+        }
+
+        // Check if start time is too far in the past (more than 10 years)
+        const tenYearsAgo = new Date(now.getTime() - 10 * 365 * 24 * 60 * 60 * 1000);
+        if (startTime < tenYearsAgo) {
+            this.showValidationError('Start time cannot be more than 10 years ago', applyBtn, errorElement);
+            return false;
+        }
+
+        // All validations passed
+        this.clearValidationError(applyBtn, errorElement);
+        return true;
+    }
+    updateTimeFilterIndicator() {
+        const indicator = document.getElementById('time-filter-indicator');
+        const textElement = document.getElementById('time-filter-text');
+        
+        if (this.isHistoryMode) {
+            indicator.classList.remove('no-filter');
+            if (this.timeFilter) {
+                const startStr = this.timeFilter.start.toLocaleDateString() + ' ' + 
+                                this.timeFilter.start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                const endStr = this.timeFilter.end.toLocaleDateString() + ' ' + 
+                              this.timeFilter.end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                textElement.innerHTML = `<div>Filter: ${startStr}</div><div>to ${endStr}</div>`;
+            } else {
+                textElement.innerHTML = '<div>No time filter applied</div><div>Configure in History Settings</div>';
+                indicator.classList.add('no-filter');
+            }
+            indicator.classList.add('show');
+        } else {
+            indicator.classList.remove('show');
+        }
+    }
+    showValidationError(message, button, errorElement) {
+        errorElement.textContent = message;
+        errorElement.classList.add('show');
+        button.disabled = true;
+        button.title = message;
+    }
+
+    clearValidationError(button, errorElement) {
+        errorElement.classList.remove('show');
+        button.disabled = false;
+        button.title = '';
+    }
+
+    showEmptyResultsPopup() {
+        document.getElementById('empty-results-popup').classList.add('show');
+    }
+
+    closeEmptyResultsPopup() {
+        document.getElementById('empty-results-popup').classList.remove('show');
+    }
+    ensureConfigPopupIntegrity() {
+        const historyConfigPopup = document.getElementById('history-config-popup');
+        if (!historyConfigPopup) return;
+
+        // Check if the popup body has been corrupted
+        const popupBody = historyConfigPopup.querySelector('.popup-body');
+        if (!popupBody || popupBody.offsetHeight === 0) {
+            // Restore the popup structure
+            const newContent = `
+                <div class="popup-body" style="min-height: 300px; display: block;">
+                    <div class="history-config-content" style="padding: 30px; display: block;">
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="historical-controls active" id="historical-controls-popup">
+                                    <div class="quick-ranges">
+                                        <button class="quick-range-btn" data-hours="1">1h</button>
+                                        <button class="quick-range-btn" data-hours="6">6h</button>
+                                        <button class="quick-range-btn" data-hours="24">24h</button>
+                                        <button class="quick-range-btn" data-hours="168">1w</button>
+                                        <button class="quick-range-btn" data-hours="0">All</button>
+                                    </div>
+                                    <div class="time-range-controls">
+                                        <div class="control-group">
+                                            <label for="start-time-popup">From:</label>
+                                            <input type="datetime-local" id="start-time-popup">
+                                        </div>
+                                        <div class="control-group">
+                                            <label for="end-time-popup">To:</label>
+                                            <input type="datetime-local" id="end-time-popup">
+                                        </div>
+                                    </div>
+                                    <div class="validation-error" id="validation-error"></div>
+                                    <button class="btn" id="apply-time-filter-popup">Apply Time Filter</button>
+                                    <button class="btn secondary" id="clear-time-filter-popup">Clear Filter</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Replace corrupted content
+            const popupContent = historyConfigPopup.querySelector('.popup-content');
+            const header = popupContent.querySelector('.popup-header');
+            popupContent.innerHTML = header.outerHTML + newContent;
+        }
+    }
+    initializeTimePickersPopup() {
+        const now = new Date();
+        const endTime = new Date(now);
+        const startTime = new Date(now - 24 * 60 * 60 * 1000); // 24 hours ago
+
+        document.getElementById('end-time-popup').value = this.formatDateTimeLocal(endTime);
+        document.getElementById('start-time-popup').value = this.formatDateTimeLocal(startTime);
+    }
 
     setQuickTimeRange(hours) {
         const now = new Date();
@@ -1003,55 +1619,89 @@ class LocationTracker {
         
         if (hours === 0) { // All time
             const startTime = new Date(0); // Very old date
-            document.getElementById('start-time').value = this.formatDateTimeLocal(startTime);
+            document.getElementById('start-time-popup').value = this.formatDateTimeLocal(startTime);
         } else {
             const startTime = new Date(now - hours * 60 * 60 * 1000);
-            document.getElementById('start-time').value = this.formatDateTimeLocal(startTime);
+            document.getElementById('start-time-popup').value = this.formatDateTimeLocal(startTime);
         }
         
-        document.getElementById('end-time').value = this.formatDateTimeLocal(endTime);
+        document.getElementById('end-time-popup').value = this.formatDateTimeLocal(endTime);
     }
 
-    applyTimeFilter() {
-        const startTime = new Date(document.getElementById('start-time').value);
-        const endTime = new Date(document.getElementById('end-time').value);
-        
-        if (startTime > endTime) {
-            alert('Start time must be before end time');
+    applyTimeFilterFromPopup() {
+        console.log('applyTimeFilterFromPopup called');
+
+        if (!this.validateTimeFilter()) {
+            console.log('Validation failed, not applying filter');
             return;
         }
 
+        const startTime = new Date(document.getElementById('start-time-popup').value);
+        const endTime = new Date(document.getElementById('end-time-popup').value);
+
+        console.log('Applying time filter:', { start: startTime, end: endTime });
+
         this.timeFilter = { start: startTime, end: endTime };
+        console.log('timeFilter set to:', this.timeFilter);
+
+        this.updateTimeFilterIndicator();
         this.loadHistoricalData();
+
+        // Close the popup
+        document.getElementById('history-config-popup').classList.remove('active');
     }
 
     clearTimeFilter() {
         this.timeFilter = null;
+        this.persistedTimeFilter = null;
+        this.filteredLocations = [];
+        this.updateTimeFilterIndicator();
         document.querySelectorAll('.quick-range-btn').forEach(btn => btn.classList.remove('active'));
-        this.loadInitialData();
+
+        if (this.isHistoryMode) {
+            // In history mode, clear everything when filter is cleared
+            this.clearAllMarkers();
+            this.clearTraceMarkers();
+            this.routeCoords = [];
+            this.updateRouteLine();
+            this.displayFilteredLocations(); // Will show "No locations found"
+        } else {
+            // In live mode, reload live data
+            this.loadInitialData();
+        }
+
+        // Close the popup if open
+        document.getElementById('history-config-popup').classList.remove('active');
     }
 
     async loadHistoricalData() {
         if (!this.timeFilter) return;
-
+        
         try {
             const startTimestamp = this.timeFilter.start.toISOString();
             const endTimestamp = this.timeFilter.end.toISOString();
-            
+
             let url = `${this.config.apiBaseUrl}/api/locations/range?start=${startTimestamp}&end=${endTimestamp}`;
             if (this.selectedDevice) {
                 url += `&device=${encodeURIComponent(this.selectedDevice)}`;
             }
-
+        
             const response = await fetch(url);
             if (response.ok) {
                 const locations = await response.json();
                 this.filteredLocations = locations || [];
+
+                // Clear all existing markers before showing historical data
+                this.clearAllMarkers();
+
                 this.displayFilteredLocations();
                 this.updateRouteForFiltered();
-                
+
                 if (this.filteredLocations.length > 0) {
                     this.fitMapToLocations(this.filteredLocations);
+                } else {
+                    // Show popup for empty results
+                    setTimeout(() => this.showEmptyResultsPopup(), 500);
                 }
             } else {
                 console.error('Failed to load historical data:', response.status);
@@ -1061,7 +1711,6 @@ class LocationTracker {
             this.showError('Failed to load historical data');
         }
     }
-
     updateRouteForDevice() {
         if (this.selectedDevice) {
             this.routeCoords = this.locations
@@ -1071,17 +1720,55 @@ class LocationTracker {
             this.routeCoords = this.locations.map(loc => [loc.longitude, loc.latitude]);
         }
         this.updateRouteLine();
+        // Only show trace markers in history mode
+        if (this.isHistoryMode) {
+            this.clearTraceMarkers();
+            const locs = this.selectedDevice
+                ? this.locations.filter(loc => loc.device_id === this.selectedDevice)
+                : this.locations;
+            locs.forEach((loc, index) => {
+                const isStart = index === locs.length - 1; // oldest (last in array)
+                const isEnd = index === 0; // newest (first in array)
+                this.createTraceMarker(loc, isStart, isEnd);
+            });
+
+            this.applyTraceDotsVisibility();
+        } else {
+            // In live mode, create trace markers for the trace dots functionality
+            this.clearTraceMarkers();
+            const locs = this.selectedDevice
+                ? this.locations.filter(loc => loc.device_id === this.selectedDevice)
+                : this.locations;
+
+            locs.forEach((loc, index) => {
+                // Don't mark as start/end in live mode, just regular trace markers
+                this.createTraceMarker(loc, false, false);
+            });
+
+            this.applyTraceDotsVisibility();
+        }
     }
 
     updateRouteForFiltered() {
+        // Only use filtered locations for historical mode
+        if (!this.isHistoryMode || this.filteredLocations.length === 0) {
+            this.routeCoords = [];
+            this.updateRouteLine();
+            this.clearTraceMarkers();
+            return;
+        }
+
         this.routeCoords = this.filteredLocations.map(loc => [loc.longitude, loc.latitude]);
         this.updateRouteLine();
-        
-        // Clear existing markers and add markers for filtered locations
-        this.clearAllMarkers();
-        this.filteredLocations.forEach(location => {
-            this.updateMapMarker(location);
+
+        this.clearTraceMarkers();
+        this.filteredLocations.forEach((loc, index) => {
+            const isStart = index === this.filteredLocations.length - 1; // oldest
+            const isEnd = index === 0; // newest
+            this.createTraceMarker(loc, isStart, isEnd);
         });
+
+        this.applyTraceDotsVisibility();
     }
 
     fitMapToLocations(locations) {
@@ -1171,11 +1858,12 @@ class LocationTracker {
                 this.updateDevicesList();
                 this.displayLocations();
                 this.updateStatistics();
-                
-                this.updateRouteForDevice();
-                
+
+                // Update route and create trace markers
+                this.updateRouteForDevice(); // This will create trace markers
+
                 if (this.locations.length > 0) {
-                    this.updateMapMarker(this.locations[0]);
+                    this.updateMapMarker(this.locations[0], true);
                     if (this.isTrackingLatest) {
                         this.centerMapOnLatestLocation();
                     }
@@ -1193,41 +1881,16 @@ class LocationTracker {
         console.log('Received location update:', location);
         
         // Only process new locations if not in history mode
-        if (!this.isHistoryMode) {
-            this.locations.unshift(location);
-            
-            if (this.locations.length > this.historyLimit * 2) {
-                this.locations = this.locations.slice(0, this.historyLimit);
-            }
-            
-            this.devices.add(location.device_id);
-            this.updateDevicesList();
-            this.updateMapMarker(location);
-            this.filterAndDisplayLocations();
-            this.updateStatistics();
-            
-            if (this.selectedDevice === '' || this.selectedDevice === location.device_id) {
-                this.routeCoords.unshift([location.longitude, location.latitude]);
-                if (this.routeCoords.length > this.historyLimit) {
-                    this.routeCoords = this.routeCoords.slice(0, this.historyLimit);
-                }
-                this.updateRouteLine();
-                
-                if (this.isTrackingLatest && this.selectedLocationIndex === -1) {
-                    this.userInteracted = false;
-                    this.centerMapOnLocation(location);
-                }
-            }
+        if (this.isHistoryMode) {
+            this.liveUpdateQueue.push(location);
+            return;
         }
+        this.applyLocationUpdate(location);
     }
 
-    updateMapMarker(location) {
+    updateMapMarker(location, isLatest = false) {
         const deviceId = location.device_id;
-        
-        if (this.markers.has(deviceId)) {
-            this.markers.get(deviceId).remove();
-        }
-        
+        let marker = this.markers.get(deviceId);
         const popupContent = `
             <div style="font-family: system-ui; min-width: 200px;">
                 <h4 style="margin: 0 0 10px 0; color: #374151;">${deviceId}</h4>
@@ -1241,15 +1904,60 @@ class LocationTracker {
                 </div>
             </div>
         `;
+        
+        if (!marker) {
+            // Create marker if not exist
+            let el;
+            if (isLatest) {
+                el = document.createElement('div');
+                el.className = 'pulse-marker';
+            }
+        
+            marker = new maplibregl.Marker({
+                element: el || undefined,
+                color: isLatest ? undefined : this.getDeviceColor(deviceId)
+            })
+            .setLngLat([location.longitude, location.latitude])
+            .setPopup(new maplibregl.Popup().setHTML(popupContent))
+            .addTo(this.map);
+        
+            this.markers.set(deviceId, marker);
+        } else {
+            // Just update existing marker
+            marker.setLngLat([location.longitude, location.latitude]);
+            marker.setPopup(new maplibregl.Popup().setHTML(popupContent));
+        }
+    
+        // Ensure pulse only applies to the latest
+        const el = marker.getElement();
+        if (isLatest) {
+            el.classList.add('pulse-marker');
+            el.style.zIndex = "9999";
+        } else {
+            el.classList.remove('pulse-marker');
+        }
+    }
 
-        const marker = new maplibregl.Marker({
-            color: this.getDeviceColor(deviceId)
-        })
-        .setLngLat([location.longitude, location.latitude])
-        .setPopup(new maplibregl.Popup().setHTML(popupContent))
-        .addTo(this.map);
-
-        this.markers.set(deviceId, marker);
+    applyLocationUpdate(location) {
+        this.locations.unshift(location);
+        
+        // prevent uncontrolled growth
+        if (this.locations.length > this.historyLimit * 2) {
+            this.locations = this.locations.slice(0, this.historyLimit);
+        }
+    
+        this.devices.add(location.device_id);
+        this.updateDevicesList();
+        this.filterAndDisplayLocations();
+        this.updateStatistics();
+    
+        if (this.selectedDevice === '' || this.selectedDevice === location.device_id) {
+            this.updateMapMarker(location, !this.isHistoryMode);
+            this.updateRouteForDevice(); // This will recreate trace markers
+            if (this.isTrackingLatest && !this.userInteracted) {
+                this.centerMapOnLocation(location);
+            }
+        }
     }
 
     getDeviceColor(deviceId) {
@@ -1268,29 +1976,105 @@ class LocationTracker {
     }
 
     centerMapOnLocation(location) {
+        // still mark that the user has not manually interacted
         this.userInteracted = false;
+
+        // indicate the upcoming move is programmatic so event handlers ignore it
+        this.suppressUserInteraction = true;
+
         this.map.flyTo({
             center: [location.longitude, location.latitude],
             zoom: Math.max(this.map.getZoom(), 12),
-            duration: 1000
+            duration: 800
+        });
+
+        // clear suppression when the programmatic move finishes
+        this.map.once('moveend', () => {
+            // tiny delay to let chained events settle
+            setTimeout(() => { this.suppressUserInteraction = false; }, 50);
         });
     }
 
     selectLocation(locationIndex) {
-        this.selectedLocationIndex = locationIndex;
-        this.userInteracted = false;
-        
-        if (locationIndex >= 0) {
-            this.toggleTracking(false);
-            const locations = this.isHistoryMode ? this.filteredLocations : this.getFilteredLocations();
-            const location = locations[locationIndex];
-            if (location) {
-                this.centerMapOnLocation(location);
-                this.updateMapMarker(location);
+            this.selectedLocationIndex = locationIndex;
+            this.userInteracted = false;
+
+            if (locationIndex >= 0) {
+                this.toggleTracking(false);
+                const locations = this.isHistoryMode ? this.filteredLocations : this.getFilteredLocations();
+                const location = locations[locationIndex];
+                if (location) {
+                    this.centerMapOnLocation(location);
+                    // Create a temporary marker for the selected location, don't interfere with the latest marker
+                    this.showSelectedLocationMarker(location);
+                }
+            } else {
+                // Clear any selected location marker when deselecting
+                this.clearSelectedLocationMarker();
             }
+
+            this.updateLocationSelection();
         }
+
+    showSelectedLocationMarker(location) {
+        // Remove existing selected marker if any
+        this.clearSelectedLocationMarker();
+
+        const popupContent = `
+            <div style="font-family: system-ui; min-width: 200px;">
+                <h4 style="margin: 0 0 10px 0; color: #374151;">${location.device_id} <span style="color: #f59e0b; font-size: 12px;">(SELECTED)</span></h4>
+                <div style="font-size: 12px; color: #6b7280; margin-bottom: 5px;">
+                    <strong>Coordinates:</strong><br>
+                    ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}
+                </div>
+                <div style="font-size: 12px; color: #6b7280;">
+                    <strong>Time:</strong><br>
+                    ${new Date(location.timestamp).toLocaleString()}
+                </div>
+                <button onclick="locationTracker.clearSelectedLocation()" style="margin-top: 10px; background: #ef4444; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                    Clear Selection
+                </button>
+            </div>
+        `;
         
+        // Create a distinct marker for selected locations
+        const el = document.createElement('div');
+        el.className = 'selected-location-marker';
+        el.style.cssText = `
+            width: 20px;
+            height: 20px;
+            background: #f59e0b;
+            border: 3px solid white;
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(245, 158, 11, 0.6);
+            cursor: pointer;
+            z-index: 1002;
+        `;
+        
+        this.selectedLocationMarker = new maplibregl.Marker({ element: el })
+            .setLngLat([location.longitude, location.latitude])
+            .setPopup(new maplibregl.Popup().setHTML(popupContent))
+            .addTo(this.map);
+        
+        // Auto-show popup
+        this.selectedLocationMarker.togglePopup();
+    }
+
+    clearSelectedLocationMarker() {
+        if (this.selectedLocationMarker) {
+            this.selectedLocationMarker.remove();
+            this.selectedLocationMarker = null;
+        }
+    }
+
+    clearSelectedLocation() {
+        this.selectedLocationIndex = -1;
+        this.clearSelectedLocationMarker();
         this.updateLocationSelection();
+        // Re-enable tracking if we were tracking before
+        if (!this.userInteracted) {
+            this.toggleTracking(true);
+        }
     }
 
     getFilteredLocations() {
@@ -1338,7 +2122,7 @@ class LocationTracker {
             container.innerHTML = '<div class="loading">No locations found</div>';
             return;
         }
-        
+
         container.innerHTML = locations.slice(0, this.historyLimit).map((location, index) => `
             <div class="location-item ${index === 0 ? 'latest' : ''} ${index === this.selectedLocationIndex ? 'selected' : ''}" 
                  onclick="locationTracker.selectLocation(${index})">
@@ -1347,6 +2131,11 @@ class LocationTracker {
                 <div class="timestamp">${new Date(location.timestamp).toLocaleString()}</div>
             </div>
         `).join('');
+        
+        // Clean up any event listeners that might interfere with popups
+        // Remove any orphaned quick-range-btn elements that might have been created
+        const orphanedButtons = container.querySelectorAll('.quick-range-btn');
+        orphanedButtons.forEach(btn => btn.remove());
     }
 
     displayFilteredLocations() {

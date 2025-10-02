@@ -1,10 +1,13 @@
-name: Deploy Feature Branch
+name: Deploy Development Branch
 
 on:
+  push:
+    branches:
+      - 'dev/**'
   workflow_dispatch:
     inputs:
       branch:
-        description: "Feature branch to deploy"
+        description: "Development branch to deploy"
         required: true
         type: string
       deploy_to_EC2_1:
@@ -24,44 +27,119 @@ on:
         type: boolean
         default: false
 
+
 jobs:
-  deploy-feature:
+  deploy-development:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        include:
-          - instance: EC2_1
-            deploy: ${{ github.event.inputs.deploy_to_EC2_1 }}
-          - instance: EC2_2
-            deploy: ${{ github.event.inputs.deploy_to_EC2_2 }}
-          - instance: EC2_3
-            deploy: ${{ github.event.inputs.deploy_to_EC2_3 }}
-          - instance: EC2_4
-            deploy: ${{ github.event.inputs.deploy_to_EC2_4 }}
+        instance: [EC2_1, EC2_2, EC2_3, EC2_4]
       fail-fast: false
     steps:
-      - name: Skip unchecked instances
-        if: matrix.deploy != 'true'
-        run: echo "Skipping ${{ matrix.instance }} - not selected for deployment"
+      - name: Validate inputs for workflow_dispatch
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [ -z "${{ github.event.inputs.branch }}" ]; then
+            echo "ERROR: Branch input is required for manual deployment"
+            exit 1
+          fi
+          # Check if at least one EC2 instance is selected
+          if [ "${{ github.event.inputs.deploy_to_EC2_1 }}" != "true" ] && \
+             [ "${{ github.event.inputs.deploy_to_EC2_2 }}" != "true" ] && \
+             [ "${{ github.event.inputs.deploy_to_EC2_3 }}" != "true" ] && \
+             [ "${{ github.event.inputs.deploy_to_EC2_4 }}" != "true" ]; then
+            echo "ERROR: At least one EC2 instance must be selected for deployment"
+            exit 1
+          fi
+          echo "Input validation passed: branch=${{ github.event.inputs.branch }}"
 
-      - name: Cleanup feature branch deployment
-        if: matrix.deploy == 'true'
+      - name: Determine deployment
+        id: should_deploy
+        run: |
+          echo "Event: ${{ github.event_name }}"
+          echo "Matrix instance: ${{ matrix.instance }}"
+          echo "Matrix deploy: ${{ matrix.deploy }}"
+          if [ "${{ github.event_name }}" = "push" ]; then
+            case "${{ github.ref_name }}" in
+              "dev/cesar")
+                if [ "${{ matrix.instance }}" = "EC2_1" ]; then
+                  echo "deploy=true" >> $GITHUB_OUTPUT
+                  echo "branch=dev/cesar" >> $GITHUB_OUTPUT
+                  echo "Deploying dev/cesar to EC2_1 (triggered by push)"
+                else
+                  echo "deploy=false" >> $GITHUB_OUTPUT
+                  echo "Skipping ${{ matrix.instance }} for dev/cesar push"
+                fi
+                ;;
+              "dev/Barrios")
+                if [ "${{ matrix.instance }}" = "EC2_2" ]; then
+                  echo "deploy=true" >> $GITHUB_OUTPUT
+                  echo "branch=dev/Barrios" >> $GITHUB_OUTPUT
+                  echo "Deploying dev/Barrios to EC2_2 (triggered by push)"
+                else
+                  echo "deploy=false" >> $GITHUB_OUTPUT
+                  echo "Skipping ${{ matrix.instance }} for dev/Barrios push"
+                fi
+                ;;
+              "dev/uribe")
+                if [ "${{ matrix.instance }}" = "EC2_3" ]; then
+                  echo "deploy=true" >> $GITHUB_OUTPUT
+                  echo "branch=dev/uribe" >> $GITHUB_OUTPUT
+                  echo "Deploying dev/uribe to EC2_3 (triggered by push)"
+                else
+                  echo "deploy=false" >> $GITHUB_OUTPUT
+                  echo "Skipping ${{ matrix.instance }} for dev/uribe push"
+                fi
+                ;;
+              "dev/carmona")
+                if [ "${{ matrix.instance }}" = "EC2_4" ]; then
+                  echo "deploy=true" >> $GITHUB_OUTPUT
+                  echo "branch=dev/carmona" >> $GITHUB_OUTPUT
+                  echo "Deploying dev/carmona to EC2_4 (triggered by push)"
+                else
+                  echo "deploy=false" >> $GITHUB_OUTPUT
+                  echo "Skipping ${{ matrix.instance }} for dev/carmona push"
+                fi
+                ;;
+              *)
+                echo "deploy=false" >> $GITHUB_OUTPUT
+                echo "Unknown dev branch: ${{ github.ref_name }}"
+                ;;
+            esac
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "deploy=${{ matrix.deploy }}" >> $GITHUB_OUTPUT
+            echo "branch=${{ github.event.inputs.branch }}" >> $GITHUB_OUTPUT
+            echo "Manual deployment for branch: ${{ github.event.inputs.branch }} to ${{ matrix.instance }} (deploy: ${{ matrix.deploy }})"
+          else
+            echo "deploy=false" >> $GITHUB_OUTPUT
+            echo "Unknown event type, skipping deployment"
+          fi
+          echo "Final deploy decision: ${{ steps.should_deploy.outputs.deploy }}"
+          echo "Selected branch: ${{ steps.should_deploy.outputs.branch }}"
+
+      - name: Skip unchecked instances
+        if: steps.should_deploy.outputs.deploy != 'true'
+        run: |
+          echo "Skipping ${{ matrix.instance }} - not selected for deployment (deploy: ${{ steps.should_deploy.outputs.deploy }})"
+
+      - name: Cleanup development branch deployment
+        if: steps.should_deploy.outputs.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
           username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
-            branch="${{ github.event.inputs.branch }}"
-            safe_branch="${{ steps.prepare.outputs.safe_branch }}"
+            branch="${{ steps.should_deploy.outputs.branch }}"
+            safe_branch=$(echo "$branch" | tr '/' '-' | tr '[:upper:]' '[:lower:]')
             container_name="location-tracker-${safe_branch}"
-            nginx_location="/test/$branch"
+            nginx_location="/test"
             
-            echo "=== Cleaning up feature branch deployment: $branch ==="
+            echo "=== Cleaning up development branch deployment: $branch ==="
             echo "Container name: $container_name"
             echo "Nginx location: $nginx_location"
             
-            # Stop and remove feature container
+            # Stop and remove dev container
             echo "Stopping and removing Docker container..."
             if docker ps -a --format '{{.Names}}' | grep -q "^${container_name}$"; then
               echo "Found container: $container_name"
@@ -72,7 +150,7 @@ jobs:
               echo "Container $container_name not found (already cleaned up)"
             fi
             
-            # Remove feature image
+            # Remove dev image
             echo "Removing Docker image..."
             if docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "^location-tracker:${safe_branch}$"; then
               echo "Found image: location-tracker:${safe_branch}"
@@ -88,8 +166,8 @@ jobs:
             
             # Remove the modular nginx configuration file
             echo "Removing nginx configuration file..."
-            sudo rm -f /etc/nginx/conf.d/location-tracker/feature-${safe_branch}.conf
-            echo "Feature branch nginx configuration removed"
+            sudo rm -f /etc/nginx/conf.d/location-tracker/dev-${safe_branch}.conf
+            echo "Development branch nginx configuration removed"
             
             # Reload nginx to apply changes
             if sudo nginx -t; then
@@ -100,81 +178,50 @@ jobs:
               sudo nginx -t
             fi
             
-            # Check if port 8082 is still in use
-            echo "Checking if port 8082 is still in use..."
-            if sudo lsof -i :8082 2>/dev/null; then
-              echo "WARNING: Port 8082 still in use by:"
-              sudo lsof -i :8082
+            # Check if port 8081 is still in use
+            echo "Checking if port 8081 is still in use..."
+            if sudo lsof -i :8081 2>/dev/null; then
+              echo "WARNING: Port 8081 still in use by:"
+              sudo lsof -i :8081
               echo "Attempting to terminate processes..."
-              sudo lsof -i :8082 | awk 'NR>1 {print $2}' | xargs -r sudo kill -9 || echo "Failed to terminate some processes"
+              sudo lsof -i :8081 | awk 'NR>1 {print $2}' | xargs -r sudo kill -9 || echo "Failed to terminate some processes"
             else
-              echo "✅ Port 8082 is now free"
+              echo "✅ Port 8081 is now free"
             fi
             
-            # Check if port 5053 is still in use
-            echo "Checking if port 5053 is still in use..."
-            if sudo lsof -i :5053 2>/dev/null; then
-              echo "WARNING: Port 5053 still in use by:"
-              sudo lsof -i :5053
+            # Check if port 5052 is still in use  
+            echo "Checking if port 5052 is still in use..."
+            if sudo lsof -i :5052 2>/dev/null; then
+              echo "WARNING: Port 5052 still in use by:"
+              sudo lsof -i :5052
               echo "Attempting to terminate processes..."
-              sudo lsof -i :5053 | awk 'NR>1 {print $2}' | xargs -r sudo kill -9 || echo "Failed to terminate some processes"
+              sudo lsof -i :5052 | awk 'NR>1 {print $2}' | xargs -r sudo kill -9 || echo "Failed to terminate some processes"
             else
-              echo "✅ Port 5053 is now free"
+              echo "✅ Port 5052 is now free"
             fi
             
-            # Clean up database entries for this instance if possible
-            echo "Checking for database cleanup opportunities..."
-            if docker ps --format '{{.Names}}' | grep -q "^location-tracker-main$"; then
-              echo "Main container is running, attempting to clean leader election entries..."
-              # Try to remove any stale leader election entries for this instance
-              main_container_id=$(docker ps --format '{{.ID}}' --filter "name=location-tracker-main")
-              if [ ! -z "$main_container_id" ]; then
-                docker exec $main_container_id sh -c '
-                  if command -v psql >/dev/null; then
-                    echo "Cleaning up potential stale leader election entries..."
-                    # Remove any entries older than 1 minute (they should be refreshed every 5 seconds)
-                    PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c "DELETE FROM leader_election WHERE last_heartbeat < NOW() - INTERVAL '\''1 minute'\'';" || echo "Could not clean leader election table"
-                  fi
-                ' || echo "Could not access database for cleanup"
-              fi
-            else
-              echo "Main container not running, skipping database cleanup"
-            fi
-            
-            echo "=== Cleanup Summary ==="
-            echo "✅ Docker container stopped and removed"
-            echo "✅ Docker image removed"
-            echo "✅ Nginx configuration file removed"
-            echo "✅ Ports freed"
-            echo "✅ Temporary files cleaned"
-            echo ""
-            echo "Feature branch '$branch' has been completely cleaned up from ${{ matrix.instance }}"
-            echo "Configuration is ready for future deploy-feature runs"
-            
-            # Show current running containers
-            echo "=== Current Running Location Tracker Containers ==="
-            docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep location-tracker || echo "No location tracker containers running"
+            echo "Development cleanup completed"
 
       - uses: actions/checkout@v4
-        if: matrix.deploy == 'true'
+        if: steps.should_deploy.outputs.deploy == 'true'
         with:
-          ref: ${{ github.event.inputs.branch }}
+          ref: ${{ steps.should_deploy.outputs.branch }}
 
       - name: Set safe branch name and instance info
-        if: matrix.deploy == 'true'
+        if: steps.should_deploy.outputs.deploy == 'true'
         id: prepare
         run: |
-          branch="${{ github.event.inputs.branch }}"
+          branch="${{ steps.should_deploy.outputs.branch }}"
           safe_branch=$(echo "$branch" | tr '/' '-' | tr '[:upper:]' '[:lower:]')
           echo "safe_branch=$safe_branch" >> $GITHUB_OUTPUT
           echo "Branch: $branch -> Safe: $safe_branch"
           echo "Instance: ${{ matrix.instance }}"
 
       - name: Modify HTML with instance name
-        if: matrix.deploy == 'true'
+        if: steps.should_deploy.outputs.deploy == 'true'
         run: |
           instance_name="${{ secrets[format('{0}_PAGE_NAME', matrix.instance)] }}"
-          branch="${{ github.event.inputs.branch }}"
+          branch="${{ steps.should_deploy.outputs.branch }}"
           
           # Default to matrix.instance if secret is not set
           if [ -z "$instance_name" ]; then
@@ -190,17 +237,17 @@ jobs:
           sed -i "s|<title>Real-time Location Tracker</title>|<title>$instance_name ($branch)</title>|g" ./static/index.html
           
           # Also update the h1 header to show the instance
-          sed -i "s|<h1>🌍 Real-time Location Tracker</h1>|<h1>🌍 $instance_name ($branch)</h1>|g" ./static/index.html
+          sed -i "s|<h1>🌍 Real-time Location Tracker</h1>|<h1>🌍 $instance_name (DEV)</h1>|g" ./static/index.html
           
           echo "HTML modifications completed"
 
       - name: Build Docker image
-        if: matrix.deploy == 'true'
+        if: steps.should_deploy.outputs.deploy == 'true'
         run: |
-          branch="${{ github.event.inputs.branch }}"
+          branch="${{ steps.should_deploy.outputs.branch }}"
           safe_branch="${{ steps.prepare.outputs.safe_branch }}"
-          base_path="/test/$branch"
-          echo "Building Docker image for branch: $branch with BASE_PATH: $base_path"
+          base_path="/test"
+          echo "Building Docker image for dev branch: $branch with BASE_PATH: $base_path"
           docker build \
             --build-arg VERSION=${safe_branch}-$(git rev-parse --short HEAD) \
             --build-arg BASE_PATH="$base_path" \
@@ -209,8 +256,8 @@ jobs:
           docker save location-tracker:${safe_branch} > location-tracker-${safe_branch}.tar
           echo "Docker image saved: location-tracker-${safe_branch}.tar"
 
-      - name: Stop existing feature container
-        if: matrix.deploy == 'true'
+      - name: Stop existing dev container
+        if: steps.should_deploy.outputs.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
@@ -219,33 +266,33 @@ jobs:
           script: |
             safe_branch="${{ steps.prepare.outputs.safe_branch }}"
             container_name="location-tracker-${safe_branch}"
-            echo "Cleaning up existing feature deployment: $container_name"
+            echo "Cleaning up existing dev deployment: $container_name"
             
-            # Stop and remove existing feature container
+            # Stop and remove existing dev container
             if docker ps -a --format '{{.Names}}' | grep -q "^${container_name}$"; then
               echo "Stopping existing container: $container_name"
               docker stop $container_name || echo "Container was not running"
               docker rm $container_name || echo "Failed to remove container"
             fi
             
-            # Remove existing feature image
+            # Remove existing dev image
             if docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "^location-tracker:${safe_branch}$"; then
               echo "Removing old image: location-tracker:${safe_branch}"
               docker rmi location-tracker:${safe_branch} || echo "Failed to remove image"
             fi
             
-            # Check for and free port 8082 (feature port)
-            if sudo lsof -i :8082 2>/dev/null; then
-              echo "Found processes using port 8082, attempting to terminate..."
-              sudo lsof -i :8082 | awk 'NR>1 {print $2}' | xargs -r sudo kill -9 || echo "Failed to terminate some processes"
+            # Check for and free port 8081 (dev port)
+            if sudo lsof -i :8081 2>/dev/null; then
+              echo "Found processes using port 8081, attempting to terminate..."
+              sudo lsof -i :8081 | awk 'NR>1 {print $2}' | xargs -r sudo kill -9 || echo "Failed to terminate some processes"
               sleep 2
             fi
             
             mkdir -p /home/ec2-user/certs
-            echo "Feature cleanup completed"
+            echo "Dev cleanup completed"
 
       - name: Upload Docker image
-        if: matrix.deploy == 'true'
+        if: steps.should_deploy.outputs.deploy == 'true'
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
@@ -255,7 +302,7 @@ jobs:
           target: /tmp/
 
       - name: Deploy SSL certificates
-        if: matrix.deploy == 'true'
+        if: steps.should_deploy.outputs.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
@@ -264,43 +311,43 @@ jobs:
           script: |
             mkdir -p /home/ec2-user/certs
             if [ -n "${{ secrets[format('{0}_SSL_CERT', matrix.instance)] }}" ]; then
-              echo "Deploying SSL certificate for feature branch..."
+              echo "Deploying SSL certificate for development branch..."
               echo "${{ secrets[format('{0}_SSL_CERT', matrix.instance)] }}" > /home/ec2-user/certs/server.crt
               chmod 644 /home/ec2-user/certs/server.crt
             fi
             if [ -n "${{ secrets[format('{0}_SSL_KEY', matrix.instance)] }}" ]; then
-              echo "Deploying SSL private key for feature branch..."
+              echo "Deploying SSL private key for development branch..."
               echo "${{ secrets[format('{0}_SSL_KEY', matrix.instance)] }}" > /home/ec2-user/certs/server.key
               chmod 600 /home/ec2-user/certs/server.key
             fi
 
-      - name: Update modular Nginx configuration with feature branch
-        if: matrix.deploy == 'true'
+      - name: Update modular Nginx configuration with development branch
+        if: steps.should_deploy.outputs.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
           username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
-            branch="${{ github.event.inputs.branch }}"
+            branch="${{ steps.should_deploy.outputs.branch }}"
             safe_branch="${{ steps.prepare.outputs.safe_branch }}"
-            nginx_location="/test/$branch"
+            nginx_location="/test"
             
-            echo "Creating modular configuration for feature branch: $branch"
+            echo "Creating modular configuration for development branch: $branch"
             echo "Safe branch name: $safe_branch"
             echo "Nginx location: $nginx_location"
             
             # Ensure the modular configuration directory exists
             sudo mkdir -p /etc/nginx/conf.d/location-tracker
             
-            # Remove any existing feature configuration for this branch
-            sudo rm -f /etc/nginx/conf.d/location-tracker/feature-${safe_branch}.conf
+            # Remove ALL existing dev configurations (only one dev branch can run at /dev)
+            sudo rm -f /etc/nginx/conf.d/location-tracker/dev-*.conf
             
-            # Create feature branch configuration file
-            cat > /tmp/feature-${safe_branch}.conf << EOF
-            # Configuration for feature branch: $branch
+            # Create development branch configuration file
+            cat > /tmp/dev-${safe_branch}.conf << EOF
+            # Configuration for development branch: $branch
             location $nginx_location/ {
-                proxy_pass http://127.0.0.1:8082/;
+                proxy_pass http://127.0.0.1:8081/;
                 proxy_http_version 1.1;
                 proxy_set_header Upgrade \$http_upgrade;
                 proxy_set_header Connection 'upgrade';
@@ -312,7 +359,7 @@ jobs:
             }
 
             location $nginx_location/ws {
-                proxy_pass http://127.0.0.1:8082/ws;
+                proxy_pass http://127.0.0.1:8081/ws;
                 proxy_http_version 1.1;
                 proxy_set_header Upgrade \$http_upgrade;
                 proxy_set_header Connection "Upgrade";
@@ -324,38 +371,38 @@ jobs:
             EOF
             
             # Move the configuration to the nginx directory
-            sudo mv /tmp/feature-${safe_branch}.conf /etc/nginx/conf.d/location-tracker/feature-${safe_branch}.conf
+            sudo mv /tmp/dev-${safe_branch}.conf /etc/nginx/conf.d/location-tracker/dev-${safe_branch}.conf
             
             # Test configuration
             echo "Testing nginx configuration..."
             if sudo nginx -t; then
               echo "Nginx configuration test passed"
               sudo systemctl reload nginx
-              echo "Feature branch configuration added successfully"
+              echo "Development branch configuration added successfully"
               
               # Verify the configuration was applied
-              echo "Verifying configuration contains feature branch:"
-              if sudo test -f /etc/nginx/conf.d/location-tracker/feature-${safe_branch}.conf; then
-                echo "✅ Feature branch configuration file created"
-                sudo ls -la /etc/nginx/conf.d/location-tracker/feature-*.conf
+              echo "Verifying configuration contains development branch:"
+              if sudo test -f /etc/nginx/conf.d/location-tracker/dev-${safe_branch}.conf; then
+                echo "✅ Development branch configuration file created"
+                sudo ls -la /etc/nginx/conf.d/location-tracker/dev-*.conf
               else
-                echo "❌ Feature branch configuration file NOT found"
+                echo "❌ Development branch configuration file NOT found"
               fi
             else
               echo "ERROR: Nginx configuration test failed"
               sudo nginx -t
               exit 1
             fi
-
+            
       - name: Load and start Docker container
-        if: matrix.deploy == 'true'
+        if: steps.should_deploy.outputs.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
           username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
-            branch="${{ github.event.inputs.branch }}"
+            branch="${{ steps.should_deploy.outputs.branch }}"
             safe_branch="${{ steps.prepare.outputs.safe_branch }}"
             container_name="location-tracker-${safe_branch}"
             echo "Loading and starting Docker container: $container_name"
@@ -372,19 +419,19 @@ jobs:
             docker run -d \
               --name $container_name \
               --restart unless-stopped \
-              -p 8082:8080 \
-              -p 5053:5053/udp \
+              -p 8081:8080 \
+              -p 5052:5052/udp \
               -e DB_HOST="${{ secrets[format('{0}_DB_HOST', matrix.instance)] }}" \
               -e DB_NAME="${{ secrets[format('{0}_DB_NAME', matrix.instance)] }}" \
               -e DB_USER="${{ secrets[format('{0}_DB_USER', matrix.instance)] }}" \
               -e DB_PASSWORD="${{ secrets[format('{0}_DB_PASSWORD', matrix.instance)] }}" \
               -e DB_SSLMODE=require \
               -e PORT=8080 \
-              -e UDP_PORT=5053 \
+              -e UDP_PORT=5052 \
               -e DOMAIN="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}" \
               -e AUTO_TLS=false \
               -e DISABLE_TLS=true \
-              -e BASE_PATH="/test/$branch" \
+              -e BASE_PATH="/test" \
               location-tracker:${safe_branch}
             
             echo "Waiting for container to start..."
@@ -401,14 +448,14 @@ jobs:
             rm -f /tmp/location-tracker-${safe_branch}.tar
 
       - name: Health check and verification
-        if: matrix.deploy == 'true'
+        if: steps.should_deploy.outputs.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
           username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
-            branch="${{ github.event.inputs.branch }}"
+            branch="${{ steps.should_deploy.outputs.branch }}"
             safe_branch="${{ steps.prepare.outputs.safe_branch }}"
             container_name="location-tracker-${safe_branch}"
             instance_name="${{ secrets[format('{0}_INSTANCE_NAME', matrix.instance)] }}"
@@ -420,23 +467,23 @@ jobs:
             
             echo "=== Final Health Check ==="
             echo "Instance: $instance_name"
-            echo "Feature branch: $branch"
+            echo "Development branch: $branch"
             echo "Container: $container_name"
             
             max_attempts=5
             attempt=1
             while [ $attempt -le $max_attempts ]; do
               echo "Health check attempt $attempt/$max_attempts..."
-              if curl -f -s http://localhost:8082/api/health; then
+              if curl -f -s http://localhost:8081/api/health; then
                 echo "Health check PASSED"
-                echo "=== Feature Branch Deployment Successful ==="
+                echo "=== Development Branch Deployment Successful ==="
                 echo "Instance: $instance_name"
-                echo "Feature branch: $branch"
+                echo "Development branch: $branch"
                 echo "Container: $container_name"
                 if [ -f /etc/ssl/certs/location-tracker.crt ]; then
-                  echo "Public URL: https://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch"
+                  echo "Public URL: https://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test"
                 else
-                  echo "Public URL: http://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test/$branch"
+                  echo "Public URL: http://${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}/test"
                 fi
                 exit 0
               else
