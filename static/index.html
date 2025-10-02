@@ -973,10 +973,10 @@ class LocationTracker {
             if (!this.suppressUserInteraction) this.handleUserInteraction();
         });
 
-        this.map.on('load', () => {
+        this.map.on('load',async () => {
             this.initializeRouteLine();
             this.routeCoords = this.locations.map(loc => [loc.longitude, loc.latitude]);
-            this.updateRouteLine();
+            await this.updateRouteLine();
             console.log('Map loaded successfully');
         });
 
@@ -1103,13 +1103,35 @@ class LocationTracker {
         });
     }
 
-    updateRouteLine() {
+    async getSnappedRoute(coords) {
+        if (coords.length < 2) return coords;
+        const osrmBaseUrl = 'https://router.project-osrm.org/route/v1/driving/';
+        const strCoords = coords.map(c => c.join(',')).join(';');
+        const url = `${osrmBaseUrl}${strCoords}?overview=full&geometries=geojson`;
+        try {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('OSRM routing error');
+            const data = await response.json();
+            if (data && data.routes && data.routes[0] && data.routes[0].geometry) {
+                return data.routes[0].geometry.coordinates;
+            }
+        } catch (e) {
+            console.error('Routing error:', e);
+        }
+        return coords;
+    }
+
+    async updateRouteLine() {
         if (!this.map.getSource('route')) return;
+        let coordsToDraw = this.routeCoords;
+        if (coordsToDraw.length >= 2) {
+            coordsToDraw = await this.getSnappedRoute(coordsToDraw);
+        }
         this.map.getSource('route').setData({
             type: 'Feature',
             geometry: {
                 type: 'LineString',
-                coordinates: this.routeCoords
+                coordinates: coordsToDraw
             }
         });
     }
@@ -1711,7 +1733,7 @@ class LocationTracker {
             this.showError('Failed to load historical data');
         }
     }
-    updateRouteForDevice() {
+    async updateRouteForDevice() {
         if (this.selectedDevice) {
             this.routeCoords = this.locations
                 .filter(loc => loc.device_id === this.selectedDevice)
@@ -1719,7 +1741,7 @@ class LocationTracker {
         } else {
             this.routeCoords = this.locations.map(loc => [loc.longitude, loc.latitude]);
         }
-        this.updateRouteLine();
+        await this.updateRouteLine();
         // Only show trace markers in history mode
         if (this.isHistoryMode) {
             this.clearTraceMarkers();
@@ -1749,17 +1771,17 @@ class LocationTracker {
         }
     }
 
-    updateRouteForFiltered() {
+    async updateRouteForFiltered() {
         // Only use filtered locations for historical mode
         if (!this.isHistoryMode || this.filteredLocations.length === 0) {
             this.routeCoords = [];
-            this.updateRouteLine();
+            await this.updateRouteLine();
             this.clearTraceMarkers();
             return;
         }
 
         this.routeCoords = this.filteredLocations.map(loc => [loc.longitude, loc.latitude]);
-        this.updateRouteLine();
+        await this.updateRouteLine();
 
         this.clearTraceMarkers();
         this.filteredLocations.forEach((loc, index) => {
