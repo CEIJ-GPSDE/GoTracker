@@ -349,6 +349,8 @@ func (us *UDPSniffer) parsePacket(data []byte) *LocationPacket {
 	}
 }
 
+// store location
+
 func (us *UDPSniffer) storeLocation(packet *LocationPacket) error {
 	query := `
 		INSERT INTO locations (device_id, latitude, longitude, timestamp)
