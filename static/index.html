@@ -920,7 +920,8 @@ class LocationTracker {
         this.liveUpdateQueue = []; 
         this.persistedTimeFilter = null;
         this.selectedLocationMarker = null; // Add this line
-
+        this.routePointMarkers = [];
+        
         this.config = {
             apiBaseUrl: window.location.origin + ('${BASE_PATH}' || ''),
             wsUrl: `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}${'${BASE_PATH}' || ''}/ws`,
@@ -1134,6 +1135,8 @@ class LocationTracker {
                 coordinates: coordsToDraw
             }
         });
+
+        this.showRoutePointMarkers(coordsToDraw); // Show points
     }
 
     createTraceMarker(location, isStart = false, isEnd = false) {
@@ -2177,6 +2180,30 @@ class LocationTracker {
             </div>
         `).join('');
     }
+
+    clearRoutePointMarkers() {
+    this.routePointMarkers.forEach(marker => marker.remove());
+    this.routePointMarkers = [];
+}
+
+showRoutePointMarkers(coords) {
+    this.clearRoutePointMarkers();
+    coords.forEach((coord, idx) => {
+        const el = document.createElement('div');
+        el.className = 'trace-marker';
+        // To number the points:
+        // el.innerText = idx+1;
+
+        // Function: distinguish first and last points
+        if(idx === 0) el.classList.add('start-point');
+        if(idx === coords.length-1) el.classList.add('end-point');
+
+        const marker = new maplibregl.Marker({element: el})
+            .setLngLat(coord)
+            .addTo(this.map);
+        this.routePointMarkers.push(marker);
+    });
+}
 
     updateStatistics() {
         document.getElementById('total-locations').textContent = this.locations.length;
