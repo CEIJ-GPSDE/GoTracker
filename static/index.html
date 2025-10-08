@@ -128,6 +128,52 @@
         .time-filter-indicator.no-filter {
             background: rgba(156, 163, 175, 0.95);
         }
+
+        .mode-indicator {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(10px);
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            z-index: 1000;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+            border: 2px solid;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .mode-indicator.live-mode {
+            border-color: #ef4444;
+            color: #dc2626;
+        }
+
+        .mode-indicator.history-mode {
+            border-color: #3b82f6;
+            color: #2563eb;
+        }
+
+        .mode-indicator-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .mode-indicator.live-mode .mode-indicator-dot {
+            background: #ef4444;
+        }
+
+        .mode-indicator.history-mode .mode-indicator-dot {
+            background: #3b82f6;
+        }
+
         .menu-toggle-btn:hover {
             box-shadow: 0 8px 20px rgba(139, 92, 246, 0.4);
         }
@@ -769,6 +815,10 @@
                 </button>
             </div>
             <div id="map"></div>
+            <div class="mode-indicator live-mode" id="mode-indicator">
+                <div class="mode-indicator-dot"></div>
+                <span>🔴 LIVE MODE</span>
+            </div>
         </div>
     </div>
 </div>
@@ -784,7 +834,6 @@
             <div class="menu-tabs">
                 <button class="tab-button active" data-tab="controls">⚙️ Controls</button>
                 <button class="tab-button" data-tab="locations">📍 Locations</button>
-                <button class="tab-button" data-tab="stats">📊 Statistics</button>
             </div>
             
             <!-- Controls Tab -->
@@ -803,7 +852,7 @@
                     </div>
                     <div class="control-item">
                       <label style="display:flex; align-items:center; gap:6px; cursor:pointer; width:100%;">
-                        <input type="checkbox" id="toggle-trace-dots">
+                        <input type="checkbox" id="toggle-trace-dots" checked>
                         <span>Show trace dots</span>
                       </label>
                     </div>
@@ -821,8 +870,8 @@
                 </div>
             </div>
             
-            <!-- Statistics Tab -->
-            <div class="tab-content" id="stats-tab">
+            <!-- Statistics Tab - Hidden but kept for stats polling -->
+            <div class="tab-content" id="stats-tab" style="display: none !important;">
                 <div class="card">
                     <div class="card-body stats">
                         <div class="stat-item">
@@ -916,7 +965,7 @@ class LocationTracker {
         this.timeFilter = null;
         this.suppressUserInteraction = false;
         this.traceMarkers = [];
-        this.showTraceDots = false;
+        this.showTraceDots = true;
         this.liveUpdateQueue = []; 
         this.persistedTimeFilter = null;
         this.selectedLocationMarker = null; // Add this line
@@ -1201,11 +1250,14 @@ class LocationTracker {
         const historyConfigBtn = document.getElementById('history-config-btn');
         const liveModeBtn = document.getElementById('live-mode-btn');
         const trackBtn = document.getElementById('track-latest-btn');
+        const modeIndicator = document.getElementById('mode-indicator');
         // Clear any selected location markers when switching modes
         this.clearSelectedLocationMarker();
         this.selectedLocationIndex = -1;
         if (this.isHistoryMode) {        
             // Hide history mode button, show config and live mode buttons
+            modeIndicator.className = 'mode-indicator history-mode';
+            modeIndicator.innerHTML = '<div class="mode-indicator-dot"></div><span>📅 HISTORY MODE</span>';
             historyBtn.style.display = 'none';
             historyConfigBtn.style.display = 'flex';
             liveModeBtn.style.display = 'flex';
@@ -1237,7 +1289,9 @@ class LocationTracker {
             if (this.timeFilter) {
                 this.persistedTimeFilter = { ...this.timeFilter };
             }
-           
+            modeIndicator.className = 'mode-indicator live-mode';
+            modeIndicator.innerHTML = '<div class="mode-indicator-dot"></div><span>🔴 LIVE MODE</span>';
+
             // Show history mode button, hide config and live mode buttons
             historyBtn.style.display = 'flex';
             historyConfigBtn.style.display = 'none';
@@ -1734,17 +1788,19 @@ class LocationTracker {
 
             this.applyTraceDotsVisibility();
         } else {
-            // In live mode, create trace markers for the trace dots functionality
+            // In live mode, create trace markers with start/end indicators
             this.clearTraceMarkers();
             const locs = this.selectedDevice
                 ? this.locations.filter(loc => loc.device_id === this.selectedDevice)
                 : this.locations;
-
+        
             locs.forEach((loc, index) => {
-                // Don't mark as start/end in live mode, just regular trace markers
-                this.createTraceMarker(loc, false, false);
+                const isStart = index === locs.length - 1; // oldest (last in array) - START
+                const isEnd = index === 0; // newest (first in array) - END (handled by pulse marker)
+                // Mark start point but not end (end is handled by the pulse marker)
+                this.createTraceMarker(loc, isStart, false);
             });
-
+        
             this.applyTraceDotsVisibility();
         }
     }

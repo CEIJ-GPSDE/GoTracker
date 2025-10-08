@@ -82,10 +82,10 @@ func NewDatabase(config *Config) (*Database, error) {
 	}
 
 	// Set connection pool settings
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
+	db.SetMaxOpenConns(50)
+	db.SetMaxIdleConns(10)
 	db.SetConnMaxLifetime(5 * time.Minute)
-
+	db.SetConnMaxIdleTime(2 * time.Minute)
 	return &Database{db}, nil
 }
 
@@ -218,9 +218,9 @@ func (h *WebSocketHub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 			h.unregister <- conn
 		}()
 
-		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		conn.SetReadDeadline(time.Now().Add(90 * time.Second))
 		conn.SetPongHandler(func(string) error {
-			conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+			conn.SetReadDeadline(time.Now().Add(90 * time.Second))
 			return nil
 		})
 
@@ -490,12 +490,12 @@ func (api *APIServer) statsHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Error counting locations: %v", err)
 	}
 
-	err = api.db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", tableName)).Scan(&activeDevices)
+	err = api.db.QueryRow(fmt.Sprintf("SELECT COUNT(DISTINCT device_id) FROM %s", tableName)).Scan(&activeDevices)
 	if err != nil {
 		log.Printf("Error counting active devices: %v", err)
 	}
 
-	err = api.db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", tableName)).Scan(&lastUpdate)
+	err = api.db.QueryRow(fmt.Sprintf("SELECT MAX(timestamp) FROM %s", tableName)).Scan(&lastUpdate)
 	if err != nil {
 		log.Printf("Error getting last update: %v", err)
 	}
