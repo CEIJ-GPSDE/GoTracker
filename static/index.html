@@ -728,7 +728,28 @@
           opacity: 1 !important;
           z-index: 1001;
         }
-        /* Add these new styles */
+
+        .direction-arrow {
+            position: absolute;
+            width: 0;
+            height: 0;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-bottom: 10px solid #3b82f6;
+            opacity: 0.7;
+            pointer-events: none;
+            z-index: 999;
+            transition: opacity 0.2s;
+        }
+
+        .direction-arrow.hidden {
+            opacity: 0;
+        }
+
+        .direction-arrow.always-visible {
+            opacity: 0.7 !important;
+        }
+
         .filter-popup {
             position: fixed;
             top: 50%;
@@ -856,6 +877,12 @@
                         <span>Show trace dots</span>
                       </label>
                     </div>
+                    <div class="control-item">
+                      <label style="display:flex; align-items:center; gap:6px; cursor:pointer; width:100%;">
+                        <input type="checkbox" id="toggle-direction-arrows" checked>
+                        <span>Show direction arrows</span>
+                      </label>
+                    </div>
                 </div>
             </div>
             
@@ -966,6 +993,8 @@ class LocationTracker {
         this.suppressUserInteraction = false;
         this.traceMarkers = [];
         this.showTraceDots = true;
+        this.showDirectionArrows = true;
+        this.directionArrows = [];
         this.liveUpdateQueue = []; 
         this.persistedTimeFilter = null;
         this.selectedLocationMarker = null;
@@ -1205,9 +1234,54 @@ class LocationTracker {
         this.traceMarkers.push(marker);
     }
 
+    calculateBearing(lat1, lon1, lat2, lon2) {
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const lat1Rad = lat1 * Math.PI / 180;
+        const lat2Rad = lat2 * Math.PI / 180;
+        
+        const y = Math.sin(dLon) * Math.cos(lat2Rad);
+        const x = Math.cos(lat1Rad) * Math.sin(lat2Rad) -
+                  Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLon);
+        
+        let bearing = Math.atan2(y, x) * 180 / Math.PI;
+        bearing = (bearing + 360) % 360;
+        
+        return bearing;
+    }
+
+    createDirectionArrow(fromLocation, toLocation) {
+        const bearing = this.calculateBearing(
+            fromLocation.latitude, fromLocation.longitude,
+            toLocation.latitude, toLocation.longitude
+        );
+        
+        // Calculate midpoint between the two locations
+        const midLat = (fromLocation.latitude + toLocation.latitude) / 2;
+        const midLng = (fromLocation.longitude + toLocation.longitude) / 2;
+        
+        // Create arrow element
+        const el = document.createElement('div');
+        el.className = 'direction-arrow';
+        el.style.transform = `rotate(${bearing}deg)`;
+        
+        const marker = new maplibregl.Marker({ 
+            element: el,
+            anchor: 'center'
+        })
+        .setLngLat([midLng, midLat])
+        .addTo(this.map);
+
+        this.directionArrows.push(marker);
+    }
+
     clearTraceMarkers() {
         this.traceMarkers.forEach(m => m.remove());
         this.traceMarkers = [];
+    }
+
+    clearDirectionArrows() {
+        this.directionArrows.forEach(m => m.remove());
+        this.directionArrows = [];
     }
 
     initializeTimePickers() {
@@ -1274,6 +1348,7 @@ class LocationTracker {
             // Clear all live markers and route when entering history mode
             this.clearAllMarkers();
             this.clearTraceMarkers();
+            this.clearDirectionArrows(); 
             this.routeCoords = [];
             this.updateRouteLine();
         
@@ -1309,6 +1384,7 @@ class LocationTracker {
             // Clear historical data
             this.clearAllMarkers();
             this.clearTraceMarkers();
+            this.clearDirectionArrows();
             this.filteredLocations = [];
             this.updateTimeFilterIndicator();
         
@@ -1355,7 +1431,10 @@ class LocationTracker {
             this.showTraceDots = e.target.checked;
             this.applyTraceDotsVisibility();
         });
-
+        document.getElementById('toggle-direction-arrows').addEventListener('change', (e) => {
+            this.showDirectionArrows = e.target.checked;
+            this.applyDirectionArrowsVisibility();
+        });
 
         // Device filter
         document.getElementById('device-filter').addEventListener('change', (e) => {
@@ -1404,6 +1483,21 @@ class LocationTracker {
         });
 
         document.getElementById('toggle-trace-dots').checked = this.showTraceDots;
+    }
+
+    applyDirectionArrowsVisibility() {
+        this.directionArrows.forEach(marker => {
+            const el = marker.getElement();
+            if (this.showDirectionArrows) {
+                el.classList.remove('hidden');
+                el.classList.add('always-visible');
+            } else {
+                el.classList.add('hidden');
+                el.classList.remove('always-visible');
+            }
+        });
+    
+        document.getElementById('toggle-direction-arrows').checked = this.showDirectionArrows;
     }
 
     openHistoryConfigPopup() {
@@ -1749,6 +1843,7 @@ class LocationTracker {
 
                 // Clear all existing markers before showing historical data
                 this.clearAllMarkers();
+                this.clearDirectionArrows();
 
                 this.displayFilteredLocations();
                 this.updateRouteForFiltered();
@@ -1776,35 +1871,40 @@ class LocationTracker {
             this.routeCoords = this.locations.map(loc => [loc.longitude, loc.latitude]);
         }
         this.updateRouteLine();
-        // Only show trace markers in history mode
+
+        // Get filtered locations
+        const locs = this.selectedDevice
+            ? this.locations.filter(loc => loc.device_id === this.selectedDevice)
+            : this.locations;
+
+        // Clear existing markers and arrows
+        this.clearTraceMarkers();
+        this.clearDirectionArrows();
+
+        // Create trace markers
         if (this.isHistoryMode) {
-            this.clearTraceMarkers();
-            const locs = this.selectedDevice
-                ? this.locations.filter(loc => loc.device_id === this.selectedDevice)
-                : this.locations;
             locs.forEach((loc, index) => {
                 const isStart = index === locs.length - 1; // oldest (last in array)
                 const isEnd = index === 0; // newest (first in array)
                 this.createTraceMarker(loc, isStart, isEnd);
             });
-
-            this.applyTraceDotsVisibility();
         } else {
             // In live mode, create trace markers with start/end indicators
-            this.clearTraceMarkers();
-            const locs = this.selectedDevice
-                ? this.locations.filter(loc => loc.device_id === this.selectedDevice)
-                : this.locations;
-        
             locs.forEach((loc, index) => {
                 const isStart = index === locs.length - 1; // oldest (last in array) - START
                 const isEnd = index === 0; // newest (first in array) - END (handled by pulse marker)
                 // Mark start point but not end (end is handled by the pulse marker)
                 this.createTraceMarker(loc, isStart, false);
             });
-        
-            this.applyTraceDotsVisibility();
         }
+
+        // Create direction arrows between consecutive points
+        for (let i = 0; i < locs.length - 1; i++) {
+            this.createDirectionArrow(locs[i + 1], locs[i]); // from older to newer
+        }
+
+        this.applyTraceDotsVisibility();
+        this.applyDirectionArrowsVisibility();
     }
 
     updateRouteForFiltered() {
@@ -1813,20 +1913,29 @@ class LocationTracker {
             this.routeCoords = [];
             this.updateRouteLine();
             this.clearTraceMarkers();
+            this.clearDirectionArrows();
             return;
-        }
+        }   
 
         this.routeCoords = this.filteredLocations.map(loc => [loc.longitude, loc.latitude]);
-        this.updateRouteLine();
+        this.updateRouteLine(); 
 
         this.clearTraceMarkers();
+        this.clearDirectionArrows();
+
         this.filteredLocations.forEach((loc, index) => {
             const isStart = index === this.filteredLocations.length - 1; // oldest
             const isEnd = index === 0; // newest
             this.createTraceMarker(loc, isStart, isEnd);
         });
 
+        // Create direction arrows between consecutive points
+        for (let i = 0; i < this.filteredLocations.length - 1; i++) {
+            this.createDirectionArrow(this.filteredLocations[i + 1], this.filteredLocations[i]);
+        }   
+
         this.applyTraceDotsVisibility();
+        this.applyDirectionArrowsVisibility();
     }
 
     fitMapToLocations(locations) {
