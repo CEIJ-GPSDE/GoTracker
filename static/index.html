@@ -1401,73 +1401,79 @@ class LocationTracker {
     }
 
     initializeRouteLine() {
+        // Remove existing route layers and source
         if (this.map.getSource('route')) {
-            this.map.removeLayer('route-line');
+            if (this.map.getLayer('route-line')) {
+                this.map.removeLayer('route-line');
+            }
             this.map.removeSource('route');
         }
-
+        
+        // Remove any existing segment layers
+        for (let i = 0; i < 100; i++) {
+            if (this.map.getLayer(`route-segment-${i}`)) {
+                this.map.removeLayer(`route-segment-${i}`);
+            }
+        }
+        
         this.map.addSource('route', {
             type: 'geojson',
             data: {
-                type: 'Feature',
-                properties: {},
-                geometry: {
-                    type: 'LineString',
-                    coordinates: []
-                }
-            }
-        });
-
-        // Main route line with gradient effect
-        this.map.addLayer({
-            id: 'route-line',
-            type: 'line',
-            source: 'route',
-            layout: {
-                'line-cap': 'round',
-                'line-join': 'round'
-            },
-            paint: {
-                'line-color': '#3b82f6',
-                'line-width': 5,
-                'line-opacity': 0.8,
-                'line-gradient': [
-                    'interpolate',
-                    ['linear'],
-                    ['line-progress'],
-                    0, '#10b981',    // Green at start (oldest)
-                    0.5, '#f59e0b',  // Orange in middle
-                    1, '#ef4444'     // Red at end (newest)
-                ]
+                type: 'FeatureCollection',
+                features: []
             }
         });
     }
-
+    
     updateRouteLine() {
         if (!this.map.getSource('route')) return;
-
+        
         const coordinates = this.routeCoords;
-
+        
         if (coordinates.length < 2) {
-        this.map.getSource('route').setData({
-            type: 'Feature',
-            properties: {},
-            geometry: {
-                type: 'LineString',
-                coordinates: []
+            // Remove all segment layers
+            for (let i = 0; i < 100; i++) {
+                if (this.map.getLayer(`route-segment-${i}`)) {
+                    this.map.removeLayer(`route-segment-${i}`);
+                }
             }
-        });
-        return;
-    }
-
-        // Create segments with progress values for gradient
-        const segments = [];
-        for (let i = 0; i < coordinates.length - 1; i++) {
-            const progress = i / (coordinates.length - 1);
-            segments.push({
+            this.map.getSource('route').setData({
+                type: 'FeatureCollection',
+                features: []
+            });
+            return;
+        }
+        
+        // Create colored segments
+        const features = [];
+        const totalSegments = coordinates.length - 1;
+        
+        for (let i = 0; i < totalSegments; i++) {
+            const progress = i / totalSegments;
+            
+            // Calculate color based on progress (green -> yellow -> red)
+        let color;
+        if (progress < 0.5) {
+            // Green to Orange
+            const localProgress = progress * 2;
+            const r = Math.round(16 + (245 - 16) * localProgress);
+            const g = Math.round(185 - (185 - 158) * localProgress);
+                const b = Math.round(129 - (129 - 11) * localProgress);
+                color = `rgb(${r}, ${g}, ${b})`;
+            } else {
+                // Orange to Red
+                const localProgress = (progress - 0.5) * 2;
+                const r = Math.round(245 + (239 - 245) * localProgress);
+                const g = Math.round(158 - (158 - 68) * localProgress);
+                const b = Math.round(11 + (68 - 11) * localProgress);
+                color = `rgb(${r}, ${g}, ${b})`;
+            }
+            
+            features.push({
                 type: 'Feature',
                 properties: {
-                    progress: progress
+                    color: color,
+                    segmentIndex: i
                 },
                 geometry: {
                     type: 'LineString',
@@ -1475,13 +1481,42 @@ class LocationTracker {
                 }
             });
         }
-
-        // Use a FeatureCollection for gradient support
+        
+        // Remove existing segment layers
+        for (let i = 0; i < 100; i++) {
+            if (this.map.getLayer(`route-segment-${i}`)) {
+                this.map.removeLayer(`route-segment-${i}`);
+            }
+        }
+        
+        // Update source data
         this.map.getSource('route').setData({
             type: 'FeatureCollection',
-            features: segments
+            features: features
         });
-        this.updateRouteLegend();
+        
+        // Add layers for each segment with its specific color
+        features.forEach((feature, index) => {
+            const layerId = `route-segment-${index}`;
+            
+            if (!this.map.getLayer(layerId)) {
+                this.map.addLayer({
+                    id: layerId,
+                    type: 'line',
+                    source: 'route',
+                    filter: ['==', 'segmentIndex', index],
+                    layout: {
+                        'line-cap': 'round',
+                        'line-join': 'round'
+                    },
+                    paint: {
+                        'line-color': feature.properties.color,
+                        'line-width': 5,
+                        'line-opacity': 0.8
+                    }
+                });
+            }
+        });
     }
 
     updateRouteLegend() {
