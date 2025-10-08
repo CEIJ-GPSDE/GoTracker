@@ -731,15 +731,26 @@
 
         .direction-arrow {
             position: absolute;
-            width: 0;
-            height: 0;
-            border-left: 6px solid transparent;
-            border-right: 6px solid transparent;
-            border-bottom: 10px solid #3b82f6;
-            opacity: 0.7;
+            width: 3px;
+            height: 16px;
+            background: #3b82f6;
+            opacity: 0.8;
             pointer-events: none;
             z-index: 999;
             transition: opacity 0.2s;
+        }
+
+        .direction-arrow::before {
+            content: '';
+            position: absolute;
+            top: -6px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-bottom: 8px solid #3b82f6;
         }
 
         .direction-arrow.hidden {
@@ -747,7 +758,7 @@
         }
 
         .direction-arrow.always-visible {
-            opacity: 0.7 !important;
+            opacity: 0.8 !important;
         }
 
         .filter-popup {
@@ -880,13 +891,13 @@
                     <div class="control-item">
                       <label style="display:flex; align-items:center; gap:6px; cursor:pointer; width:100%;">
                         <input type="checkbox" id="toggle-trace-dots" checked>
-                        <span>Show trace dots</span>
+                        <span id="trace-dots-label">Show trace dots</span>
                       </label>
                     </div>
                     <div class="control-item">
                       <label style="display:flex; align-items:center; gap:6px; cursor:pointer; width:100%;">
                         <input type="checkbox" id="toggle-direction-arrows" checked>
-                        <span>Show direction arrows</span>
+                        <span id="direction-arrows-label">Show direction arrows</span>
                       </label>
                     </div>
                 </div>
@@ -1199,8 +1210,8 @@ class LocationTracker {
         document.getElementById('refresh-data-btn').textContent = 
             this.isHistoryMode ? this.t('refreshDataHistorical') : this.t('refreshData');
 
-        document.querySelector('label[for="toggle-trace-dots"] span').textContent = this.t('showTraceDots');
-        document.querySelector('label[for="toggle-direction-arrows"] span').textContent = this.t('showDirectionArrows');
+        document.getElementById('trace-dots-label').textContent = this.t('showTraceDots');
+        document.getElementById('direction-arrows-label').textContent = this.t('showDirectionArrows');
 
         // Update history config popup
         document.querySelector('#history-config-popup .popup-header h2').textContent = this.t('historicalViewConfig');
@@ -1549,7 +1560,7 @@ class LocationTracker {
         if (this.isHistoryMode) {        
             // Hide history mode button, show config and live mode buttons
             modeIndicator.className = 'mode-indicator history-mode';
-            modeIndicator.innerHTML = '<div class="mode-indicator-dot"></div><span>📅 HISTORY MODE</span>';
+            modeIndicator.innerHTML = `<div class="mode-indicator-dot"></div><span>${this.t('historyModeBadge')}</span>`;
             historyBtn.style.display = 'none';
             historyConfigBtn.style.display = 'flex';
             liveModeBtn.style.display = 'flex';
@@ -1580,7 +1591,7 @@ class LocationTracker {
         } else {
             // Update mode indicator
             modeIndicator.className = 'mode-indicator live-mode';
-            modeIndicator.innerHTML = '<div class="mode-indicator-dot"></div><span>🔴 LIVE MODE</span>';
+            modeIndicator.innerHTML = `<div class="mode-indicator-dot"></div><span>${this.t('liveModeBadge')}</span>`;
                 
             // Store current filter before leaving history mode
             if (this.timeFilter) {
@@ -2583,9 +2594,33 @@ class LocationTracker {
     updateConnectionStatus(message, status) {
         const statusElement = document.getElementById('connection-status');
         statusElement.className = `status ${status}`;
-        statusElement.querySelector('span').textContent = message;
-    }
 
+        // Translate common status messages
+        let translatedMessage = message;
+        const translations = {
+            'Connected': this.t('connected'),
+            'Connecting...': this.t('connecting'),
+            'Disconnected': this.t('disconnected'),
+            'Connection Error': this.t('connectionError'),
+            'Connection failed - refresh page': this.t('connectionFailed')
+        };
+
+        // Check if message matches a translatable string
+        if (translations[message]) {
+            translatedMessage = translations[message];
+        } else if (message.includes('Reconnecting in')) {
+            // Handle reconnecting messages with parameters
+            const match = message.match(/Reconnecting in (\d+)s\.\.\. \((\d+)\/(\d+)\)/);
+            if (match) {
+                translatedMessage = this.t('reconnecting')
+                    .replace('{0}', match[1])
+                    .replace('{1}', match[2])
+                    .replace('{2}', match[3]);
+            }
+        }
+
+        statusElement.querySelector('span').textContent = translatedMessage;
+    }
     showError(message) {
         const container = document.getElementById('location-list');
         container.innerHTML = `<div class="error">${message}</div>`;

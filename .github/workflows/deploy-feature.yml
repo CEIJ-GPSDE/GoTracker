@@ -77,9 +77,14 @@ jobs:
           
           # Modify the HTML title to include instance name and branch
           sed -i "s|<title>Real-time Location Tracker</title>|<title>$instance_name ($branch)</title>|g" ./static/index.html
-          
-          # Also update the h1 header to show the instance
+
+          # Update both English and Spanish headers
           sed -i "s|<h1>🌍 Real-time Location Tracker</h1>|<h1>🌍 $instance_name ($branch)</h1>|g" ./static/index.html
+          sed -i "s|<h1>🌍 Rastreador de Ubicación en Tiempo Real</h1>|<h1>🌍 $instance_name ($branch)</h1>|g" ./static/index.html
+
+          # Update the translation object to include instance name
+          sed -i "s|title: \"🌍 Real-time Location Tracker\"|title: \"🌍 $instance_name ($branch)\"|g" ./static/index.html
+          sed -i "s|title: \"🌍 Rastreador de Ubicación en Tiempo Real\"|title: \"🌍 $instance_name ($branch)\"|g" ./static/index.html
           
           echo "HTML modifications completed"
 
