@@ -968,7 +968,13 @@ class LocationTracker {
         this.showTraceDots = true;
         this.liveUpdateQueue = []; 
         this.persistedTimeFilter = null;
-        this.selectedLocationMarker = null; // Add this line
+        this.selectedLocationMarker = null;
+        this.liveUpdateQueue = []; 
+        this.persistedTimeFilter = null;
+        this.selectedLocationMarker = null;
+        this.liveLocations = []; 
+        this.initialDbLocation = null; 
+        this.hasReceivedLiveUpdate = false;
 
         this.config = {
             apiBaseUrl: window.location.origin + ('${BASE_PATH}' || ''),
@@ -1285,38 +1291,34 @@ class LocationTracker {
             }
            
         } else {
+            // Update mode indicator
+            modeIndicator.className = 'mode-indicator live-mode';
+            modeIndicator.innerHTML = '<div class="mode-indicator-dot"></div><span>🔴 LIVE MODE</span>';
+                
             // Store current filter before leaving history mode
             if (this.timeFilter) {
                 this.persistedTimeFilter = { ...this.timeFilter };
             }
-            modeIndicator.className = 'mode-indicator live-mode';
-            modeIndicator.innerHTML = '<div class="mode-indicator-dot"></div><span>🔴 LIVE MODE</span>';
-
+        
             // Show history mode button, hide config and live mode buttons
             historyBtn.style.display = 'flex';
             historyConfigBtn.style.display = 'none';
             liveModeBtn.style.display = 'none';
             trackBtn.style.display = 'flex';
-           
-            // Clear historical data and restore live mode
+        
+            // Clear historical data
             this.clearAllMarkers();
             this.clearTraceMarkers();
             this.filteredLocations = [];
             this.updateTimeFilterIndicator();
-           
-            // Restore live mode display
-            this.updateRouteForDevice();
-            this.displayLocations();
-           
+        
+            // Reset live mode: fetch latest from DB and prepare for live updates
+            this.loadInitialData();
+        
             // Process any queued live updates
             while (this.liveUpdateQueue.length > 0) {
                 const queuedLocation = this.liveUpdateQueue.shift();
                 this.applyLocationUpdate(queuedLocation);
-            }
-           
-            if (this.locations.length > 0) {
-                const latest = this.locations[0];
-                this.updateMapMarker(latest, true);
             }
         }
     
@@ -1907,16 +1909,31 @@ class LocationTracker {
 
     async loadInitialData() {
         try {
-            const response = await fetch(`${this.config.apiBaseUrl}/api/locations/history?limit=${this.historyLimit}`);
+            // In live mode, only fetch the latest location from DB
+            const limit = this.isHistoryMode ? this.historyLimit : 1;
+            const response = await fetch(`${this.config.apiBaseUrl}/api/locations/history?limit=${limit}`);
             if (response.ok) {
                 const locations = await response.json();
-                this.locations = locations || [];
+
+                if (this.isHistoryMode) {
+                    // History mode: load all requested locations
+                    this.locations = locations || [];
+                } else {
+                    // Live mode: only store the initial DB location
+                    this.initialDbLocation = locations.length > 0 ? locations[0] : null;
+                    this.liveLocations = [];
+                    this.hasReceivedLiveUpdate = false;
+
+                    // Set locations to show only the initial one
+                    this.locations = this.initialDbLocation ? [this.initialDbLocation] : [];
+                }
+
                 this.updateDevicesList();
                 this.displayLocations();
                 this.updateStatistics();
 
                 // Update route and create trace markers
-                this.updateRouteForDevice(); // This will create trace markers
+                this.updateRouteForDevice();
 
                 if (this.locations.length > 0) {
                     this.updateMapMarker(this.locations[0], true);
@@ -1995,18 +2012,31 @@ class LocationTracker {
     }
 
     applyLocationUpdate(location) {
-        this.locations.unshift(location);
-        
-        // prevent uncontrolled growth
-        if (this.locations.length > this.historyLimit * 2) {
-            this.locations = this.locations.slice(0, this.historyLimit);
+        // Mark that we've received at least one live update
+        if (!this.hasReceivedLiveUpdate) {
+            this.hasReceivedLiveUpdate = true;
+            // Clear the initial DB location from display
+            this.locations = [];
+            this.clearAllMarkers();
+            this.clearTraceMarkers();
         }
-    
+
+        // Add to live locations
+        this.liveLocations.unshift(location);
+
+        // Prevent uncontrolled growth of live locations
+        if (this.liveLocations.length > this.historyLimit) {
+            this.liveLocations = this.liveLocations.slice(0, this.historyLimit);
+        }
+
+        // Update locations to show live data
+        this.locations = [...this.liveLocations];
+
         this.devices.add(location.device_id);
         this.updateDevicesList();
         this.filterAndDisplayLocations();
         this.updateStatistics();
-    
+
         if (this.selectedDevice === '' || this.selectedDevice === location.device_id) {
             this.updateMapMarker(location, !this.isHistoryMode);
             this.updateRouteForDevice(); // This will recreate trace markers
@@ -2174,6 +2204,9 @@ class LocationTracker {
     displayLocations(locations = this.locations) {
         const container = document.getElementById('location-list');
         
+        // In live mode, locations will only contain live updates after first update,
+        // or the initial DB location before any updates
+
         if (locations.length === 0) {
             container.innerHTML = '<div class="loading">No locations found</div>';
             return;
@@ -2235,6 +2268,9 @@ class LocationTracker {
             if (this.isHistoryMode && this.timeFilter) {
                 await this.loadHistoricalData();
             } else {
+                // In live mode, reset to initial state
+                this.liveLocations = [];
+                this.hasReceivedLiveUpdate = false;
                 await this.loadInitialData();
             }
             console.log('Data refreshed successfully');
