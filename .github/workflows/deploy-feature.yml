@@ -44,117 +44,6 @@ jobs:
         if: matrix.deploy != 'true'
         run: echo "Skipping ${{ matrix.instance }} - not selected for deployment"
 
-      - name: Cleanup feature branch deployment
-        if: matrix.deploy == 'true'
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets[format('{0}_HOST', matrix.instance)] }}
-          username: ${{ secrets[format('{0}_USER', matrix.instance)] }}
-          key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
-          script: |
-            branch="${{ github.event.inputs.branch }}"
-            safe_branch="${{ steps.prepare.outputs.safe_branch }}"
-            container_name="location-tracker-${safe_branch}"
-            nginx_location="/test/$branch"
-            
-            echo "=== Cleaning up feature branch deployment: $branch ==="
-            echo "Container name: $container_name"
-            echo "Nginx location: $nginx_location"
-            
-            # Stop and remove feature container
-            echo "Stopping and removing Docker container..."
-            if docker ps -a --format '{{.Names}}' | grep -q "^${container_name}$"; then
-              echo "Found container: $container_name"
-              docker stop $container_name || echo "Container was not running"
-              docker rm -f $container_name || echo "Failed to remove container"
-              echo "Container removed successfully"
-            else
-              echo "Container $container_name not found (already cleaned up)"
-            fi
-            
-            # Remove feature image
-            echo "Removing Docker image..."
-            if docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "^location-tracker:${safe_branch}$"; then
-              echo "Found image: location-tracker:${safe_branch}"
-              docker rmi -f location-tracker:${safe_branch} || echo "Failed to remove image"
-              echo "Image removed successfully"
-            else
-              echo "Image location-tracker:${safe_branch} not found (already cleaned up)"
-            fi
-            
-            # Clean up any leftover tar files
-            echo "Cleaning up temporary files..."
-            rm -f /tmp/location-tracker-${safe_branch}.tar || echo "No tar file to clean up"
-            
-            # Remove the modular nginx configuration file
-            echo "Removing nginx configuration file..."
-            sudo rm -f /etc/nginx/conf.d/location-tracker/feature-${safe_branch}.conf
-            echo "Feature branch nginx configuration removed"
-            
-            # Reload nginx to apply changes
-            if sudo nginx -t; then
-              sudo systemctl reload nginx
-              echo "✅ Nginx configuration reloaded after cleanup"
-            else
-              echo "WARNING: Nginx configuration test failed after cleanup"
-              sudo nginx -t
-            fi
-            
-            # Check if port 8082 is still in use
-            echo "Checking if port 8082 is still in use..."
-            if sudo lsof -i :8082 2>/dev/null; then
-              echo "WARNING: Port 8082 still in use by:"
-              sudo lsof -i :8082
-              echo "Attempting to terminate processes..."
-              sudo lsof -i :8082 | awk 'NR>1 {print $2}' | xargs -r sudo kill -9 || echo "Failed to terminate some processes"
-            else
-              echo "✅ Port 8082 is now free"
-            fi
-            
-            # Check if port 5053 is still in use
-            echo "Checking if port 5053 is still in use..."
-            if sudo lsof -i :5053 2>/dev/null; then
-              echo "WARNING: Port 5053 still in use by:"
-              sudo lsof -i :5053
-              echo "Attempting to terminate processes..."
-              sudo lsof -i :5053 | awk 'NR>1 {print $2}' | xargs -r sudo kill -9 || echo "Failed to terminate some processes"
-            else
-              echo "✅ Port 5053 is now free"
-            fi
-            
-            # Clean up database entries for this instance if possible
-            echo "Checking for database cleanup opportunities..."
-            if docker ps --format '{{.Names}}' | grep -q "^location-tracker-main$"; then
-              echo "Main container is running, attempting to clean leader election entries..."
-              # Try to remove any stale leader election entries for this instance
-              main_container_id=$(docker ps --format '{{.ID}}' --filter "name=location-tracker-main")
-              if [ ! -z "$main_container_id" ]; then
-                docker exec $main_container_id sh -c '
-                  if command -v psql >/dev/null; then
-                    echo "Cleaning up potential stale leader election entries..."
-                    # Remove any entries older than 1 minute (they should be refreshed every 5 seconds)
-                    PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c "DELETE FROM leader_election WHERE last_heartbeat < NOW() - INTERVAL '\''1 minute'\'';" || echo "Could not clean leader election table"
-                  fi
-                ' || echo "Could not access database for cleanup"
-              fi
-            else
-              echo "Main container not running, skipping database cleanup"
-            fi
-            
-            echo "=== Cleanup Summary ==="
-            echo "✅ Docker container stopped and removed"
-            echo "✅ Docker image removed"
-            echo "✅ Nginx configuration file removed"
-            echo "✅ Ports freed"
-            echo "✅ Temporary files cleaned"
-            echo ""
-            echo "Feature branch '$branch' has been completely cleaned up from ${{ matrix.instance }}"
-            echo "Configuration is ready for future deploy-feature runs"
-            
-            # Show current running containers
-            echo "=== Current Running Location Tracker Containers ==="
-            docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep location-tracker || echo "No location tracker containers running"
-
       - uses: actions/checkout@v4
         if: matrix.deploy == 'true'
         with:
@@ -165,7 +54,7 @@ jobs:
         id: prepare
         run: |
           branch="${{ github.event.inputs.branch }}"
-          safe_branch=$(echo "$branch" | tr '/' '-' | tr '[:upper:]' '[:lower:]')
+          safe_branch=$(echo "$branch" | tr '/' '_' | tr '[:upper:]' '[:lower:]')
           echo "safe_branch=$safe_branch" >> $GITHUB_OUTPUT
           echo "Branch: $branch -> Safe: $safe_branch"
           echo "Instance: ${{ matrix.instance }}"

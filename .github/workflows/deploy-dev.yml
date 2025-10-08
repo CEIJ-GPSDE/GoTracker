@@ -131,7 +131,7 @@ jobs:
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
             branch="${{ steps.should_deploy.outputs.branch }}"
-            safe_branch=$(echo "$branch" | tr '/' '-' | tr '[:upper:]' '[:lower:]')
+            safe_branch=$(echo "$branch" | tr '/' '_' | tr '[:upper:]' '[:lower:]')
             container_name="location-tracker-${safe_branch}"
             nginx_location="/test"
             
@@ -212,7 +212,7 @@ jobs:
         id: prepare
         run: |
           branch="${{ steps.should_deploy.outputs.branch }}"
-          safe_branch=$(echo "$branch" | tr '/' '-' | tr '[:upper:]' '[:lower:]')
+          safe_branch=$(echo "$branch" | tr '/' '_' | tr '[:upper:]' '[:lower:]')
           echo "safe_branch=$safe_branch" >> $GITHUB_OUTPUT
           echo "Branch: $branch -> Safe: $safe_branch"
           echo "Instance: ${{ matrix.instance }}"
