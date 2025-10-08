@@ -1057,6 +1057,10 @@ class LocationTracker {
                 historyModeBadge: "📅 HISTORY MODE",
                 legendStart: "Start (oldest)",
                 legendEnd: "End (newest)",
+                filterLabel: "Filter:",
+                to: "to",
+                noTimeFilterApplied: "No time filter applied",
+                configureInHistorySettings: "Configure in History Settings",
                 controlsAndInfo: "Controls & Information",
                 controls: "⚙️ Controls",
                 locations: "📍 Locations",
@@ -1116,6 +1120,10 @@ class LocationTracker {
                 historyModeBadge: "📅 MODO HISTÓRICO",
                 legendStart: "Inicio (más antiguo)",
                 legendEnd: "Fin (más reciente)",
+                filterLabel: "Filtro:",
+                to: "hasta",
+                noTimeFilterApplied: "No se aplicó filtro de tiempo",
+                configureInHistorySettings: "Configurar en Ajustes de Historial",
                 controlsAndInfo: "Controles e Información",
                 controls: "⚙️ Controles",
                 locations: "📍 Ubicaciones",
@@ -1408,14 +1416,14 @@ class LocationTracker {
             }
             this.map.removeSource('route');
         }
-        
+
         // Remove any existing segment layers
         for (let i = 0; i < 100; i++) {
             if (this.map.getLayer(`route-segment-${i}`)) {
                 this.map.removeLayer(`route-segment-${i}`);
             }
         }
-        
+
         this.map.addSource('route', {
             type: 'geojson',
             data: {
@@ -1424,7 +1432,7 @@ class LocationTracker {
             }
         });
     }
-    
+
     updateRouteLine() {
         if (!this.map.getSource('route')) return;
         
@@ -1441,34 +1449,43 @@ class LocationTracker {
                 type: 'FeatureCollection',
                 features: []
             });
+            this.updateRouteLegend();
             return;
         }
-        
+
         // Create colored segments
         const features = [];
         const totalSegments = coordinates.length - 1;
-        
+
+        // NOTE: coordinates array is ordered from NEWEST to OLDEST (index 0 = newest, last index = oldest)
+        // We want: oldest (last index) = GREEN, newest (index 0) = RED
+
         for (let i = 0; i < totalSegments; i++) {
-            const progress = i / totalSegments;
-            
-            // Calculate color based on progress (green -> yellow -> red)
-        let color;
-        if (progress < 0.5) {
-            // Green to Orange
-            const localProgress = progress * 2;
-            const r = Math.round(16 + (245 - 16) * localProgress);
-            const g = Math.round(185 - (185 - 158) * localProgress);
+            // Calculate progress: 0 = oldest (green), 1 = newest (red)
+        // Since array is reversed (newest first), we need to invert the progress
+            const progress = 1 - (i / totalSegments);
+
+            // Calculate color based on progress
+            // progress = 0 (oldest) -> Green #10b981
+            // progress = 0.5 (middle) -> Orange #f59e0b  
+            // progress = 1 (newest) -> Red #ef4444
+            let color;
+            if (progress < 0.5) {
+                // Green to Orange (oldest to middle)
+                const localProgress = progress * 2;
+                const r = Math.round(16 + (245 - 16) * localProgress);
+                const g = Math.round(185 - (185 - 158) * localProgress);
                 const b = Math.round(129 - (129 - 11) * localProgress);
                 color = `rgb(${r}, ${g}, ${b})`;
             } else {
-                // Orange to Red
+                // Orange to Red (middle to newest)
                 const localProgress = (progress - 0.5) * 2;
                 const r = Math.round(245 + (239 - 245) * localProgress);
                 const g = Math.round(158 - (158 - 68) * localProgress);
                 const b = Math.round(11 + (68 - 11) * localProgress);
                 color = `rgb(${r}, ${g}, ${b})`;
             }
-            
+
             features.push({
                 type: 'Feature',
                 properties: {
@@ -1481,24 +1498,24 @@ class LocationTracker {
                 }
             });
         }
-        
+
         // Remove existing segment layers
         for (let i = 0; i < 100; i++) {
             if (this.map.getLayer(`route-segment-${i}`)) {
                 this.map.removeLayer(`route-segment-${i}`);
             }
         }
-        
+
         // Update source data
         this.map.getSource('route').setData({
             type: 'FeatureCollection',
             features: features
         });
-        
+
         // Add layers for each segment with its specific color
         features.forEach((feature, index) => {
             const layerId = `route-segment-${index}`;
-            
+
             if (!this.map.getLayer(layerId)) {
                 this.map.addLayer({
                     id: layerId,
@@ -1517,10 +1534,14 @@ class LocationTracker {
                 });
             }
         });
+
+        this.updateRouteLegend();
     }
 
     updateRouteLegend() {
         const legend = document.getElementById('route-legend');
+        if (!legend) return;
+        
         if (this.routeCoords.length > 1) {
             legend.style.display = 'block';
         } else {
@@ -1960,9 +1981,9 @@ class LocationTracker {
                                 this.timeFilter.start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                 const endStr = this.timeFilter.end.toLocaleDateString() + ' ' + 
                               this.timeFilter.end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                textElement.innerHTML = `<div>Filter: ${startStr}</div><div>to ${endStr}</div>`;
+                textElement.innerHTML = `<div>${this.t('filterLabel')} ${startStr}</div><div>${this.t('to')} ${endStr}</div>`;
             } else {
-                textElement.innerHTML = '<div>No time filter applied</div><div>Configure in History Settings</div>';
+                textElement.innerHTML = `<div>${this.t('noTimeFilterApplied')}</div><div>${this.t('configureInHistorySettings')}</div>`;
                 indicator.classList.add('no-filter');
             }
             indicator.classList.add('show');
@@ -2185,6 +2206,7 @@ class LocationTracker {
 
 
         this.applyTraceDotsVisibility();
+        this.updateRouteLegend(); // Add this line
     }
 
     updateRouteForFiltered() {
@@ -2208,6 +2230,7 @@ class LocationTracker {
         });
 
         this.applyTraceDotsVisibility();
+        this.updateRouteLegend(); // Add this line
     }
 
     fitMapToLocations(locations) {
