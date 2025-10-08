@@ -131,7 +131,7 @@ jobs:
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
             branch="${{ steps.should_deploy.outputs.branch }}"
-            safe_branch=$(echo "$branch" | tr '/' '-' | tr '[:upper:]' '[:lower:]')
+            safe_branch=$(echo "$branch" | tr '/' '_' | tr '[:upper:]' '[:lower:]')
             container_name="location-tracker-${safe_branch}"
             nginx_location="/test"
             
@@ -212,7 +212,7 @@ jobs:
         id: prepare
         run: |
           branch="${{ steps.should_deploy.outputs.branch }}"
-          safe_branch=$(echo "$branch" | tr '/' '-' | tr '[:upper:]' '[:lower:]')
+          safe_branch=$(echo "$branch" | tr '/' '_' | tr '[:upper:]' '[:lower:]')
           echo "safe_branch=$safe_branch" >> $GITHUB_OUTPUT
           echo "Branch: $branch -> Safe: $safe_branch"
           echo "Instance: ${{ matrix.instance }}"
@@ -236,8 +236,13 @@ jobs:
           # Modify the HTML title to include instance name and branch
           sed -i "s|<title>Real-time Location Tracker</title>|<title>$instance_name ($branch)</title>|g" ./static/index.html
           
-          # Also update the h1 header to show the instance
+          # Update both English and Spanish headers
           sed -i "s|<h1>🌍 Real-time Location Tracker</h1>|<h1>🌍 $instance_name (DEV)</h1>|g" ./static/index.html
+          sed -i "s|<h1>🌍 Rastreador de Ubicación en Tiempo Real</h1>|<h1>🌍 $instance_name (DEV)</h1>|g" ./static/index.html
+          
+          # Update the translation object to include instance name
+          sed -i "s|title: \"🌍 Real-time Location Tracker\"|title: \"🌍 $instance_name (DEV)\"|g" ./static/index.html
+          sed -i "s|title: \"🌍 Rastreador de Ubicación en Tiempo Real\"|title: \"🌍 $instance_name (DEV)\"|g" ./static/index.html
           
           echo "HTML modifications completed"
 
@@ -432,6 +437,7 @@ jobs:
               -e AUTO_TLS=false \
               -e DISABLE_TLS=true \
               -e BASE_PATH="/test" \
+              -e TABLE_PREFIX="${safe_branch}" \
               location-tracker:${safe_branch}
             
             echo "Waiting for container to start..."
