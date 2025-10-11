@@ -2195,35 +2195,44 @@ class LocationTracker {
         // === TAB SWITCHING SETUP ===
         const tabButtons = popup.querySelectorAll('.tab-button');
         const tabContents = popup.querySelectorAll('.tab-content');
-
+            
         console.log('Found tab buttons:', tabButtons.length); // Debug log
         console.log('Found tab contents:', tabContents.length); // Debug log
-
+            
         tabButtons.forEach(button => {
             // Remove old listeners by cloning
             const newButton = button.cloneNode(true);
             button.parentNode.replaceChild(newButton, button);
-
+        
             newButton.addEventListener('click', () => {
                 const tabId = newButton.dataset.tab;
-                console.log('Tab clicked:', tabId);
+                console.log('Tab clicked:', tabId); // Debug log
             
                 // Update button states
                 popup.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
                 newButton.classList.add('active');
             
-                // Hide no filter tab
+                // Hide ALL tabs including no-filter-selected-tab
                 const noFilterTab = popup.querySelector('#no-filter-selected-tab');
-                if (noFilterTab) noFilterTab.style.display = 'none';
+                const timeFilterTab = popup.querySelector('#time-filter-tab');
+                const locationFilterTab = popup.querySelector('#location-filter-tab');
+                
+                // Remove active class and hide all tabs
+                if (noFilterTab) {
+                    noFilterTab.classList.remove('active');
+                    noFilterTab.style.display = 'none';
+                }
+                if (timeFilterTab) timeFilterTab.classList.remove('active');
+                if (locationFilterTab) locationFilterTab.classList.remove('active');
             
-                // Update content visibility
-                tabContents.forEach(content => {
-                    content.classList.remove('active');
-                    if (content.id === `${tabId}-tab`) {
-                        content.classList.add('active');
-                        console.log('Activated tab:', content.id);
-                    }
-                });
+                // Show the selected tab
+                if (tabId === 'time-filter' && timeFilterTab) {
+                    timeFilterTab.classList.add('active');
+                    console.log('Activated tab: time-filter-tab');
+                } else if (tabId === 'location-filter' && locationFilterTab) {
+                    locationFilterTab.classList.add('active');
+                    console.log('Activated tab: location-filter-tab');
+                }
             });
         });
 
