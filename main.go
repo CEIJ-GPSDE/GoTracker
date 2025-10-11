@@ -405,6 +405,7 @@ func (api *APIServer) Run(ctx context.Context) {
 	r.HandleFunc("/api/locations/latest", api.latestLocationHandler).Methods("GET")
 	r.HandleFunc("/api/locations/history", api.locationHistoryHandler).Methods("GET")
 	r.HandleFunc("/api/locations/range", api.locationRangeHandler).Methods("GET") // New endpoint
+	r.HandleFunc("/api/locations/nearby", api.locationNearbyHandler).Methods("GET")
 	r.HandleFunc("/api/locations/device/{deviceId}", api.deviceLocationHistoryHandler).Methods("GET")
 	r.HandleFunc("/ws", api.wsHub.HandleWebSocket)
 
@@ -671,6 +672,91 @@ func (api *APIServer) locationRangeHandler(w http.ResponseWriter, r *http.Reques
 	for rows.Next() {
 		var location LocationPacket
 		if err := rows.Scan(&location.DeviceID, &location.Latitude, &location.Longitude, &location.Timestamp); err != nil {
+			log.Printf("Row scan error: %v", err)
+			continue
+		}
+		locations = append(locations, location)
+	}
+
+	if err = rows.Err(); err != nil {
+		log.Printf("Rows iteration error: %v", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(locations)
+}
+
+// New handler for location-based queries
+func (api *APIServer) locationNearbyHandler(w http.ResponseWriter, r *http.Request) {
+	latStr := r.URL.Query().Get("lat")
+	lngStr := r.URL.Query().Get("lng")
+	radiusStr := r.URL.Query().Get("radius")
+
+	if latStr == "" || lngStr == "" {
+		http.Error(w, "lat and lng parameters are required", http.StatusBadRequest)
+		return
+	}
+
+	lat, err := strconv.ParseFloat(latStr, 64)
+	if err != nil || lat < -90 || lat > 90 {
+		http.Error(w, "Invalid latitude", http.StatusBadRequest)
+		return
+	}
+
+	lng, err := strconv.ParseFloat(lngStr, 64)
+	if err != nil || lng < -180 || lng > 180 {
+		http.Error(w, "Invalid longitude", http.StatusBadRequest)
+		return
+	}
+
+	radius := 0.5 // default 500m
+	if radiusStr != "" {
+		radius, err = strconv.ParseFloat(radiusStr, 64)
+		if err != nil || radius <= 0 || radius > 50 {
+			http.Error(w, "Invalid radius (must be between 0 and 50 km)", http.StatusBadRequest)
+			return
+		}
+	}
+
+	tableName := "locations"
+	if api.tablePrefix != "" {
+		tableName = api.tablePrefix + "_locations"
+	}
+
+	// Using Haversine formula approximation for nearby search
+	// This calculates distance in kilometers
+	query := fmt.Sprintf(`
+		SELECT device_id, latitude, longitude, timestamp,
+		       (6371 * acos(
+		           cos(radians($1)) * cos(radians(latitude)) *
+		           cos(radians(longitude) - radians($2)) +
+		           sin(radians($1)) * sin(radians(latitude))
+		       )) AS distance
+		FROM %s
+		WHERE (6371 * acos(
+		    cos(radians($1)) * cos(radians(latitude)) *
+		    cos(radians(longitude) - radians($2)) +
+		    sin(radians($1)) * sin(radians(latitude))
+		)) <= $3
+		ORDER BY timestamp DESC
+		LIMIT 1000
+	`, tableName)
+
+	rows, err := api.db.Query(query, lat, lng, radius)
+	if err != nil {
+		log.Printf("Database query error: %v", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var locations []LocationPacket
+	for rows.Next() {
+		var location LocationPacket
+		var distance float64
+		if err := rows.Scan(&location.DeviceID, &location.Latitude, &location.Longitude, &location.Timestamp, &distance); err != nil {
 			log.Printf("Row scan error: %v", err)
 			continue
 		}

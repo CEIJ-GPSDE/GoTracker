@@ -129,6 +129,59 @@
             background: rgba(156, 163, 175, 0.95);
         }
 
+        .no-filter-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(10px);
+            padding: 40px 60px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            z-index: 2000;
+            display: none;
+            text-align: center;
+            border: 3px solid #f59e0b;
+            max-width: 90%;
+        }
+
+        .no-filter-overlay.show {
+            display: block;
+            animation: pulseScale 0.5s ease-out;
+        }
+
+        .no-filter-overlay h3 {
+            margin: 0 0 15px 0;
+            color: #f59e0b;
+            font-size: 1.8rem;
+            font-weight: 700;
+        }
+
+        .no-filter-overlay p {
+            margin: 0 0 25px 0;
+            color: #6b7280;
+            font-size: 1.1rem;
+            line-height: 1.6;
+        }
+
+        .no-filter-overlay .btn {
+            margin: 5px;
+            padding: 15px 30px;
+            font-size: 1rem;
+        }
+
+        @keyframes pulseScale {
+            0% {
+                transform: translate(-50%, -50%) scale(0.9);
+                opacity: 0;
+            }
+            100% {
+                transform: translate(-50%, -50%) scale(1);
+                opacity: 1;
+            }
+        }
+
         .mode-indicator {
             position: absolute;
             bottom: 20px;
@@ -868,6 +921,16 @@
                 </button>
             </div>
             <div id="map"></div>
+            <div class="no-filter-overlay" id="no-filter-overlay">
+                <h3 id="no-filter-title">⚠️ No Time Filter Applied</h3>
+                <p id="no-filter-message">Please configure a time filter in History Settings to view historical data.</p>
+                <button class="btn" onclick="locationTracker.openHistoryConfigPopup()">
+                    <span id="no-filter-btn-text">Open History Settings</span>
+                </button>
+                <button class="btn secondary" onclick="locationTracker.hideNoFilterOverlay()">
+                    <span id="no-filter-dismiss-text">Dismiss</span>
+                </button>
+            </div>
             <div class="mode-indicator live-mode" id="mode-indicator">
                 <div class="mode-indicator-dot"></div>
                 <span>🔴 LIVE MODE</span>
@@ -967,7 +1030,13 @@
             <button class="popup-close" id="history-config-close">×</button>
         </div>
         <div class="popup-body">
-            <div class="tab-content active">
+            <div class="menu-tabs">
+                <button class="tab-button active" data-tab="time-filter" id="time-filter-tab-btn">⏱️ <span id="time-filter-tab-label">Time Filter</span></button>
+                <button class="tab-button" data-tab="location-filter" id="location-filter-tab-btn">📍 <span id="location-filter-tab-label">Location Filter</span></button>
+            </div>
+
+            <!-- Time Filter Tab -->
+            <div class="tab-content active" id="time-filter-tab">
                 <div class="card">
                     <div class="card-body">
                         <div class="historical-controls active" id="historical-controls-popup">
@@ -992,6 +1061,29 @@
                             <button class="btn" id="apply-time-filter-popup">Apply Time Filter</button>
                             <button class="btn secondary" id="clear-time-filter-popup">Clear Filter</button>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Location Filter Tab -->
+            <div class="tab-content" id="location-filter-tab">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="control-group">
+                            <label for="location-lat-input" id="location-lat-label">Latitude:</label>
+                            <input type="number" id="location-lat-input" step="0.000001" placeholder="e.g., 40.7128">
+                        </div>
+                        <div class="control-group">
+                            <label for="location-lng-input" id="location-lng-label">Longitude:</label>
+                            <input type="number" id="location-lng-input" step="0.000001" placeholder="e.g., -74.0060">
+                        </div>
+                        <div class="control-group">
+                            <label for="location-radius-input" id="location-radius-label">Radius (km):</label>
+                            <input type="number" id="location-radius-input" value="0.5" min="0.1" max="50" step="0.1">
+                        </div>
+                        <div class="validation-error" id="location-validation-error"></div>
+                        <button class="btn" id="apply-location-filter">Apply Location Filter</button>
+                        <button class="btn secondary" id="clear-location-filter">Clear Filter</button>
                     </div>
                 </div>
             </div>
@@ -1091,6 +1183,19 @@ class LocationTracker {
                 noTimeFilter: "No time filter applied",
                 configureInSettings: "Configure in History Settings",
                 filterLabel: "Filter:",
+                timeFilterTabLabel: "Time Filter",
+                locationFilterTabLabel: "Location Filter",
+                latitude: "Latitude",
+                longitude: "Longitude",
+                radiusKm: "Radius (km)",
+                applyLocationFilter: "Apply Location Filter",
+                validLocationRequired: "Valid latitude and longitude are required",
+                invalidCoordinates: "Invalid coordinates (lat: -90 to 90, lng: -180 to 180)",
+                invalidRadius: "Radius must be greater than 0",
+                noFilterTitle: "⚠️ No Time Filter Applied",
+                noFilterMessage: "Please configure a time filter in History Settings to view historical data.",
+                openHistorySettings: "Open History Settings",
+                dismiss: "Dismiss",
                 validationErrors: {
                     required: "Both start and end times are required",
                     invalidFormat: "Invalid date format",
@@ -1154,6 +1259,19 @@ class LocationTracker {
                 noTimeFilter: "No se aplicó filtro de tiempo",
                 configureInSettings: "Configurar en Ajustes de Historial",
                 filterLabel: "Filtro:",
+                timeFilterTabLabel: "Filtro de Tiempo",
+                locationFilterTabLabel: "Filtro de Ubicación",
+                latitude: "Latitud",
+                longitude: "Longitud",
+                radiusKm: "Radio (km)",
+                applyLocationFilter: "Aplicar Filtro de Ubicación",
+                validLocationRequired: "Se requiere latitud y longitud válidas",
+                invalidCoordinates: "Coordenadas inválidas (lat: -90 a 90, lng: -180 a 180)",
+                invalidRadius: "El radio debe ser mayor que 0",
+                noFilterTitle: "⚠️ No se Aplicó Filtro de Tiempo",
+                noFilterMessage: "Por favor configure un filtro de tiempo en Ajustes de Historial para ver datos históricos.",
+                openHistorySettings: "Abrir Ajustes de Historial",
+                dismiss: "Cerrar",
                 validationErrors: {
                     required: "Se requieren hora de inicio y fin",
                     invalidFormat: "Formato de fecha inválido",
@@ -1244,7 +1362,18 @@ class LocationTracker {
         document.querySelector('label[for="end-time-popup"]').textContent = this.t('to');
         document.getElementById('apply-time-filter-popup').textContent = this.t('applyTimeFilter');
         document.getElementById('clear-time-filter-popup').textContent = this.t('clearFilter');
+        
+        // Update no filter overlay
+        const noFilterTitle = document.getElementById('no-filter-title');
+        const noFilterMessage = document.getElementById('no-filter-message');
+        const noFilterBtnText = document.getElementById('no-filter-btn-text');
+        const noFilterDismissText = document.getElementById('no-filter-dismiss-text');
 
+        if (noFilterTitle) noFilterTitle.textContent = this.t('noFilterTitle');
+        if (noFilterMessage) noFilterMessage.textContent = this.t('noFilterMessage');
+        if (noFilterBtnText) noFilterBtnText.textContent = this.t('openHistorySettings');
+        if (noFilterDismissText) noFilterDismissText.textContent = this.t('dismiss');
+        
         // Update empty results popup
         document.querySelector('#empty-results-popup h3').textContent = this.t('noResultsTitle');
         document.querySelector('#empty-results-popup p').textContent = this.t('noResultsMessage');
@@ -1255,6 +1384,25 @@ class LocationTracker {
         const legendEnd = document.getElementById('legend-end');
         if (legendStart) legendStart.textContent = this.t('legendStart');
         if (legendEnd) legendEnd.textContent = this.t('legendEnd');
+        
+        // Update history config popup tabs
+        const timeFilterTabBtn = document.querySelector('#time-filter-tab-label');
+        const locationFilterTabBtn = document.querySelector('#location-filter-tab-label');
+        if (timeFilterTabBtn) timeFilterTabBtn.textContent = this.t('timeFilterTabLabel');
+        if (locationFilterTabBtn) locationFilterTabBtn.textContent = this.t('locationFilterTabLabel');
+
+        // Update location filter labels
+        const locationLatLabel = document.getElementById('location-lat-label');
+        const locationLngLabel = document.getElementById('location-lng-label');
+        const locationRadiusLabel = document.getElementById('location-radius-label');
+        const applyLocationBtn = document.getElementById('apply-location-filter');
+        const clearLocationBtn = document.getElementById('clear-location-filter');
+
+        if (locationLatLabel) locationLatLabel.textContent = this.t('latitude');
+        if (locationLngLabel) locationLngLabel.textContent = this.t('longitude');
+        if (locationRadiusLabel) locationRadiusLabel.textContent = this.t('radiusKm');
+        if (applyLocationBtn) applyLocationBtn.textContent = this.t('applyLocationFilter');
+        if (clearLocationBtn) clearLocationBtn.textContent = this.t('clearFilter');
 
         // Refresh displays
         this.updateConnectionStatus(
@@ -1679,11 +1827,13 @@ class LocationTracker {
                 this.restoreTimePickerValues();
                 this.updateTimeFilterIndicator();
                 this.loadHistoricalData();
+                this.hideNoFilterOverlay();
             } else {
                 // Initialize with empty filtered locations (user needs to apply time filter)
                 this.filteredLocations = [];
                 this.displayFilteredLocations();
                 this.updateTimeFilterIndicator();
+                this.showNoFilterOverlay();
             }
            
         } else {
@@ -1721,6 +1871,21 @@ class LocationTracker {
         // Update refresh button state based on current mode
         this.updateRefreshButtonState();
         this.updateLocationSelection();
+        this.hideNoFilterOverlay();
+    }
+
+    showNoFilterOverlay() {
+        const overlay = document.getElementById('no-filter-overlay');
+        if (overlay) {
+            overlay.classList.add('show');
+        }
+    }
+
+    hideNoFilterOverlay() {
+        const overlay = document.getElementById('no-filter-overlay');
+        if (overlay) {
+            overlay.classList.remove('show');
+        }
     }
 
     setupEventListeners() {
@@ -1847,56 +2012,115 @@ class LocationTracker {
             existingClearBtn.replaceWith(existingClearBtn.cloneNode(true));
         }
 
-        const controlsContainer = popup.querySelector('#historical-controls-popup');
-        if (!controlsContainer) return;
+        // Setup tab switching for history config popup
+        const tabButtons = popup.querySelectorAll('.tab-button');
+        const tabContents = popup.querySelectorAll('.tab-content');
 
-        // Get fresh references after potential cloning
-        const startInput = popup.querySelector('#start-time-popup');
-        const endInput = popup.querySelector('#end-time-popup');
-        const applyBtn = popup.querySelector('#apply-time-filter-popup');
-        const clearBtn = popup.querySelector('#clear-time-filter-popup');
+        tabButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const tabId = button.dataset.tab;
 
-        if (startInput && endInput) {
-            const validateAndUpdate = () => {
-                console.log('Validating time filter...');
-                this.validateTimeFilter();
-            };
+                tabButtons.forEach(btn => btn.classList.remove('active'));
+                button.classList.add('active');
 
-            startInput.addEventListener('change', validateAndUpdate);
-            endInput.addEventListener('change', validateAndUpdate);
-            startInput.addEventListener('input', validateAndUpdate);
-            endInput.addEventListener('input', validateAndUpdate);
-        }
-
-        // Quick range buttons
-        controlsContainer.querySelectorAll('.quick-range-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const hours = parseInt(e.target.dataset.hours);
-                this.setQuickTimeRange(hours);
-                controlsContainer.querySelectorAll('.quick-range-btn').forEach(b => b.classList.remove('active'));
-                e.target.classList.add('active');
-                // Validate after setting quick range
-                setTimeout(() => this.validateTimeFilter(), 100);
+                tabContents.forEach(content => {
+                    content.classList.remove('active');
+                    if (content.id === `${tabId}-tab`) {
+                        content.classList.add('active');
+                    }
+                });
             });
         });
 
-        // Apply button
-        if (applyBtn) {
-            applyBtn.addEventListener('click', () => {
-                console.log('Apply button clicked');
-                if (this.validateTimeFilter()) {
-                    this.applyTimeFilterFromPopup();
-                }
+        const controlsContainer = popup.querySelector('#historical-controls-popup');
+        if (controlsContainer) {
+            const startInput = popup.querySelector('#start-time-popup');
+            const endInput = popup.querySelector('#end-time-popup');
+            const applyBtn = popup.querySelector('#apply-time-filter-popup');
+            const clearBtn = popup.querySelector('#clear-time-filter-popup');
+
+            if (startInput && endInput) {
+                const validateAndUpdate = () => {
+                    this.validateTimeFilter();
+                };
+
+                startInput.addEventListener('change', validateAndUpdate);
+                endInput.addEventListener('change', validateAndUpdate);
+                startInput.addEventListener('input', validateAndUpdate);
+                endInput.addEventListener('input', validateAndUpdate);
+            }
+
+            controlsContainer.querySelectorAll('.quick-range-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const hours = parseInt(e.target.dataset.hours);
+                    this.setQuickTimeRange(hours);
+                    controlsContainer.querySelectorAll('.quick-range-btn').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    setTimeout(() => this.validateTimeFilter(), 100);
+                });
             });
+
+            if (applyBtn) {
+                applyBtn.addEventListener('click', () => {
+                    if (this.validateTimeFilter()) {
+                        this.applyTimeFilterFromPopup();
+                    }
+                });
+            }
+
+            if (clearBtn) {
+                clearBtn.addEventListener('click', () => this.clearTimeFilter());
+            }
+
+            setTimeout(() => this.validateTimeFilter(), 200);
         }
 
-        // Clear button
-        if (clearBtn) {
-            clearBtn.addEventListener('click', () => this.clearTimeFilter());
-        }
+        // Location filter events
+        const locationTab = popup.querySelector('#location-filter-tab');
+        if (locationTab) {
+            const latInput = locationTab.querySelector('#location-lat-input');
+            const lngInput = locationTab.querySelector('#location-lng-input');
+            const radiusInput = locationTab.querySelector('#location-radius-input');
+            const applyLocationBtn = locationTab.querySelector('#apply-location-filter');
+            const clearLocationBtn = locationTab.querySelector('#clear-location-filter');
+            const errorElement = locationTab.querySelector('#location-validation-error');
 
-        // Initial validation
-        setTimeout(() => this.validateTimeFilter(), 200);
+            if (applyLocationBtn) {
+                applyLocationBtn.addEventListener('click', () => {
+                    const lat = parseFloat(latInput.value);
+                    const lng = parseFloat(lngInput.value);
+                    const radius = parseFloat(radiusInput.value);
+
+                    if (isNaN(lat) || isNaN(lng)) {
+                        this.showValidationError('validLocationRequired', applyLocationBtn, errorElement);
+                        return;
+                    }
+
+                    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+                        this.showValidationError('invalidCoordinates', applyLocationBtn, errorElement);
+                        return;
+                    }
+
+                    if (isNaN(radius) || radius <= 0) {
+                        this.showValidationError('invalidRadius', applyLocationBtn, errorElement);
+                        return;
+                    }
+
+                    this.clearValidationError(applyLocationBtn, errorElement);
+                    this.loadHistoricalByLocation(lat, lng, radius);
+                    popup.classList.remove('active');
+                });
+            }
+
+            if (clearLocationBtn) {
+                clearLocationBtn.addEventListener('click', () => {
+                    latInput.value = '';
+                    lngInput.value = '';
+                    radiusInput.value = '0.5';
+                    this.clearValidationError(applyLocationBtn, errorElement);
+                });
+            }
+        }
     }
     // Add this method after setupConfigPopupEvents
     restoreTimePickerValues() {
@@ -2232,7 +2456,34 @@ class LocationTracker {
         this.applyTraceDotsVisibility();
         this.updateRouteLegend(); // Add this line
     }
+    
+    async loadHistoricalByLocation(latitude, longitude, radiusKm = 0.5) {
+        try {
+            const url = `${this.config.apiBaseUrl}/api/locations/nearby?lat=${latitude}&lng=${longitude}&radius=${radiusKm}`;
 
+            const response = await fetch(url);
+            if (response.ok) {
+                const locations = await response.json();
+                this.filteredLocations = locations || [];
+
+                this.clearAllMarkers();
+                this.displayFilteredLocations();
+                this.updateRouteForFiltered();
+
+                if (this.filteredLocations.length > 0) {
+                    this.fitMapToLocations(this.filteredLocations);
+                } else {
+                    setTimeout(() => this.showEmptyResultsPopup(), 500);
+                }
+            } else {
+                console.error('Failed to load location data:', response.status);
+            }
+        } catch (error) {
+            console.error('Error loading location data:', error);
+            this.showError('Failed to load location data');
+        }
+    }
+    
     fitMapToLocations(locations) {
         if (locations.length === 0) return;
 
