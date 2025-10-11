@@ -151,7 +151,7 @@
             max-width: 90%;
             pointer-events: auto; /* Ensure clicks work */
         }
-        
+
         .no-filter-overlay.show {
             display: block !important; /* Force display */
             animation: pulseScale 0.5s ease-out;
@@ -1041,6 +1041,18 @@
                 <button class="tab-button" data-tab="location-filter" id="location-filter-tab-btn">📍 <span id="location-filter-tab-label">Location Filter</span></button>
             </div>
 
+            <!-- No Filter Selected Tab (Default) -->
+            <div class="tab-content" id="no-filter-selected-tab" style="display: none;">
+                <div class="card">
+                    <div class="card-body" style="text-align: center; padding: 60px 30px;">
+                        <div style="font-size: 48px; margin-bottom: 20px; opacity: 0.5;">🔍</div>
+                        <h3 style="color: #6b7280; margin-bottom: 15px;" id="no-filter-selected-title">No filter selected</h3>
+                        <p style="color: #9ca3af; margin-bottom: 10px;" id="please-select-filter">Please select a time range or location to view historical data.</p>
+                        <p style="color: #9ca3af; font-size: 14px;" id="select-filter-tab">Choose a tab above to configure your filter.</p>
+                    </div>
+                </div>
+            </div>
+
             <!-- Time Filter Tab -->
             <div class="tab-content active" id="time-filter-tab">
                 <div class="card">
@@ -1129,9 +1141,7 @@ class LocationTracker {
         this.liveUpdateQueue = []; 
         this.persistedTimeFilter = null;
         this.selectedLocationMarker = null;
-        this.liveUpdateQueue = []; 
-        this.persistedTimeFilter = null;
-        this.selectedLocationMarker = null;
+        this.persistedLocationFilter = null;
         this.liveLocations = []; 
         this.initialDbLocation = null; 
         this.hasReceivedLiveUpdate = false;
@@ -1210,6 +1220,11 @@ class LocationTracker {
                 longitude: "Longitude",
                 radiusLabel: "Radius:",
                 km: "km",
+                noFilterSelected: "No filter selected",
+                pleaseSelectFilter: "Please select a time range or location to view historical data.",
+                selectFilterTab: "Choose a tab above to configure your filter.",
+                noFilterTitle: "⚠️ No Filter Applied",
+                noFilterMessage: "Please configure a filter in History Settings to view historical data.",
                 validationErrors: {
                     required: "Both start and end times are required",
                     invalidFormat: "Invalid date format",
@@ -1292,6 +1307,11 @@ class LocationTracker {
                 longitude: "Longitud",
                 radiusLabel: "Radio:",
                 km: "km",
+                noFilterSelected: "Ningún filtro seleccionado",
+                pleaseSelectFilter: "Por favor seleccione un rango de tiempo o ubicación para ver datos históricos.",
+                selectFilterTab: "Elija una pestaña arriba para configurar su filtro.",
+                noFilterTitle: "⚠️ No se Aplicó Filtro",
+                noFilterMessage: "Por favor configure un filtro en Ajustes de Historial para ver datos históricos.",
                 validationErrors: {
                     required: "Se requieren hora de inicio y fin",
                     invalidFormat: "Formato de fecha inválido",
@@ -1394,6 +1414,16 @@ class LocationTracker {
         if (noFilterBtnText) noFilterBtnText.textContent = this.t('openHistorySettings');
         if (noFilterDismissText) noFilterDismissText.textContent = this.t('dismiss');
         
+        // Update no filter selected message
+        const noFilterSelectedTitle = document.getElementById('no-filter-selected-title');
+        const pleaseSelectFilter = document.getElementById('please-select-filter');
+        const selectFilterTab = document.getElementById('select-filter-tab');
+        
+        if (noFilterSelectedTitle) noFilterSelectedTitle.textContent = this.t('noFilterSelected');
+        if (pleaseSelectFilter) pleaseSelectFilter.textContent = this.t('pleaseSelectFilter');
+        if (selectFilterTab) selectFilterTab.textContent = this.t('selectFilterTab');
+
+
         // Update empty results popup
         document.querySelector('#empty-results-popup h3').textContent = this.t('noResultsTitle');
         document.querySelector('#empty-results-popup p').textContent = this.t('noResultsMessage');
@@ -1821,43 +1851,64 @@ class LocationTracker {
         const liveModeBtn = document.getElementById('live-mode-btn');
         const trackBtn = document.getElementById('track-latest-btn');
         const modeIndicator = document.getElementById('mode-indicator');
+        
         // Clear any selected location markers when switching modes
         this.clearSelectedLocationMarker();
         this.selectedLocationIndex = -1;
+        
         if (this.isHistoryMode) {        
-            // Hide history mode button, show config and live mode buttons
+            // Update mode indicator
             modeIndicator.className = 'mode-indicator history-mode';
             modeIndicator.innerHTML = `<div class="mode-indicator-dot"></div><span>${this.t('historyModeBadge')}</span>`;
+
+            // Hide history mode button, show config and live mode buttons
             historyBtn.style.display = 'none';
             historyConfigBtn.style.display = 'flex';
             liveModeBtn.style.display = 'flex';
             trackBtn.style.display = 'none';
-
+        
             this.toggleTracking(false);
-
+        
             // Clear all live markers and route when entering history mode
             this.clearAllMarkers();
             this.clearTraceMarkers();
             this.routeCoords = [];
             this.updateRouteLine();
+        
+            // Check if we have any persisted filters
+            const hasPersistedTimeFilter = this.persistedTimeFilter !== null;
+            const hasPersistedLocationFilter = this.persistedLocationFilter !== null;
 
-            // Restore persisted filter if it exists
-            if (this.persistedTimeFilter) {
+            if (hasPersistedTimeFilter) {
+                // Restore time filter
                 this.timeFilter = { ...this.persistedTimeFilter };
                 this.activeFilterType = 'time';
+                this.locationFilter = null; // Clear location filter when restoring time
                 this.restoreTimePickerValues();
                 this.updateTimeFilterIndicator();
                 this.loadHistoricalData();
                 this.hideNoFilterOverlay();
+            } else if (hasPersistedLocationFilter) {
+                // Restore location filter
+                this.locationFilter = { ...this.persistedLocationFilter };
+                this.activeFilterType = 'location';
+                this.timeFilter = null; // Clear time filter when restoring location
+                this.updateTimeFilterIndicator();
+                this.loadHistoricalByLocation(
+                    this.locationFilter.lat,
+                    this.locationFilter.lng,
+                    this.locationFilter.radius
+                );
+                this.hideNoFilterOverlay();
             } else {
-                // Initialize with empty filtered locations (user needs to apply filter)
+                // No persisted filters - show empty state
                 this.filteredLocations = [];
                 this.activeFilterType = null;
                 this.locationFilter = null;
+                this.timeFilter = null;
                 this.displayFilteredLocations();
                 this.updateTimeFilterIndicator();
 
-                // IMPORTANT: Show overlay after a short delay to ensure DOM is ready
                 setTimeout(() => {
                     this.showNoFilterOverlay();
                 }, 100);
@@ -1868,9 +1919,13 @@ class LocationTracker {
             modeIndicator.className = 'mode-indicator live-mode';
             modeIndicator.innerHTML = `<div class="mode-indicator-dot"></div><span>${this.t('liveModeBadge')}</span>`;
 
-            // Store current filter before leaving history mode
-            if (this.timeFilter) {
+            // Store current filters before leaving history mode
+            if (this.timeFilter && this.activeFilterType === 'time') {
                 this.persistedTimeFilter = { ...this.timeFilter };
+                this.persistedLocationFilter = null; // Clear persisted location filter
+            } else if (this.locationFilter && this.activeFilterType === 'location') {
+                this.persistedLocationFilter = { ...this.locationFilter };
+                this.persistedTimeFilter = null; // Clear persisted time filter
             }
         
             // Show history mode button, hide config and live mode buttons
@@ -1879,7 +1934,7 @@ class LocationTracker {
             liveModeBtn.style.display = 'none';
             trackBtn.style.display = 'flex';
         
-            // Clear historical data
+            // Clear historical data display but keep filter data
             this.clearAllMarkers();
             this.clearTraceMarkers();
             this.filteredLocations = [];
@@ -2015,35 +2070,60 @@ class LocationTracker {
     }
 
     openHistoryConfigPopup() {
-        console.log('Opening history config popup'); // Debug log
+        console.log('Opening history config popup');    
 
         const historyConfigPopup = document.getElementById('history-config-popup');
         if (!historyConfigPopup) {
             console.error('History config popup not found');
             return;
-        }
+        }   
 
         const closeBtn = historyConfigPopup.querySelector('#history-config-close');
         if (closeBtn) {
             closeBtn.onclick = () => {
                 historyConfigPopup.classList.remove('active');
             };
-        }
+        }   
 
-        // Initialize time pickers with current filter or defaults
-        if (this.timeFilter) {
+        // Determine which tab to show based on active filter
+        const timeFilterTab = document.getElementById('time-filter-tab');
+        const locationFilterTab = document.getElementById('location-filter-tab');
+        const noFilterTab = document.getElementById('no-filter-selected-tab');
+        const tabButtons = historyConfigPopup.querySelectorAll('.tab-button');  
+
+        // Hide all tabs first
+        timeFilterTab.classList.remove('active');
+        locationFilterTab.classList.remove('active');
+        if (noFilterTab) noFilterTab.style.display = 'none';
+        tabButtons.forEach(btn => btn.classList.remove('active'));  
+
+        if (this.activeFilterType === 'time' && this.timeFilter) {
+            // Show time filter tab
+            timeFilterTab.classList.add('active');
+            document.getElementById('time-filter-tab-btn').classList.add('active');
             document.getElementById('start-time-popup').value = this.formatDateTimeLocal(this.timeFilter.start);
             document.getElementById('end-time-popup').value = this.formatDateTimeLocal(this.timeFilter.end);
+        } else if (this.activeFilterType === 'location' && this.locationFilter) {
+            // Show location filter tab
+            locationFilterTab.classList.add('active');
+            document.getElementById('location-filter-tab-btn').classList.add('active');
+            document.getElementById('location-lat-input').value = this.locationFilter.lat;
+            document.getElementById('location-lng-input').value = this.locationFilter.lng;
+            document.getElementById('location-radius-input').value = this.locationFilter.radius;
         } else {
-            this.initializeTimePickersPopup();
-        }
+            // Show no filter message
+            if (noFilterTab) {
+                noFilterTab.style.display = 'block';
+            }
+            // Don't activate any tab button
+        }   
 
-        // Show popup first
-        historyConfigPopup.classList.add('active');
+        // Show popup
+        historyConfigPopup.classList.add('active'); 
 
-        console.log('Popup shown, setting up events'); // Debug log
+        console.log('Popup shown, setting up events');  
 
-        // Set up events immediately (no delay)
+        // Set up events
         this.setupConfigPopupEvents(historyConfigPopup);
     }
     
@@ -2123,18 +2203,22 @@ class LocationTracker {
 
             newButton.addEventListener('click', () => {
                 const tabId = newButton.dataset.tab;
-                console.log('Tab clicked:', tabId); // Debug log
-
+                console.log('Tab clicked:', tabId);
+            
                 // Update button states
                 popup.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
                 newButton.classList.add('active');
-
+            
+                // Hide no filter tab
+                const noFilterTab = popup.querySelector('#no-filter-selected-tab');
+                if (noFilterTab) noFilterTab.style.display = 'none';
+            
                 // Update content visibility
                 tabContents.forEach(content => {
                     content.classList.remove('active');
                     if (content.id === `${tabId}-tab`) {
                         content.classList.add('active');
-                        console.log('Activated tab:', content.id); // Debug log
+                        console.log('Activated tab:', content.id);
                     }
                 });
             });
@@ -2151,6 +2235,15 @@ class LocationTracker {
             const applyLocationBtn = locationTab.querySelector('#apply-location-filter');
             const clearLocationBtn = locationTab.querySelector('#clear-location-filter');
             const errorElement = locationTab.querySelector('#location-validation-error');
+
+            // Clear validation errors on input change
+            const clearErrorOnInput = () => {
+                this.clearValidationError(applyLocationBtn, errorElement);
+            };
+        
+            if (latInput) latInput.addEventListener('input', clearErrorOnInput);
+            if (lngInput) lngInput.addEventListener('input', clearErrorOnInput);
+            if (radiusInput) radiusInput.addEventListener('input', clearErrorOnInput);
 
             console.log('Location filter elements:', {
                 latInput: !!latInput,
@@ -2215,16 +2308,17 @@ class LocationTracker {
 
                 newClearLocationBtn.addEventListener('click', () => {
                     console.log('Clear location filter clicked');
-
+                                
                     latInput.value = '';
                     lngInput.value = '';
                     radiusInput.value = '0.5';
                     this.clearValidationError(newApplyLocationBtn, errorElement);
-
-                    // Clear location filter state
+                                
+                    // Clear both filter states
                     this.locationFilter = null;
-                    this.timeFilter = null; // Also clear time filter
+                    this.timeFilter = null;
                     this.persistedTimeFilter = null;
+                    this.persistedLocationFilter = null; // Add this line
                     this.activeFilterType = null;
                     this.filteredLocations = [];
                     this.clearAllMarkers();
@@ -2233,8 +2327,7 @@ class LocationTracker {
                     this.updateRouteLine();
                     this.displayFilteredLocations();
                     this.updateTimeFilterIndicator();
-
-                    // Show overlay after clearing
+                                
                     setTimeout(() => {
                         this.showNoFilterOverlay();
                     }, 100);
@@ -2479,6 +2572,7 @@ class LocationTracker {
     clearTimeFilter() {
         this.timeFilter = null;
         this.persistedTimeFilter = null;
+        this.persistedLocationFilter = null;
         this.activeFilterType = null;
         this.locationFilter = null; // Also clear location filter
         this.filteredLocations = [];
