@@ -2305,20 +2305,23 @@ class LocationTracker {
                 // Remove old listener by cloning
                 const newClearLocationBtn = clearLocationBtn.cloneNode(true);
                 clearLocationBtn.parentNode.replaceChild(newClearLocationBtn, clearLocationBtn);
-
+                        
                 newClearLocationBtn.addEventListener('click', () => {
                     console.log('Clear location filter clicked');
                                 
                     latInput.value = '';
                     lngInput.value = '';
                     radiusInput.value = '0.5';
-                    this.clearValidationError(newApplyLocationBtn, errorElement);
+                    
+                    // Fix: Get the apply button reference again since it was cloned
+                    const currentApplyBtn = locationTab.querySelector('#apply-location-filter');
+                    this.clearValidationError(currentApplyBtn, errorElement);
                                 
                     // Clear both filter states
                     this.locationFilter = null;
                     this.timeFilter = null;
                     this.persistedTimeFilter = null;
-                    this.persistedLocationFilter = null; // Add this line
+                    this.persistedLocationFilter = null;
                     this.activeFilterType = null;
                     this.filteredLocations = [];
                     this.clearAllMarkers();
