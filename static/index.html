@@ -130,7 +130,7 @@
         }
 
         .no-filter-overlay {
-            position: absolute;
+            position: fixed;  /* Changed from absolute to fixed */
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
@@ -139,7 +139,7 @@
             padding: 40px 60px;
             border-radius: 20px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            z-index: 2000;
+            z-index: 10500;  /* Increased z-index to be above everything */
             display: none;
             text-align: center;
             border: 3px solid #f59e0b;
@@ -1878,16 +1878,24 @@ class LocationTracker {
     }
 
     showNoFilterOverlay() {
+        console.log('showNoFilterOverlay called'); // Debug log
         const overlay = document.getElementById('no-filter-overlay');
         if (overlay) {
+            console.log('Overlay found, adding show class'); // Debug log
             overlay.classList.add('show');
+            // Force display
+            overlay.style.display = 'block';
+        } else {
+            console.error('no-filter-overlay element not found!'); // Debug log
         }
     }
 
     hideNoFilterOverlay() {
+        console.log('hideNoFilterOverlay called'); // Debug log
         const overlay = document.getElementById('no-filter-overlay');
         if (overlay) {
             overlay.classList.remove('show');
+            overlay.style.display = 'none';
         }
     }
 
@@ -1973,20 +1981,21 @@ class LocationTracker {
     }
 
     openHistoryConfigPopup() {
-        // First ensure popup integrity
-        this.ensureConfigPopupIntegrity();
+        console.log('Opening history config popup'); // Debug log
 
         const historyConfigPopup = document.getElementById('history-config-popup');
         if (!historyConfigPopup) {
             console.error('History config popup not found');
             return;
         }
+
         const closeBtn = historyConfigPopup.querySelector('#history-config-close');
         if (closeBtn) {
             closeBtn.onclick = () => {
                 historyConfigPopup.classList.remove('active');
             };
         }
+
         // Initialize time pickers with current filter or defaults
         if (this.timeFilter) {
             document.getElementById('start-time-popup').value = this.formatDateTimeLocal(this.timeFilter.start);
@@ -1995,52 +2004,50 @@ class LocationTracker {
             this.initializeTimePickersPopup();
         }
 
-        // Show popup
+        // Show popup first
         historyConfigPopup.classList.add('active');
 
-        // Set up events after a brief delay
-        setTimeout(() => {
-            this.setupConfigPopupEvents(historyConfigPopup);
-        }, 50);
+        console.log('Popup shown, setting up events'); // Debug log
+
+        // Set up events immediately (no delay)
+        this.setupConfigPopupEvents(historyConfigPopup);
     }
+    
     setupConfigPopupEvents(popup) {
-        // Remove any existing event listeners to avoid duplicates
-        const existingApplyBtn = popup.querySelector('#apply-time-filter-popup');
-        if (existingApplyBtn) {
-            existingApplyBtn.replaceWith(existingApplyBtn.cloneNode(true));
-        }
+        console.log('Setting up config popup events'); // Debug log
 
-        const existingClearBtn = popup.querySelector('#clear-time-filter-popup');
-        if (existingClearBtn) {
-            existingClearBtn.replaceWith(existingClearBtn.cloneNode(true));
-        }
-
-        // Setup tab switching for history config popup
-        const tabButtons = popup.querySelectorAll('.tab-button');
-        const tabContents = popup.querySelectorAll('.tab-content');
-
-        tabButtons.forEach(button => {
-            button.addEventListener('click', () => {
-                const tabId = button.dataset.tab;
-
-                tabButtons.forEach(btn => btn.classList.remove('active'));
-                button.classList.add('active');
-
-                tabContents.forEach(content => {
-                    content.classList.remove('active');
-                    if (content.id === `${tabId}-tab`) {
-                        content.classList.add('active');
-                    }
-                });
-            });
-        });
-
+        // === TIME FILTER TAB SETUP ===
         const controlsContainer = popup.querySelector('#historical-controls-popup');
         if (controlsContainer) {
+            console.log('Time filter controls found'); // Debug log
+
             const startInput = popup.querySelector('#start-time-popup');
             const endInput = popup.querySelector('#end-time-popup');
             const applyBtn = popup.querySelector('#apply-time-filter-popup');
             const clearBtn = popup.querySelector('#clear-time-filter-popup');
+
+            // Remove old listeners by cloning
+            if (applyBtn) {
+                const newApplyBtn = applyBtn.cloneNode(true);
+                applyBtn.parentNode.replaceChild(newApplyBtn, applyBtn);
+
+                newApplyBtn.addEventListener('click', () => {
+                    console.log('Apply time filter clicked');
+                    if (this.validateTimeFilter()) {
+                        this.applyTimeFilterFromPopup();
+                    }
+                });
+            }
+
+            if (clearBtn) {
+                const newClearBtn = clearBtn.cloneNode(true);
+                clearBtn.parentNode.replaceChild(newClearBtn, clearBtn);
+
+                newClearBtn.addEventListener('click', () => {
+                    console.log('Clear time filter clicked');
+                    this.clearTimeFilter();
+                });
+            }
 
             if (startInput && endInput) {
                 const validateAndUpdate = () => {
@@ -2063,23 +2070,46 @@ class LocationTracker {
                 });
             });
 
-            if (applyBtn) {
-                applyBtn.addEventListener('click', () => {
-                    if (this.validateTimeFilter()) {
-                        this.applyTimeFilterFromPopup();
-                    }
-                });
-            }
-
-            if (clearBtn) {
-                clearBtn.addEventListener('click', () => this.clearTimeFilter());
-            }
-
             setTimeout(() => this.validateTimeFilter(), 200);
+        } else {
+            console.error('Time filter controls container not found!');
         }
 
-        // Location filter events
+        // === TAB SWITCHING SETUP ===
+        const tabButtons = popup.querySelectorAll('.tab-button');
+        const tabContents = popup.querySelectorAll('.tab-content');
+
+        console.log('Found tab buttons:', tabButtons.length); // Debug log
+        console.log('Found tab contents:', tabContents.length); // Debug log
+
+        tabButtons.forEach(button => {
+            // Remove old listeners by cloning
+            const newButton = button.cloneNode(true);
+            button.parentNode.replaceChild(newButton, button);
+
+            newButton.addEventListener('click', () => {
+                const tabId = newButton.dataset.tab;
+                console.log('Tab clicked:', tabId); // Debug log
+
+                // Update button states
+                popup.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+                newButton.classList.add('active');
+
+                // Update content visibility
+                tabContents.forEach(content => {
+                    content.classList.remove('active');
+                    if (content.id === `${tabId}-tab`) {
+                        content.classList.add('active');
+                        console.log('Activated tab:', content.id); // Debug log
+                    }
+                });
+            });
+        });
+
+        // === LOCATION FILTER TAB SETUP ===
         const locationTab = popup.querySelector('#location-filter-tab');
+        console.log('Location filter tab found:', !!locationTab); // Debug log
+
         if (locationTab) {
             const latInput = locationTab.querySelector('#location-lat-input');
             const lngInput = locationTab.querySelector('#location-lng-input');
@@ -2088,39 +2118,68 @@ class LocationTracker {
             const clearLocationBtn = locationTab.querySelector('#clear-location-filter');
             const errorElement = locationTab.querySelector('#location-validation-error');
 
+            console.log('Location filter elements:', {
+                latInput: !!latInput,
+                lngInput: !!lngInput,
+                radiusInput: !!radiusInput,
+                applyLocationBtn: !!applyLocationBtn,
+                clearLocationBtn: !!clearLocationBtn,
+                errorElement: !!errorElement
+            }); // Debug log
+
             if (applyLocationBtn) {
-                applyLocationBtn.addEventListener('click', () => {
+                // Remove old listener by cloning
+                const newApplyLocationBtn = applyLocationBtn.cloneNode(true);
+                applyLocationBtn.parentNode.replaceChild(newApplyLocationBtn, applyLocationBtn);
+
+                newApplyLocationBtn.addEventListener('click', () => {
+                    console.log('Apply location filter clicked'); // Debug log
+
                     const lat = parseFloat(latInput.value);
                     const lng = parseFloat(lngInput.value);
                     const radius = parseFloat(radiusInput.value);
 
+                    console.log('Location filter values:', { lat, lng, radius }); // Debug log
+
                     if (isNaN(lat) || isNaN(lng)) {
-                        this.showValidationError('validLocationRequired', applyLocationBtn, errorElement);
+                        console.log('Invalid lat/lng');
+                        this.showValidationError('validLocationRequired', newApplyLocationBtn, errorElement);
                         return;
                     }
 
                     if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-                        this.showValidationError('invalidCoordinates', applyLocationBtn, errorElement);
+                        console.log('Coordinates out of range');
+                        this.showValidationError('invalidCoordinates', newApplyLocationBtn, errorElement);
                         return;
                     }
 
                     if (isNaN(radius) || radius <= 0) {
-                        this.showValidationError('invalidRadius', applyLocationBtn, errorElement);
+                        console.log('Invalid radius');
+                        this.showValidationError('invalidRadius', newApplyLocationBtn, errorElement);
                         return;
                     }
 
-                    this.clearValidationError(applyLocationBtn, errorElement);
+                    console.log('Validation passed, loading historical by location');
+                    this.clearValidationError(newApplyLocationBtn, errorElement);
                     this.loadHistoricalByLocation(lat, lng, radius);
                     popup.classList.remove('active');
                 });
+            } else {
+                console.error('Apply location button not found!');
             }
 
             if (clearLocationBtn) {
-                clearLocationBtn.addEventListener('click', () => {
+                // Remove old listener by cloning
+                const newClearLocationBtn = clearLocationBtn.cloneNode(true);
+                clearLocationBtn.parentNode.replaceChild(newClearLocationBtn, clearLocationBtn);
+
+                newClearLocationBtn.addEventListener('click', () => {
+                    console.log('Clear location filter clicked'); // Debug log
+
                     latInput.value = '';
                     lngInput.value = '';
                     radiusInput.value = '0.5';
-                    this.clearValidationError(applyLocationBtn, errorElement);
+                    this.clearValidationError(newApplyLocationBtn, errorElement);
 
                     // Clear filtered locations and show no filter overlay
                     this.filteredLocations = [];
@@ -2132,6 +2191,8 @@ class LocationTracker {
                     this.showNoFilterOverlay();
                 });
             }
+        } else {
+            console.error('Location filter tab not found!');
         }
     }
     // Add this method after setupConfigPopupEvents
@@ -2482,33 +2543,41 @@ class LocationTracker {
     }
     
     async loadHistoricalByLocation(latitude, longitude, radiusKm = 0.5) {
+        console.log('loadHistoricalByLocation called with:', { latitude, longitude, radiusKm }); // Debug log
+        
         try {
             const url = `${this.config.apiBaseUrl}/api/locations/nearby?lat=${latitude}&lng=${longitude}&radius=${radiusKm}`;
-
+            console.log('Fetching from URL:', url); // Debug log
+        
             const response = await fetch(url);
+            console.log('Response status:', response.status); // Debug log
+            
             if (response.ok) {
                 const locations = await response.json();
+                console.log('Received locations:', locations.length); // Debug log
+                
                 this.filteredLocations = locations || [];
-
+            
                 this.clearAllMarkers();
                 this.displayFilteredLocations();
                 this.updateRouteForFiltered();
-
+                
                 // Hide the no filter overlay since we're applying a location filter
                 this.hideNoFilterOverlay();
-
+            
                 if (this.filteredLocations.length > 0) {
                     this.fitMapToLocations(this.filteredLocations);
                 } else {
                     setTimeout(() => this.showEmptyResultsPopup(), 500);
                 }
             } else {
-                console.error('Failed to load location data:', response.status);
-                this.showError('Failed to load location data');
+                const errorText = await response.text();
+                console.error('Failed to load location data:', response.status, errorText);
+                this.showError('Failed to load location data: ' + response.status);
             }
         } catch (error) {
             console.error('Error loading location data:', error);
-            this.showError('Failed to load location data');
+            this.showError('Failed to load location data: ' + error.message);
         }
     }
     
@@ -2912,12 +2981,12 @@ class LocationTracker {
 
     displayFilteredLocations() {
         const container = document.getElementById('location-list');
-        
+
         if (this.filteredLocations.length === 0) {
             container.innerHTML = `<div class="loading">${this.t('noLocationsFound')}</div>`;
             return;
         }
-        
+
         container.innerHTML = this.filteredLocations.map((location, index) => `
             <div class="location-item ${index === this.selectedLocationIndex ? 'selected' : ''}" 
                  onclick="locationTracker.selectLocation(${index})">
