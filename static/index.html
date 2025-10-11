@@ -2071,58 +2071,61 @@ class LocationTracker {
 
     openHistoryConfigPopup() {
         console.log('Opening history config popup');    
-
+        
         const historyConfigPopup = document.getElementById('history-config-popup');
         if (!historyConfigPopup) {
             console.error('History config popup not found');
             return;
         }   
-
+    
         const closeBtn = historyConfigPopup.querySelector('#history-config-close');
         if (closeBtn) {
             closeBtn.onclick = () => {
                 historyConfigPopup.classList.remove('active');
             };
         }   
-
+    
         // Determine which tab to show based on active filter
         const timeFilterTab = document.getElementById('time-filter-tab');
         const locationFilterTab = document.getElementById('location-filter-tab');
         const noFilterTab = document.getElementById('no-filter-selected-tab');
         const tabButtons = historyConfigPopup.querySelectorAll('.tab-button');  
-
-        // Hide all tabs first
-        timeFilterTab.classList.remove('active');
-        locationFilterTab.classList.remove('active');
+    
+        // Hide all tabs and remove active classes first
+        if (timeFilterTab) timeFilterTab.classList.remove('active');
+        if (locationFilterTab) locationFilterTab.classList.remove('active');
         if (noFilterTab) noFilterTab.style.display = 'none';
         tabButtons.forEach(btn => btn.classList.remove('active'));  
-
+    
         if (this.activeFilterType === 'time' && this.timeFilter) {
             // Show time filter tab
-            timeFilterTab.classList.add('active');
+            if (timeFilterTab) timeFilterTab.classList.add('active');
             document.getElementById('time-filter-tab-btn').classList.add('active');
             document.getElementById('start-time-popup').value = this.formatDateTimeLocal(this.timeFilter.start);
             document.getElementById('end-time-popup').value = this.formatDateTimeLocal(this.timeFilter.end);
         } else if (this.activeFilterType === 'location' && this.locationFilter) {
             // Show location filter tab
-            locationFilterTab.classList.add('active');
+            if (locationFilterTab) locationFilterTab.classList.add('active');
             document.getElementById('location-filter-tab-btn').classList.add('active');
             document.getElementById('location-lat-input').value = this.locationFilter.lat;
             document.getElementById('location-lng-input').value = this.locationFilter.lng;
             document.getElementById('location-radius-input').value = this.locationFilter.radius;
         } else {
-            // Show no filter message
+            // Show no filter message and make time filter tab active by default
+            // This allows users to click on tabs to configure filters
             if (noFilterTab) {
+                noFilterTab.classList.add('active'); // Add active class instead of just display
                 noFilterTab.style.display = 'block';
             }
-            // Don't activate any tab button
+            // Activate time filter tab button by default so users can switch
+            document.getElementById('time-filter-tab-btn').classList.add('active');
         }   
-
+    
         // Show popup
         historyConfigPopup.classList.add('active'); 
-
+    
         console.log('Popup shown, setting up events');  
-
+    
         // Set up events
         this.setupConfigPopupEvents(historyConfigPopup);
     }
@@ -2305,18 +2308,18 @@ class LocationTracker {
                 // Remove old listener by cloning
                 const newClearLocationBtn = clearLocationBtn.cloneNode(true);
                 clearLocationBtn.parentNode.replaceChild(newClearLocationBtn, clearLocationBtn);
-                        
+
                 newClearLocationBtn.addEventListener('click', () => {
                     console.log('Clear location filter clicked');
-                                
+
                     latInput.value = '';
                     lngInput.value = '';
                     radiusInput.value = '0.5';
-                    
+
                     // Fix: Get the apply button reference again since it was cloned
                     const currentApplyBtn = locationTab.querySelector('#apply-location-filter');
                     this.clearValidationError(currentApplyBtn, errorElement);
-                                
+
                     // Clear both filter states
                     this.locationFilter = null;
                     this.timeFilter = null;
@@ -2330,7 +2333,7 @@ class LocationTracker {
                     this.updateRouteLine();
                     this.displayFilteredLocations();
                     this.updateTimeFilterIndicator();
-                                
+
                     setTimeout(() => {
                         this.showNoFilterOverlay();
                     }, 100);
