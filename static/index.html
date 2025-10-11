@@ -1045,8 +1045,7 @@
             <div class="tab-content" id="no-filter-selected-tab" style="display: none;">
                 <div class="card">
                     <div class="card-body" style="text-align: center; padding: 60px 30px;">
-                        <div style="font-size: 48px; margin-bottom: 20px; opacity: 0.5;">🔍</div>
-                        <h3 style="color: white; margin-bottom: 15px;" id="no-filter-selected-title">No filter selected</h3>
+                        <h3 style="color: white; margin-bottom: 15px;" id="no-filter-selected-title">🔍 No filter selected</h3>
                         <p style="color: #9ca3af; margin-bottom: 10px;" id="please-select-filter">Please select a time range or location to view historical data.</p>
                         <p style="color: #9ca3af; font-size: 14px;" id="select-filter-tab">Choose a tab above to configure your filter.</p>
                     </div>
@@ -1095,6 +1094,9 @@
                             <label for="location-lng-input" id="location-lng-label">Longitude:</label>
                             <input type="number" id="location-lng-input" step="0.000001" placeholder="e.g., -74.0060">
                         </div>
+                        <button class="btn secondary" id="select-on-map-btn" onclick="locationTracker.startMapLocationSelection(); document.getElementById('history-config-popup').classList.remove('active');" style="margin-bottom: 15px;">
+                            <span id="select-on-map-text">📍 Select on Map</span>
+                        </button>
                         <div class="control-group">
                             <label for="location-radius-input" id="location-radius-label">Radius (km):</label>
                             <input type="number" id="location-radius-input" value="0.5" min="0.1" max="50" step="0.1">
@@ -1145,8 +1147,10 @@ class LocationTracker {
         this.liveLocations = []; 
         this.initialDbLocation = null; 
         this.hasReceivedLiveUpdate = false;
-        this.locationFilter = null; // Add this line
-        this.activeFilterType = null; // Add this line: 'time', 'location', or null
+        this.locationFilter = null;
+        this.activeFilterType = null;
+        this.isSelectingLocationOnMap = false;
+        this.mapSelectionHandler = null;
         this.translations = {
             en: {
                 title: "🌍 Real-time Location Tracker",
@@ -1225,6 +1229,11 @@ class LocationTracker {
                 selectFilterTab: "Choose a tab above to configure your filter.",
                 noFilterTitle: "⚠️ No Filter Applied",
                 noFilterMessage: "Please configure a filter in History Settings to view historical data.",
+                selectOnMap: "Select on Map",
+                selectLocationOnMap: "Click on the map to select a location",
+                clickMapToSelect: "Click anywhere on the map to set the location for filtering",
+                cancelSelection: "Cancel",
+                locationSelected: "Location selected! Coordinates updated.",
                 validationErrors: {
                     required: "Both start and end times are required",
                     invalidFormat: "Invalid date format",
@@ -1312,6 +1321,11 @@ class LocationTracker {
                 selectFilterTab: "Elija una pestaña arriba para configurar su filtro.",
                 noFilterTitle: "⚠️ No se Aplicó Filtro",
                 noFilterMessage: "Por favor configure un filtro en Ajustes de Historial para ver datos históricos.",
+                selectOnMap: "Seleccionar en Mapa",
+                selectLocationOnMap: "Haga clic en el mapa para seleccionar una ubicación",
+                clickMapToSelect: "Haga clic en cualquier lugar del mapa para establecer la ubicación del filtro",
+                cancelSelection: "Cancelar",
+                locationSelected: "¡Ubicación seleccionada! Coordenadas actualizadas.",
                 validationErrors: {
                     required: "Se requieren hora de inicio y fin",
                     invalidFormat: "Formato de fecha inválido",
@@ -1453,6 +1467,10 @@ class LocationTracker {
         if (locationRadiusLabel) locationRadiusLabel.textContent = this.t('radiusKm');
         if (applyLocationBtn) applyLocationBtn.textContent = this.t('applyLocationFilter');
         if (clearLocationBtn) clearLocationBtn.textContent = this.t('clearFilter');
+        
+        // Update select on map button
+        const selectOnMapText = document.getElementById('select-on-map-text');
+        if (selectOnMapText) selectOnMapText.textContent = '📍 ' + this.t('selectOnMap');
 
         // Refresh displays
         this.updateConnectionStatus(
@@ -2789,13 +2807,13 @@ class LocationTracker {
         
             const response = await fetch(url);
             console.log('Response status:', response.status);
-        
+
             if (response.ok) {
                 const locations = await response.json();
                 console.log('Received locations:', locations.length);
-            
+
                 this.filteredLocations = locations || [];
-            
+
                 // Set location filter as active
                 this.locationFilter = { lat: latitude, lng: longitude, radius: radiusKm };
                 this.activeFilterType = 'location';
@@ -2811,11 +2829,25 @@ class LocationTracker {
                 if (this.filteredLocations.length > 0) {
                     this.fitMapToLocations(this.filteredLocations);
                 } else {
-                    // Show empty results popup for location filter too
+                    // Show empty results popup for location filter
                     console.log('No locations found, showing empty results popup');
+
+                    // Make sure we wait a bit for the UI to update
                     setTimeout(() => {
-                        this.showEmptyResultsPopup();
-                    }, 500);
+                        const emptyPopup = document.getElementById('empty-results-popup');
+                        if (emptyPopup) {
+                            console.log('Showing empty results popup');
+                            emptyPopup.classList.add('show');
+
+                            // Also update the message to be more specific
+                            const message = emptyPopup.querySelector('p');
+                            if (message) {
+                                message.textContent = this.t('noResultsMessage');
+                            }
+                        } else {
+                            console.error('Empty results popup not found!');
+                        }
+                    }, 300);
                 }
             } else {
                 const errorText = await response.text();
@@ -2828,6 +2860,131 @@ class LocationTracker {
         }
     }
     
+    startMapLocationSelection() {
+        console.log('Starting map location selection');
+        this.isSelectingLocationOnMap = true;
+        
+        // Change cursor to crosshair
+        this.map.getCanvas().style.cursor = 'crosshair';
+        
+        // Show instruction overlay on map
+        const instructionDiv = document.createElement('div');
+        instructionDiv.id = 'map-selection-instruction';
+        instructionDiv.style.cssText = `
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(102, 126, 234, 0.95);
+            color: white;
+            padding: 20px 30px;
+            border-radius: 15px;
+            font-size: 16px;
+            font-weight: 500;
+            z-index: 2000;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            text-align: center;
+            pointer-events: none;
+        `;
+        instructionDiv.innerHTML = `
+            <div style="margin-bottom: 10px;">📍 ${this.t('selectLocationOnMap')}</div>
+            <div style="font-size: 14px; opacity: 0.9;">${this.t('clickMapToSelect')}</div>
+        `;
+        document.querySelector('.map-container').appendChild(instructionDiv);
+        
+        // Create cancel button
+        const cancelBtn = document.createElement('button');
+        cancelBtn.id = 'map-selection-cancel';
+        cancelBtn.textContent = this.t('cancelSelection');
+        cancelBtn.style.cssText = `
+            position: absolute;
+            top: 80px;
+            right: 20px;
+            z-index: 2001;
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        `;
+        cancelBtn.onclick = () => this.cancelMapLocationSelection();
+        document.querySelector('.map-container').appendChild(cancelBtn);
+        
+        // Add click handler to map
+        this.mapSelectionHandler = (e) => {
+            const { lng, lat } = e.lngLat;
+            console.log('Map clicked at:', { lat, lng });
+            this.selectLocationFromMap(lat, lng);
+        };
+
+        this.map.once('click', this.mapSelectionHandler);
+    }   
+
+    cancelMapLocationSelection() {
+        console.log('Canceling map location selection');
+        this.isSelectingLocationOnMap = false;
+
+        // Restore cursor
+        this.map.getCanvas().style.cursor = '';
+
+        // Remove instruction overlay
+        const instruction = document.getElementById('map-selection-instruction');
+        if (instruction) instruction.remove();
+
+        // Remove cancel button
+        const cancelBtn = document.getElementById('map-selection-cancel');
+        if (cancelBtn) cancelBtn.remove();
+
+        // Remove map click handler if it exists
+        if (this.mapSelectionHandler) {
+            this.map.off('click', this.mapSelectionHandler);
+            this.mapSelectionHandler = null;
+        }
+    }   
+
+    selectLocationFromMap(lat, lng) {
+        console.log('Location selected from map:', { lat, lng });
+
+        // Update the input fields
+        document.getElementById('location-lat-input').value = lat.toFixed(6);
+        document.getElementById('location-lng-input').value = lng.toFixed(6);
+
+        // Trigger validation
+        const latInput = document.getElementById('location-lat-input');
+        if (latInput) {
+            latInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        // Clean up selection mode
+        this.cancelMapLocationSelection();
+
+        // Show success message briefly
+        const successDiv = document.createElement('div');
+        successDiv.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(16, 185, 129, 0.95);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 500;
+            z-index: 10600;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        `;
+        successDiv.textContent = this.t('locationSelected');
+        document.body.appendChild(successDiv);
+
+        setTimeout(() => {
+            successDiv.remove();
+        }, 2000);
+    }
+
     fitMapToLocations(locations) {
         if (locations.length === 0) return;
 
