@@ -105,6 +105,7 @@
         .history-btn:hover {
             box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4);
         }
+        
         .time-filter-indicator {
             position: absolute;
             top: 60px;
@@ -125,8 +126,12 @@
             display: block;
         }
 
-        .time-filter-indicator.no-filter {
-            background: rgba(156, 163, 175, 0.95);
+        .time-filter-indicator.time-filter-active {
+            background: rgba(59, 130, 246, 0.95);
+        }
+
+        .time-filter-indicator.location-filter-active {
+            background: rgba(16, 185, 129, 0.95); /* Green for location filter */
         }
 
         .no-filter-overlay {
@@ -1129,6 +1134,8 @@ class LocationTracker {
         this.liveLocations = []; 
         this.initialDbLocation = null; 
         this.hasReceivedLiveUpdate = false;
+        this.locationFilter = null; // Add this line
+        this.activeFilterType = null; // Add this line: 'time', 'location', or null
         this.translations = {
             en: {
                 title: "🌍 Real-time Location Tracker",
@@ -1821,16 +1828,17 @@ class LocationTracker {
             this.routeCoords = [];
             this.updateRouteLine();
         
-            // Restore persisted filter if it exists
             if (this.persistedTimeFilter) {
                 this.timeFilter = { ...this.persistedTimeFilter };
+                this.activeFilterType = 'time';
                 this.restoreTimePickerValues();
                 this.updateTimeFilterIndicator();
                 this.loadHistoricalData();
                 this.hideNoFilterOverlay();
             } else {
-                // Initialize with empty filtered locations (user needs to apply time filter)
+                // Initialize with empty filtered locations (user needs to apply filter)
                 this.filteredLocations = [];
+                this.activeFilterType = null;
                 this.displayFilteredLocations();
                 this.updateTimeFilterIndicator();
                 this.showNoFilterOverlay();
@@ -2133,34 +2141,40 @@ class LocationTracker {
                 applyLocationBtn.parentNode.replaceChild(newApplyLocationBtn, applyLocationBtn);
 
                 newApplyLocationBtn.addEventListener('click', () => {
-                    console.log('Apply location filter clicked'); // Debug log
-
+                    console.log('Apply location filter clicked');
+                
                     const lat = parseFloat(latInput.value);
                     const lng = parseFloat(lngInput.value);
                     const radius = parseFloat(radiusInput.value);
-
-                    console.log('Location filter values:', { lat, lng, radius }); // Debug log
-
+                
+                    console.log('Location filter values:', { lat, lng, radius });
+                
                     if (isNaN(lat) || isNaN(lng)) {
                         console.log('Invalid lat/lng');
                         this.showValidationError('validLocationRequired', newApplyLocationBtn, errorElement);
                         return;
                     }
-
+                
                     if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
                         console.log('Coordinates out of range');
                         this.showValidationError('invalidCoordinates', newApplyLocationBtn, errorElement);
                         return;
                     }
-
+                
                     if (isNaN(radius) || radius <= 0) {
                         console.log('Invalid radius');
                         this.showValidationError('invalidRadius', newApplyLocationBtn, errorElement);
                         return;
                     }
-
+                
                     console.log('Validation passed, loading historical by location');
                     this.clearValidationError(newApplyLocationBtn, errorElement);
+
+                    // Clear time filter inputs when applying location filter
+                    document.getElementById('start-time-popup').value = '';
+                    document.getElementById('end-time-popup').value = '';
+                    document.querySelectorAll('.quick-range-btn').forEach(btn => btn.classList.remove('active'));
+
                     this.loadHistoricalByLocation(lat, lng, radius);
                     popup.classList.remove('active');
                 });
@@ -2174,20 +2188,23 @@ class LocationTracker {
                 clearLocationBtn.parentNode.replaceChild(newClearLocationBtn, clearLocationBtn);
 
                 newClearLocationBtn.addEventListener('click', () => {
-                    console.log('Clear location filter clicked'); // Debug log
+                    console.log('Clear location filter clicked');
 
                     latInput.value = '';
                     lngInput.value = '';
                     radiusInput.value = '0.5';
                     this.clearValidationError(newApplyLocationBtn, errorElement);
 
-                    // Clear filtered locations and show no filter overlay
+                    // Clear location filter state
+                    this.locationFilter = null;
+                    this.activeFilterType = null;
                     this.filteredLocations = [];
                     this.clearAllMarkers();
                     this.clearTraceMarkers();
                     this.routeCoords = [];
                     this.updateRouteLine();
                     this.displayFilteredLocations();
+                    this.updateTimeFilterIndicator();
                     this.showNoFilterOverlay();
                 });
             }
@@ -2267,23 +2284,29 @@ class LocationTracker {
         this.clearValidationError(applyBtn, errorElement);
         return true;
     }
+    
     updateTimeFilterIndicator() {
         const indicator = document.getElementById('time-filter-indicator');
         const textElement = document.getElementById('time-filter-text');
-        
+
         if (this.isHistoryMode) {
-            indicator.classList.remove('no-filter');
-            if (this.timeFilter) {
+            indicator.classList.remove('time-filter-active', 'location-filter-active');
+
+            if (this.activeFilterType === 'time' && this.timeFilter) {
                 const startStr = this.timeFilter.start.toLocaleDateString() + ' ' + 
                                 this.timeFilter.start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                 const endStr = this.timeFilter.end.toLocaleDateString() + ' ' + 
                               this.timeFilter.end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                textElement.innerHTML = `<div>${this.t('filterLabel')} ${startStr}</div><div>${this.t('to')} ${endStr}</div>`;
+                textElement.innerHTML = `<div><strong>⏱️ Time Filter:</strong> ${startStr}</div><div>${this.t('to')} ${endStr}</div>`;
+                indicator.classList.add('time-filter-active');
+                indicator.classList.add('show');
+            } else if (this.activeFilterType === 'location' && this.locationFilter) {
+                textElement.innerHTML = `<div><strong>📍 Location Filter:</strong></div><div>Lat: ${this.locationFilter.lat.toFixed(6)}, Lng: ${this.locationFilter.lng.toFixed(6)}</div><div>Radius: ${this.locationFilter.radius} km</div>`;
+                indicator.classList.add('location-filter-active');
+                indicator.classList.add('show');
             } else {
-                textElement.innerHTML = `<div>${this.t('noTimeFilterApplied')}</div><div>${this.t('configureInHistorySettings')}</div>`;
-                indicator.classList.add('no-filter');
+                indicator.classList.remove('show');
             }
-            indicator.classList.add('show');
         } else {
             indicator.classList.remove('show');
         }
@@ -2409,10 +2432,13 @@ class LocationTracker {
         console.log('Applying time filter:', { start: startTime, end: endTime });
 
         this.timeFilter = { start: startTime, end: endTime };
+        this.activeFilterType = 'time'; // Set active filter type
+        this.locationFilter = null; // Clear location filter
         console.log('timeFilter set to:', this.timeFilter);
 
         this.updateTimeFilterIndicator();
         this.loadHistoricalData();
+        this.hideNoFilterOverlay();
 
         // Close the popup
         document.getElementById('history-config-popup').classList.remove('active');
@@ -2421,6 +2447,7 @@ class LocationTracker {
     clearTimeFilter() {
         this.timeFilter = null;
         this.persistedTimeFilter = null;
+        this.activeFilterType = null; // Clear active filter type
         this.filteredLocations = [];
         this.updateTimeFilterIndicator();
         document.querySelectorAll('.quick-range-btn').forEach(btn => btn.classList.remove('active'));
@@ -2431,7 +2458,8 @@ class LocationTracker {
             this.clearTraceMarkers();
             this.routeCoords = [];
             this.updateRouteLine();
-            this.displayFilteredLocations(); // Will show "No locations found"
+            this.displayFilteredLocations();
+            this.showNoFilterOverlay(); // Show overlay when no filter
         } else {
             // In live mode, reload live data
             this.loadInitialData();
@@ -2543,26 +2571,31 @@ class LocationTracker {
     }
     
     async loadHistoricalByLocation(latitude, longitude, radiusKm = 0.5) {
-        console.log('loadHistoricalByLocation called with:', { latitude, longitude, radiusKm }); // Debug log
+        console.log('loadHistoricalByLocation called with:', { latitude, longitude, radiusKm });
         
         try {
             const url = `${this.config.apiBaseUrl}/api/locations/nearby?lat=${latitude}&lng=${longitude}&radius=${radiusKm}`;
-            console.log('Fetching from URL:', url); // Debug log
+            console.log('Fetching from URL:', url);
         
             const response = await fetch(url);
-            console.log('Response status:', response.status); // Debug log
-            
+            console.log('Response status:', response.status);
+
             if (response.ok) {
                 const locations = await response.json();
-                console.log('Received locations:', locations.length); // Debug log
-                
+                console.log('Received locations:', locations.length);
+
                 this.filteredLocations = locations || [];
+
+                // Set location filter as active
+                this.locationFilter = { lat: latitude, lng: longitude, radius: radiusKm };
+                this.activeFilterType = 'location';
+                this.timeFilter = null; // Clear time filter
+                this.persistedTimeFilter = null;
             
                 this.clearAllMarkers();
                 this.displayFilteredLocations();
                 this.updateRouteForFiltered();
-                
-                // Hide the no filter overlay since we're applying a location filter
+                this.updateTimeFilterIndicator(); // Update indicator to show location filter
                 this.hideNoFilterOverlay();
             
                 if (this.filteredLocations.length > 0) {
