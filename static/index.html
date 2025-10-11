@@ -135,7 +135,7 @@
         }
 
         .no-filter-overlay {
-            position: fixed;  /* Changed from absolute to fixed */
+            position: fixed;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
@@ -144,15 +144,16 @@
             padding: 40px 60px;
             border-radius: 20px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            z-index: 10500;  /* Increased z-index to be above everything */
+            z-index: 10500;
             display: none;
             text-align: center;
             border: 3px solid #f59e0b;
             max-width: 90%;
+            pointer-events: auto; /* Ensure clicks work */
         }
-
+        
         .no-filter-overlay.show {
-            display: block;
+            display: block !important; /* Force display */
             animation: pulseScale 0.5s ease-out;
         }
 
@@ -1203,6 +1204,12 @@ class LocationTracker {
                 noFilterMessage: "Please configure a time filter in History Settings to view historical data.",
                 openHistorySettings: "Open History Settings",
                 dismiss: "Dismiss",
+                timeFilterActive: "⏱️ Time Filter:",
+                locationFilterActive: "📍 Location Filter:",
+                latitude: "Latitude",
+                longitude: "Longitude",
+                radiusLabel: "Radius:",
+                km: "km",
                 validationErrors: {
                     required: "Both start and end times are required",
                     invalidFormat: "Invalid date format",
@@ -1279,6 +1286,12 @@ class LocationTracker {
                 noFilterMessage: "Por favor configure un filtro de tiempo en Ajustes de Historial para ver datos históricos.",
                 openHistorySettings: "Abrir Ajustes de Historial",
                 dismiss: "Cerrar",
+                timeFilterActive: "⏱️ Filtro de Tiempo:",
+                locationFilterActive: "📍 Filtro de Ubicación:",
+                latitude: "Latitud",
+                longitude: "Longitud",
+                radiusLabel: "Radio:",
+                km: "km",
                 validationErrors: {
                     required: "Se requieren hora de inicio y fin",
                     invalidFormat: "Formato de fecha inválido",
@@ -1819,15 +1832,16 @@ class LocationTracker {
             historyConfigBtn.style.display = 'flex';
             liveModeBtn.style.display = 'flex';
             trackBtn.style.display = 'none';
-        
+
             this.toggleTracking(false);
-        
+
             // Clear all live markers and route when entering history mode
             this.clearAllMarkers();
             this.clearTraceMarkers();
             this.routeCoords = [];
             this.updateRouteLine();
-        
+
+            // Restore persisted filter if it exists
             if (this.persistedTimeFilter) {
                 this.timeFilter = { ...this.persistedTimeFilter };
                 this.activeFilterType = 'time';
@@ -1839,9 +1853,14 @@ class LocationTracker {
                 // Initialize with empty filtered locations (user needs to apply filter)
                 this.filteredLocations = [];
                 this.activeFilterType = null;
+                this.locationFilter = null;
                 this.displayFilteredLocations();
                 this.updateTimeFilterIndicator();
-                this.showNoFilterOverlay();
+
+                // IMPORTANT: Show overlay after a short delay to ensure DOM is ready
+                setTimeout(() => {
+                    this.showNoFilterOverlay();
+                }, 100);
             }
         
         } else {
@@ -1886,15 +1905,22 @@ class LocationTracker {
     }
 
     showNoFilterOverlay() {
-        console.log('showNoFilterOverlay called'); // Debug log
+        console.log('showNoFilterOverlay called');
         const overlay = document.getElementById('no-filter-overlay');
         if (overlay) {
-            console.log('Overlay found, adding show class'); // Debug log
-            overlay.classList.add('show');
-            // Force display
+            console.log('Overlay found, adding show class');
+
+            // Force reflow to ensure display change is registered
+            overlay.style.display = 'none';
+            overlay.offsetHeight; // Force reflow
             overlay.style.display = 'block';
+
+            // Add show class after a tiny delay
+            requestAnimationFrame(() => {
+                overlay.classList.add('show');
+            });
         } else {
-            console.error('no-filter-overlay element not found!'); // Debug log
+            console.error('no-filter-overlay element not found!');
         }
     }
 
@@ -2197,6 +2223,8 @@ class LocationTracker {
 
                     // Clear location filter state
                     this.locationFilter = null;
+                    this.timeFilter = null; // Also clear time filter
+                    this.persistedTimeFilter = null;
                     this.activeFilterType = null;
                     this.filteredLocations = [];
                     this.clearAllMarkers();
@@ -2205,7 +2233,11 @@ class LocationTracker {
                     this.updateRouteLine();
                     this.displayFilteredLocations();
                     this.updateTimeFilterIndicator();
-                    this.showNoFilterOverlay();
+
+                    // Show overlay after clearing
+                    setTimeout(() => {
+                        this.showNoFilterOverlay();
+                    }, 100);
                 });
             }
         } else {
@@ -2297,11 +2329,11 @@ class LocationTracker {
                                 this.timeFilter.start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                 const endStr = this.timeFilter.end.toLocaleDateString() + ' ' + 
                               this.timeFilter.end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                textElement.innerHTML = `<div><strong>⏱️ Time Filter:</strong> ${startStr}</div><div>${this.t('to')} ${endStr}</div>`;
+                textElement.innerHTML = `<div><strong>${this.t('timeFilterActive')}</strong> ${startStr}</div><div>${this.t('to')} ${endStr}</div>`;
                 indicator.classList.add('time-filter-active');
                 indicator.classList.add('show');
             } else if (this.activeFilterType === 'location' && this.locationFilter) {
-                textElement.innerHTML = `<div><strong>📍 Location Filter:</strong></div><div>Lat: ${this.locationFilter.lat.toFixed(6)}, Lng: ${this.locationFilter.lng.toFixed(6)}</div><div>Radius: ${this.locationFilter.radius} km</div>`;
+                textElement.innerHTML = `<div><strong>${this.t('locationFilterActive')}</strong></div><div>${this.t('latitude')}: ${this.locationFilter.lat.toFixed(6)}, ${this.t('longitude')}: ${this.locationFilter.lng.toFixed(6)}</div><div>${this.t('radiusLabel')} ${this.locationFilter.radius} ${this.t('km')}</div>`;
                 indicator.classList.add('location-filter-active');
                 indicator.classList.add('show');
             } else {
@@ -2447,7 +2479,8 @@ class LocationTracker {
     clearTimeFilter() {
         this.timeFilter = null;
         this.persistedTimeFilter = null;
-        this.activeFilterType = null; // Clear active filter type
+        this.activeFilterType = null;
+        this.locationFilter = null; // Also clear location filter
         this.filteredLocations = [];
         this.updateTimeFilterIndicator();
         document.querySelectorAll('.quick-range-btn').forEach(btn => btn.classList.remove('active'));
@@ -2459,7 +2492,11 @@ class LocationTracker {
             this.routeCoords = [];
             this.updateRouteLine();
             this.displayFilteredLocations();
-            this.showNoFilterOverlay(); // Show overlay when no filter
+
+            // Show overlay after clearing
+            setTimeout(() => {
+                this.showNoFilterOverlay();
+            }, 100);
         } else {
             // In live mode, reload live data
             this.loadInitialData();
