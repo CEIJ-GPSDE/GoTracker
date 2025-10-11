@@ -2251,50 +2251,63 @@ class LocationTracker {
         // === LOCATION FILTER TAB SETUP ===
         const locationTab = popup.querySelector('#location-filter-tab');
         console.log('Location filter tab found:', !!locationTab); // Debug log
-            
+
         if (locationTab) {
             const latInput = locationTab.querySelector('#location-lat-input');
             const lngInput = locationTab.querySelector('#location-lng-input');
             const radiusInput = locationTab.querySelector('#location-radius-input');
-            const applyLocationBtn = locationTab.querySelector('#apply-location-filter');
+            let applyLocationBtn = locationTab.querySelector('#apply-location-filter'); // Use let so we can update the reference
             const clearLocationBtn = locationTab.querySelector('#clear-location-filter');
             const errorElement = locationTab.querySelector('#location-validation-error');
         
+            console.log('Location filter elements:', {
+                latInput: !!latInput,
+                lngInput: !!lngInput,
+                radiusInput: !!radiusInput,
+                applyLocationBtn: !!applyLocationBtn,
+                clearLocationBtn: !!clearLocationBtn,
+                errorElement: !!errorElement
+            }); // Debug log
+        
             // Validation function for location filter
             const validateLocationFilter = () => {
+                // Always get fresh reference to the button
+                const currentApplyBtn = locationTab.querySelector('#apply-location-filter');
+                if (!currentApplyBtn) return false;
+            
                 const lat = parseFloat(latInput.value);
                 const lng = parseFloat(lngInput.value);
                 const radius = parseFloat(radiusInput.value);
             
                 // Clear previous errors first
-                this.clearValidationError(applyLocationBtn, errorElement);
+                this.clearValidationError(currentApplyBtn, errorElement);
             
                 // Check if inputs are empty (valid state - user hasn't entered anything yet)
                 if (latInput.value === '' || lngInput.value === '') {
-                    applyLocationBtn.disabled = true;
+                    currentApplyBtn.disabled = true;
                     return false;
                 }
             
                 // Check for invalid numbers
                 if (isNaN(lat) || isNaN(lng)) {
-                    this.showValidationError('validLocationRequired', applyLocationBtn, errorElement);
+                    this.showValidationError('validLocationRequired', currentApplyBtn, errorElement);
                     return false;
                 }
             
                 // Check coordinate ranges
                 if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-                    this.showValidationError('invalidCoordinates', applyLocationBtn, errorElement);
+                    this.showValidationError('invalidCoordinates', currentApplyBtn, errorElement);
                     return false;
                 }
             
                 // Check radius
                 if (isNaN(radius) || radius <= 0) {
-                    this.showValidationError('invalidRadius', applyLocationBtn, errorElement);
+                    this.showValidationError('invalidRadius', currentApplyBtn, errorElement);
                     return false;
                 }
             
                 // All validations passed
-                applyLocationBtn.disabled = false;
+                currentApplyBtn.disabled = false;
                 return true;
             };
         
@@ -2312,22 +2325,11 @@ class LocationTracker {
                 radiusInput.addEventListener('change', validateLocationFilter);
             }
         
-            // Set initial validation state
-            setTimeout(() => validateLocationFilter(), 100);
-        
-            console.log('Location filter elements:', {
-                latInput: !!latInput,
-                lngInput: !!lngInput,
-                radiusInput: !!radiusInput,
-                applyLocationBtn: !!applyLocationBtn,
-                clearLocationBtn: !!clearLocationBtn,
-                errorElement: !!errorElement
-            }); // Debug log
-        
             if (applyLocationBtn) {
                 // Remove old listener by cloning
                 const newApplyLocationBtn = applyLocationBtn.cloneNode(true);
                 applyLocationBtn.parentNode.replaceChild(newApplyLocationBtn, applyLocationBtn);
+                applyLocationBtn = newApplyLocationBtn; // Update reference
             
                 newApplyLocationBtn.addEventListener('click', () => {
                     console.log('Apply location filter clicked');
@@ -2378,15 +2380,16 @@ class LocationTracker {
             
                 newClearLocationBtn.addEventListener('click', () => {
                     console.log('Clear location filter clicked');
-                                
+
                     latInput.value = '';
                     lngInput.value = '';
                     radiusInput.value = '0.5';
-                    
-                    // Fix: Get the apply button reference again since it was cloned
+
+                    // Get the apply button reference and clear validation
                     const currentApplyBtn = locationTab.querySelector('#apply-location-filter');
                     this.clearValidationError(currentApplyBtn, errorElement);
-                                
+                    if (currentApplyBtn) currentApplyBtn.disabled = true; // Disable since inputs are now empty
+
                     // Clear both filter states
                     this.locationFilter = null;
                     this.timeFilter = null;
@@ -2400,12 +2403,15 @@ class LocationTracker {
                     this.updateRouteLine();
                     this.displayFilteredLocations();
                     this.updateTimeFilterIndicator();
-                                
+
                     setTimeout(() => {
                         this.showNoFilterOverlay();
                     }, 100);
                 });
             }
+        
+            // Set initial validation state
+            setTimeout(() => validateLocationFilter(), 100);
         } else {
             console.error('Location filter tab not found!');
         }
@@ -2783,13 +2789,13 @@ class LocationTracker {
         
             const response = await fetch(url);
             console.log('Response status:', response.status);
-
+        
             if (response.ok) {
                 const locations = await response.json();
                 console.log('Received locations:', locations.length);
-
+            
                 this.filteredLocations = locations || [];
-
+            
                 // Set location filter as active
                 this.locationFilter = { lat: latitude, lng: longitude, radius: radiusKm };
                 this.activeFilterType = 'location';
@@ -2799,13 +2805,17 @@ class LocationTracker {
                 this.clearAllMarkers();
                 this.displayFilteredLocations();
                 this.updateRouteForFiltered();
-                this.updateTimeFilterIndicator(); // Update indicator to show location filter
-                this.hideNoFilterOverlay();
+                this.updateTimeFilterIndicator();
+                this.hideNoFilterOverlay(); // Make sure to hide the overlay
             
                 if (this.filteredLocations.length > 0) {
                     this.fitMapToLocations(this.filteredLocations);
                 } else {
-                    setTimeout(() => this.showEmptyResultsPopup(), 500);
+                    // Show empty results popup for location filter too
+                    console.log('No locations found, showing empty results popup');
+                    setTimeout(() => {
+                        this.showEmptyResultsPopup();
+                    }, 500);
                 }
             } else {
                 const errorText = await response.text();
