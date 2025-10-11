@@ -1835,12 +1835,12 @@ class LocationTracker {
                 this.updateTimeFilterIndicator();
                 this.showNoFilterOverlay();
             }
-           
+        
         } else {
             // Update mode indicator
             modeIndicator.className = 'mode-indicator live-mode';
             modeIndicator.innerHTML = `<div class="mode-indicator-dot"></div><span>${this.t('liveModeBadge')}</span>`;
-                
+
             // Store current filter before leaving history mode
             if (this.timeFilter) {
                 this.persistedTimeFilter = { ...this.timeFilter };
@@ -1867,11 +1867,14 @@ class LocationTracker {
                 this.applyLocationUpdate(queuedLocation);
             }
         }
-    
+
         // Update refresh button state based on current mode
         this.updateRefreshButtonState();
         this.updateLocationSelection();
         this.hideNoFilterOverlay();
+
+        // Re-apply translations after mode switch
+        this.updateUILanguage();
     }
 
     showNoFilterOverlay() {
@@ -2118,6 +2121,15 @@ class LocationTracker {
                     lngInput.value = '';
                     radiusInput.value = '0.5';
                     this.clearValidationError(applyLocationBtn, errorElement);
+
+                    // Clear filtered locations and show no filter overlay
+                    this.filteredLocations = [];
+                    this.clearAllMarkers();
+                    this.clearTraceMarkers();
+                    this.routeCoords = [];
+                    this.updateRouteLine();
+                    this.displayFilteredLocations();
+                    this.showNoFilterOverlay();
                 });
             }
         }
@@ -2215,11 +2227,23 @@ class LocationTracker {
             indicator.classList.remove('show');
         }
     }
+    
     showValidationError(message, button, errorElement) {
         // Translate validation error if it's a key
-        const translatedMessage = this.t(`validationErrors.${message}`) !== `validationErrors.${message}` 
-            ? this.t(`validationErrors.${message}`) 
-            : message;
+        let translatedMessage = message;
+
+        // Check if it's a validation error key
+        if (message === 'validLocationRequired' || message === 'invalidCoordinates' || message === 'invalidRadius') {
+            translatedMessage = this.t(message);
+        } else {
+            // Check if it's in validationErrors object
+            const validationKey = `validationErrors.${message}`;
+            const translated = this.t(validationKey);
+            if (translated !== validationKey) {
+                translatedMessage = translated;
+            }
+        }
+
         errorElement.textContent = translatedMessage;
         errorElement.classList.add('show');
         button.disabled = true;
@@ -2470,6 +2494,9 @@ class LocationTracker {
                 this.displayFilteredLocations();
                 this.updateRouteForFiltered();
 
+                // Hide the no filter overlay since we're applying a location filter
+                this.hideNoFilterOverlay();
+
                 if (this.filteredLocations.length > 0) {
                     this.fitMapToLocations(this.filteredLocations);
                 } else {
@@ -2477,6 +2504,7 @@ class LocationTracker {
                 }
             } else {
                 console.error('Failed to load location data:', response.status);
+                this.showError('Failed to load location data');
             }
         } catch (error) {
             console.error('Error loading location data:', error);
@@ -2886,7 +2914,7 @@ class LocationTracker {
         const container = document.getElementById('location-list');
         
         if (this.filteredLocations.length === 0) {
-            container.innerHTML = '<div class="loading">No locations found in selected time range</div>';
+            container.innerHTML = `<div class="loading">${this.t('noLocationsFound')}</div>`;
             return;
         }
         
