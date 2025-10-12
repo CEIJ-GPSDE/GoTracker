@@ -1094,7 +1094,7 @@
                             <label for="location-lng-input" id="location-lng-label">Longitude:</label>
                             <input type="number" id="location-lng-input" step="0.000001" placeholder="e.g., -74.0060">
                         </div>
-                        <button class="btn secondary" id="select-on-map-btn" onclick="locationTracker.startMapLocationSelection(); document.getElementById('history-config-popup').classList.remove('active');" style="margin-bottom: 15px;">
+                        <button class="btn secondary" id="select-on-map-btn" style="margin-bottom: 15px;">
                             <span id="select-on-map-text">📍 Select on Map</span>
                         </button>
                         <div class="control-group">
@@ -1151,6 +1151,7 @@ class LocationTracker {
         this.activeFilterType = null;
         this.isSelectingLocationOnMap = false;
         this.mapSelectionHandler = null;
+        this.lastActiveConfigTab = 'time-filter';
         this.translations = {
             en: {
                 title: "🌍 Real-time Location Tracker",
@@ -2089,73 +2090,91 @@ class LocationTracker {
 
     openHistoryConfigPopup() {
         console.log('Opening history config popup');    
-        
+
         const historyConfigPopup = document.getElementById('history-config-popup');
         if (!historyConfigPopup) {
             console.error('History config popup not found');
             return;
         }   
-    
+
         const closeBtn = historyConfigPopup.querySelector('#history-config-close');
         if (closeBtn) {
             closeBtn.onclick = () => {
                 historyConfigPopup.classList.remove('active');
             };
         }   
-    
-        // Determine which tab to show based on active filter
+
+        // Get tab elements
         const timeFilterTab = document.getElementById('time-filter-tab');
         const locationFilterTab = document.getElementById('location-filter-tab');
         const noFilterTab = document.getElementById('no-filter-selected-tab');
         const tabButtons = historyConfigPopup.querySelectorAll('.tab-button');  
-    
+
         // Hide all tabs and remove active classes first
         if (timeFilterTab) timeFilterTab.classList.remove('active');
         if (locationFilterTab) locationFilterTab.classList.remove('active');
         if (noFilterTab) noFilterTab.style.display = 'none';
         tabButtons.forEach(btn => btn.classList.remove('active'));  
-    
+
+        // Preserve input values for location filter (don't reset them)
+        const latInput = document.getElementById('location-lat-input');
+        const lngInput = document.getElementById('location-lng-input');
+        const radiusInput = document.getElementById('location-radius-input');
+
+        // Only populate if there's an active location filter, otherwise keep current values
+        if (this.activeFilterType === 'location' && this.locationFilter) {
+            latInput.value = this.locationFilter.lat;
+            lngInput.value = this.locationFilter.lng;
+            radiusInput.value = this.locationFilter.radius;
+        }
+        // If no active filter but inputs are empty, set default radius
+        if (!latInput.value && !lngInput.value && !radiusInput.value) {
+            radiusInput.value = '0.5';
+        }
+
+        // Determine which tab to show
+        let tabToShow = null;
+
         if (this.activeFilterType === 'time' && this.timeFilter) {
-            // Show time filter tab
-            if (timeFilterTab) timeFilterTab.classList.add('active');
-            document.getElementById('time-filter-tab-btn').classList.add('active');
+            // Show time filter tab and populate values
+            tabToShow = 'time-filter';
+            this.lastActiveConfigTab = 'time-filter';
             document.getElementById('start-time-popup').value = this.formatDateTimeLocal(this.timeFilter.start);
             document.getElementById('end-time-popup').value = this.formatDateTimeLocal(this.timeFilter.end);
         } else if (this.activeFilterType === 'location' && this.locationFilter) {
-            // Show location filter tab
+            // Show location filter tab (values already populated above)
+            tabToShow = 'location-filter';
+            this.lastActiveConfigTab = 'location-filter';
+        } else {
+            // No active filter - show last active tab or default to time filter
+            if (this.lastActiveConfigTab && (this.lastActiveConfigTab === 'time-filter' || this.lastActiveConfigTab === 'location-filter')) {
+                tabToShow = this.lastActiveConfigTab;
+            } else {
+                // Show no filter tab as default
+                if (noFilterTab) {
+                    noFilterTab.classList.add('active');
+                    noFilterTab.style.display = 'block';
+                }
+                // Activate time filter tab button by default
+                document.getElementById('time-filter-tab-btn').classList.add('active');
+                tabToShow = null; // Don't show any specific tab, show no-filter message
+            }
+        }
+
+        // Show the appropriate tab
+        if (tabToShow === 'time-filter') {
+            if (timeFilterTab) timeFilterTab.classList.add('active');
+            document.getElementById('time-filter-tab-btn').classList.add('active');
+        } else if (tabToShow === 'location-filter') {
             if (locationFilterTab) locationFilterTab.classList.add('active');
             document.getElementById('location-filter-tab-btn').classList.add('active');
-            document.getElementById('location-lat-input').value = this.locationFilter.lat;
-            document.getElementById('location-lng-input').value = this.locationFilter.lng;
-            document.getElementById('location-radius-input').value = this.locationFilter.radius;
-        } else {
-            // Show no filter message and set default location to latest if available
-            if (noFilterTab) {
-                noFilterTab.classList.add('active');
-                noFilterTab.style.display = 'block';
-            }
+        }
 
-            // Set default location values to latest location if available
-            const latestLocation = this.locations.length > 0 ? this.locations[0] : null;
-            if (latestLocation) {
-                // Don't auto-fill, keep empty so users must explicitly enter values
-                document.getElementById('location-lat-input').value = '';
-                document.getElementById('location-lng-input').value = '';
-            } else {
-                document.getElementById('location-lat-input').value = '';
-                document.getElementById('location-lng-input').value = '';
-            }
-            document.getElementById('location-radius-input').value = '0.5';
-
-            // Activate time filter tab button by default so users can switch
-            document.getElementById('time-filter-tab-btn').classList.add('active');
-        }  
-    
         // Show popup
         historyConfigPopup.classList.add('active'); 
-    
+
         console.log('Popup shown, setting up events');  
-    
+
         // Set up events
         this.setupConfigPopupEvents(historyConfigPopup);
     }
@@ -2237,6 +2256,9 @@ class LocationTracker {
             newButton.addEventListener('click', () => {
                 const tabId = newButton.dataset.tab;
                 console.log('Tab clicked:', tabId); // Debug log
+            
+                // Update last active tab
+                this.lastActiveConfigTab = tabId;
             
                 // Update button states
                 popup.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
@@ -2432,6 +2454,24 @@ class LocationTracker {
             setTimeout(() => validateLocationFilter(), 100);
         } else {
             console.error('Location filter tab not found!');
+        }
+
+        // === SELECT ON MAP BUTTON SETUP ===
+        const selectOnMapBtn = popup.querySelector('#select-on-map-btn');
+        if (selectOnMapBtn) {
+            // Remove old listener by cloning
+            const newSelectOnMapBtn = selectOnMapBtn.cloneNode(true);
+            selectOnMapBtn.parentNode.replaceChild(newSelectOnMapBtn, selectOnMapBtn);
+        
+            newSelectOnMapBtn.addEventListener('click', () => {
+                console.log('Select on map button clicked');
+
+                // Close the popup
+                popup.classList.remove('active');
+
+                // Start map selection
+                this.startMapLocationSelection();
+            });
         }
     }
     // Add this method after setupConfigPopupEvents
@@ -2947,20 +2987,14 @@ class LocationTracker {
 
     selectLocationFromMap(lat, lng) {
         console.log('Location selected from map:', { lat, lng });
-
+        
         // Update the input fields
         document.getElementById('location-lat-input').value = lat.toFixed(6);
         document.getElementById('location-lng-input').value = lng.toFixed(6);
-
-        // Trigger validation
-        const latInput = document.getElementById('location-lat-input');
-        if (latInput) {
-            latInput.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-
+        
         // Clean up selection mode
         this.cancelMapLocationSelection();
-
+        
         // Show success message briefly
         const successDiv = document.createElement('div');
         successDiv.style.cssText = `
@@ -2979,10 +3013,22 @@ class LocationTracker {
         `;
         successDiv.textContent = this.t('locationSelected');
         document.body.appendChild(successDiv);
-
+        
         setTimeout(() => {
             successDiv.remove();
-        }, 2000);
+            
+            // Reopen the history config popup on the location filter tab
+            this.lastActiveConfigTab = 'location-filter';
+            this.openHistoryConfigPopup();
+            
+            // Trigger validation after popup opens
+            setTimeout(() => {
+                const latInput = document.getElementById('location-lat-input');
+                if (latInput) {
+                    latInput.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+            }, 100);
+        }, 1500);
     }
 
     fitMapToLocations(locations) {
