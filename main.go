@@ -727,19 +727,22 @@ func (api *APIServer) locationNearbyHandler(w http.ResponseWriter, r *http.Reque
 
 	// Using Haversine formula approximation for nearby search
 	// This calculates distance in kilometers
+	// CORRECTED VERSION - Replace the query section above with this:
 	query := fmt.Sprintf(`
-		SELECT device_id, latitude, longitude, timestamp,
-		       (6371 * acos(
-		           cos(radians($1)) * cos(radians(latitude)) *
-		           cos(radians(longitude) - radians($2)) +
-		           sin(radians($1)) * sin(radians(latitude))
-		       )) AS distance
-		FROM %s
-		WHERE (6371 * acos(
-		    cos(radians($1)) * cos(radians(latitude)) *
-		    cos(radians(longitude) - radians($2)) +
-		    sin(radians($1)) * sin(radians(latitude))
-		)) <= $3
+		WITH calculated_distances AS (
+			SELECT device_id, latitude, longitude, timestamp,
+			       (6371 * acos(
+			           GREATEST(-1, LEAST(1,
+			               cos(radians($1)) * cos(radians(latitude)) *
+			               cos(radians(longitude) - radians($2)) +
+			               sin(radians($1)) * sin(radians(latitude))
+			           ))
+			       )) AS distance
+			FROM %s
+		)
+		SELECT device_id, latitude, longitude, timestamp, distance
+		FROM calculated_distances
+		WHERE distance <= $3
 		ORDER BY timestamp DESC
 		LIMIT 1000
 	`, tableName)
