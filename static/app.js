@@ -795,27 +795,27 @@ class LocationTracker {
         const overlay = document.getElementById('no-filter-overlay');
         if (overlay) {
             console.log('Overlay found, adding show class');
-        
+
             // Update text to prompt user to choose a filter
             const title = overlay.querySelector('h3');
             const message = overlay.querySelector('p');
-            
+
             if (title) {
                 title.textContent = this.currentLanguage === 'es' 
                     ? '⚠️ No se Aplicó Filtro' 
                     : '⚠️ No Filter Applied';
             }
-            
+
             if (message) {
                 message.textContent = this.currentLanguage === 'es'
                     ? 'Por favor seleccione un filtro de tiempo o ubicación en Ajustes de Historial para ver datos históricos.'
                     : 'Please select a time or location filter in History Settings to view historical data.';
             }
-        
+
             overlay.style.display = 'none';
             overlay.offsetHeight;
             overlay.style.display = 'block';
-        
+
             requestAnimationFrame(() => {
                 overlay.classList.add('show');
             });
@@ -962,16 +962,13 @@ class LocationTracker {
             tabToShow = 'location-filter';
             this.lastActiveConfigTab = 'location-filter';
         } else {
-            if (this.lastActiveConfigTab && (this.lastActiveConfigTab === 'time-filter' || this.lastActiveConfigTab === 'location-filter')) {
-                tabToShow = this.lastActiveConfigTab;
-            } else {
-                if (noFilterTab) {
-                    noFilterTab.classList.add('active');
-                    noFilterTab.style.display = 'block';
-                }
-                document.getElementById('time-filter-tab-btn').classList.add('active');
-                tabToShow = null;
+            // No active filter - show the "no filter selected" message
+            if (noFilterTab) {
+                noFilterTab.classList.add('active');
+                noFilterTab.style.display = 'block';
             }
+            // Don't activate any specific tab button yet - let user choose
+            tabToShow = null;
         }
 
         if (tabToShow === 'time-filter') {
@@ -1557,24 +1554,27 @@ class LocationTracker {
     
     async loadHistoricalByLocation(latitude, longitude, radiusKm = 0.5) {
         console.log('loadHistoricalByLocation called with:', { latitude, longitude, radiusKm });
-        
+
         try {
             const url = `${this.config.apiBaseUrl}/api/locations/nearby?lat=${latitude}&lng=${longitude}&radius=${radiusKm}`;
             console.log('Fetching from URL:', url);
         
             const response = await fetch(url);
             console.log('Response status:', response.status);
+            console.log('Response headers:', response.headers); 
 
             if (response.ok) {
                 const locations = await response.json();
                 console.log('Received locations:', locations.length);
+                console.log('First location:', locations[0]);   
 
-                this.filteredLocations = locations || [];
+                this.filteredLocations = locations || [];   
 
                 this.locationFilter = { lat: latitude, lng: longitude, radius: radiusKm };
                 this.activeFilterType = 'location';
                 this.timeFilter = null;
                 this.persistedTimeFilter = null;
+                this.persistedLocationFilter = { ...this.locationFilter };
             
                 this.clearAllMarkers();
                 this.displayFilteredLocations();
@@ -1585,7 +1585,6 @@ class LocationTracker {
                 if (this.filteredLocations.length > 0) {
                     this.fitMapToLocations(this.filteredLocations);
                 } else {
-                    // Show empty results popup for location filter with no results
                     setTimeout(() => {
                         this.showEmptyResultsPopup();
                     }, 300);

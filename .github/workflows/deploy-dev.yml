@@ -230,19 +230,18 @@ jobs:
           
           echo "Using instance name: $instance_name"
           echo "Branch: $branch"
-
+      
           ls
           
-          # Modify the HTML title to include instance name and branch
+          # Modify the HTML title
           sed -i "s|<title>Real-time Location Tracker</title>|<title>$instance_name ($branch)</title>|g" ./static/index.html
           
-          # Update both English and Spanish headers
+          # Update the h1 in HTML
           sed -i "s|<h1>🌍 Real-time Location Tracker</h1>|<h1>🌍 $instance_name (DEV)</h1>|g" ./static/index.html
-          sed -i "s|<h1>🌍 Rastreador de Ubicación en Tiempo Real</h1>|<h1>🌍 $instance_name (DEV)</h1>|g" ./static/index.html
           
-          # Update the translation object to include instance name
-          sed -i "s|title: \"🌍 Real-time Location Tracker\"|title: \"🌍 $instance_name (DEV)\"|g" ./static/index.html
-          sed -i "s|title: \"🌍 Rastreador de Ubicación en Tiempo Real\"|title: \"🌍 $instance_name (DEV)\"|g" ./static/index.html
+          # Update the translation objects in app.js (both English and Spanish)
+          sed -i "s|title: \"🌍 Real-time Location Tracker\"|title: \"🌍 $instance_name (DEV)\"|g" ./static/app.js
+          sed -i "s|title: \"🌍 Rastreador de Ubicación en Tiempo Real\"|title: \"🌍 $instance_name (DEV)\"|g" ./static/app.js
           
           echo "HTML modifications completed"
 
