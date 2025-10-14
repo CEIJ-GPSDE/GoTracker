@@ -1109,26 +1109,30 @@ class LocationTracker {
             const validateLocationFilter = () => {
                 const currentApplyBtn = locationTab.querySelector('#apply-location-filter');
                 if (!currentApplyBtn) return false;
-            
+
                 const lat = parseFloat(latInput.value);
                 const lng = parseFloat(lngInput.value);
                 const radius = parseFloat(radiusInput.value);
-            
+
                 this.clearValidationError(currentApplyBtn, errorElement);
-            
-                if (latInput.value === '' || lngInput.value === '') {
+
+                // Only disable if BOTH fields are empty
+                if (latInput.value === '' && lngInput.value === '') {
                     currentApplyBtn.disabled = true;
                     return false;
                 }
             
-                if (isNaN(lat) || isNaN(lng)) {
-                    this.showValidationError('validLocationRequired', currentApplyBtn, errorElement);
-                    return false;
-                }
-            
-                if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-                    this.showValidationError('invalidCoordinates', currentApplyBtn, errorElement);
-                    return false;
+                // If either field has a value, validate both
+                if (latInput.value !== '' || lngInput.value !== '') {
+                    if (isNaN(lat) || isNaN(lng)) {
+                        this.showValidationError('validLocationRequired', currentApplyBtn, errorElement);
+                        return false;
+                    }
+                
+                    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+                        this.showValidationError('invalidCoordinates', currentApplyBtn, errorElement);
+                        return false;
+                    }
                 }
             
                 if (isNaN(radius) || radius <= 0) {
@@ -1706,9 +1710,31 @@ class LocationTracker {
         setTimeout(() => {
             successDiv.remove();
             
-            this.lastActiveConfigTab = 'location-filter';
-            this.openHistoryConfigPopup();
+            // Open the history config popup
+            const historyConfigPopup = document.getElementById('history-config-popup');
+            historyConfigPopup.classList.add('active');
             
+            // Activate the location filter tab
+            const tabButtons = historyConfigPopup.querySelectorAll('.tab-button');
+            const locationFilterTabBtn = historyConfigPopup.querySelector('[data-tab="location-filter"]');
+            const timeFilterTab = historyConfigPopup.querySelector('#time-filter-tab');
+            const locationFilterTab = historyConfigPopup.querySelector('#location-filter-tab');
+            const noFilterTab = historyConfigPopup.querySelector('#no-filter-selected-tab');
+            
+            // Remove active class from all tabs
+            tabButtons.forEach(btn => btn.classList.remove('active'));
+            if (timeFilterTab) timeFilterTab.classList.remove('active');
+            if (locationFilterTab) locationFilterTab.classList.remove('active');
+            if (noFilterTab) {
+                noFilterTab.classList.remove('active');
+                noFilterTab.style.display = 'none';
+            }
+            
+            // Activate location filter tab
+            if (locationFilterTabBtn) locationFilterTabBtn.classList.add('active');
+            if (locationFilterTab) locationFilterTab.classList.add('active');
+            
+            // Trigger validation
             setTimeout(() => {
                 const latInput = document.getElementById('location-lat-input');
                 if (latInput) {
