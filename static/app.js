@@ -1558,27 +1558,50 @@ class LocationTracker {
     
     async loadHistoricalByLocation(latitude, longitude, radiusKm = 0.5) {
         console.log('loadHistoricalByLocation called with:', { latitude, longitude, radiusKm });
-
+        
         try {
             const url = `${this.config.apiBaseUrl}/api/locations/nearby?lat=${latitude}&lng=${longitude}&radius=${radiusKm}`;
             console.log('Fetching from URL:', url);
+            console.log('Full URL with protocol:', window.location.protocol + '//' + window.location.host + `/api/locations/nearby?lat=${latitude}&lng=${longitude}&radius=${radiusKm}`);
         
             const response = await fetch(url);
             console.log('Response status:', response.status);
-            console.log('Response headers:', response.headers); 
-
+            console.log('Response ok:', response.ok);
+            console.log('Response headers:', [...response.headers.entries()]);
+        
             if (response.ok) {
-                const locations = await response.json();
-                console.log('Received locations:', locations.length);
-                console.log('First location:', locations[0]);   
-
+                const text = await response.text(); // Get raw text first
+                console.log('Raw response text:', text);
+                
+                let locations;
+                try {
+                    locations = JSON.parse(text);
+                } catch (e) {
+                    console.error('JSON parse error:', e);
+                    console.error('Failed to parse:', text);
+                    throw new Error('Invalid JSON response');
+                }
+                
+                console.log('Parsed locations:', locations);
+                console.log('Number of locations:', locations ? locations.length : 0);
+                
+                if (locations && locations.length > 0) {
+                    console.log('First location sample:', locations[0]);
+                }
+            
                 this.filteredLocations = locations || [];   
-
+            
                 this.locationFilter = { lat: latitude, lng: longitude, radius: radiusKm };
                 this.activeFilterType = 'location';
                 this.timeFilter = null;
                 this.persistedTimeFilter = null;
                 this.persistedLocationFilter = { ...this.locationFilter };
+            
+                console.log('State after setting filters:', {
+                    activeFilterType: this.activeFilterType,
+                    locationFilter: this.locationFilter,
+                    filteredLocations: this.filteredLocations.length
+                });
             
                 this.clearAllMarkers();
                 this.displayFilteredLocations();
@@ -1587,8 +1610,10 @@ class LocationTracker {
                 this.hideNoFilterOverlay();
             
                 if (this.filteredLocations.length > 0) {
+                    console.log('Fitting map to locations...');
                     this.fitMapToLocations(this.filteredLocations);
                 } else {
+                    console.log('No locations found, showing empty results popup');
                     setTimeout(() => {
                         this.showEmptyResultsPopup();
                     }, 300);
@@ -1596,10 +1621,12 @@ class LocationTracker {
             } else {
                 const errorText = await response.text();
                 console.error('Failed to load location data:', response.status, errorText);
+                console.error('Response headers:', [...response.headers.entries()]);
                 this.showError('Failed to load location data: ' + response.status);
             }
         } catch (error) {
-            console.error('Error loading location data:', error);
+            console.error('Exception in loadHistoricalByLocation:', error);
+            console.error('Error stack:', error.stack);
             this.showError('Failed to load location data: ' + error.message);
         }
     }
@@ -1709,18 +1736,18 @@ class LocationTracker {
         
         setTimeout(() => {
             successDiv.remove();
-            
+
             // Open the history config popup
             const historyConfigPopup = document.getElementById('history-config-popup');
             historyConfigPopup.classList.add('active');
-            
+
             // Activate the location filter tab
             const tabButtons = historyConfigPopup.querySelectorAll('.tab-button');
             const locationFilterTabBtn = historyConfigPopup.querySelector('[data-tab="location-filter"]');
             const timeFilterTab = historyConfigPopup.querySelector('#time-filter-tab');
             const locationFilterTab = historyConfigPopup.querySelector('#location-filter-tab');
             const noFilterTab = historyConfigPopup.querySelector('#no-filter-selected-tab');
-            
+
             // Remove active class from all tabs
             tabButtons.forEach(btn => btn.classList.remove('active'));
             if (timeFilterTab) timeFilterTab.classList.remove('active');
@@ -1729,11 +1756,11 @@ class LocationTracker {
                 noFilterTab.classList.remove('active');
                 noFilterTab.style.display = 'none';
             }
-            
+
             // Activate location filter tab
             if (locationFilterTabBtn) locationFilterTabBtn.classList.add('active');
             if (locationFilterTab) locationFilterTab.classList.add('active');
-            
+
             // Trigger validation
             setTimeout(() => {
                 const latInput = document.getElementById('location-lat-input');

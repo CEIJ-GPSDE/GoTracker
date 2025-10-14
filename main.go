@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -69,8 +70,11 @@ func NewDatabase(config *Config) (*Database, error) {
 	connStr := fmt.Sprintf(
 		"host=%s user=%s password=%s dbname=%s sslmode=%s",
 		config.DBHost, config.DBUser, config.DBPassword,
-		config.DBName, getEnv("DB_SSLMODE", "require"),
+		config.DBName, config.DBSSLMode, // ✅ FIX: Use config.DBSSLMode, not getEnv
 	)
+
+	log.Printf("🔌 Connecting to database: host=%s dbname=%s user=%s sslmode=%s",
+		config.DBHost, config.DBName, config.DBUser, config.DBSSLMode)
 
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
@@ -80,6 +84,8 @@ func NewDatabase(config *Config) (*Database, error) {
 	if err := db.Ping(); err != nil {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
+
+	log.Println("✅ Database connection established successfully")
 
 	// Set connection pool settings
 	db.SetMaxOpenConns(50)
@@ -112,6 +118,24 @@ func (db *Database) InitializeSchema(prefix string) error {
 
 	_, err := db.Exec(schema)
 	return err
+}
+
+func (db *Database) TestConnection(prefix string) error {
+	tableName := "locations"
+	if prefix != "" {
+		tableName = prefix + "_locations"
+	}
+	
+	// Test if we can write and read
+	testQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s", tableName)
+	var count int
+	err := db.QueryRow(testQuery).Scan(&count)
+	if err != nil {
+		return fmt.Errorf("failed to query table %s: %w", tableName, err)
+	}
+	
+	log.Printf("✅ Database connection test passed. Table '%s' has %d records", tableName, count)
+	return nil
 }
 
 // Location data structure
@@ -311,19 +335,27 @@ func (us *UDPSniffer) Run(ctx context.Context) {
 				continue
 			}
 
-			// ✅ Always log raw packet content
+			// Always log raw packet content
 			raw := string(buffer[:n])
 			log.Printf("Received raw UDP packet from %s: %s", addr, raw)
 
 			packet := us.parsePacket(buffer[:n])
 			if packet != nil {
+				// ✅ CRITICAL: Store to database first
 				if err := us.storeLocation(packet); err != nil {
-					log.Printf("Error storing location: %v", err)
-				} else {
-					us.wsHub.Broadcast(packet)
-					log.Printf("Processed location packet from %s: Device=%s, Lat=%.6f, Lng=%.6f",
-						addr, packet.DeviceID, packet.Latitude, packet.Longitude)
+					log.Printf("❌ ERROR storing location to database: %v", err)
+					continue // Don't broadcast if DB write failed
 				}
+				
+				log.Printf("✅ Stored to database: Device=%s, Lat=%.6f, Lng=%.6f, Time=%s",
+					packet.DeviceID, packet.Latitude, packet.Longitude, packet.Timestamp.Format(time.RFC3339))
+				
+				// ✅ Then broadcast via WebSocket
+				us.wsHub.Broadcast(packet)
+				log.Printf("📡 Broadcast via WebSocket: Device=%s", packet.DeviceID)
+				
+				log.Printf("Processed location packet from %s: Device=%s, Lat=%.6f, Lng=%.6f",
+					addr, packet.DeviceID, packet.Latitude, packet.Longitude)
 			}
 		}
 	}
@@ -694,19 +726,29 @@ func (api *APIServer) locationNearbyHandler(w http.ResponseWriter, r *http.Reque
 	lngStr := r.URL.Query().Get("lng")
 	radiusStr := r.URL.Query().Get("radius")
 
+	log.Printf("========================================")
+	log.Printf("📍 Location nearby request received")
+	log.Printf("   Query params: lat=%s, lng=%s, radius=%s", latStr, lngStr, radiusStr)
+	log.Printf("   Full URL: %s", r.URL.String())
+	log.Printf("   Remote addr: %s", r.RemoteAddr)
+	log.Printf("========================================")
+
 	if latStr == "" || lngStr == "" {
+		log.Printf("❌ Missing required parameters")
 		http.Error(w, "lat and lng parameters are required", http.StatusBadRequest)
 		return
 	}
 
 	lat, err := strconv.ParseFloat(latStr, 64)
 	if err != nil || lat < -90 || lat > 90 {
+		log.Printf("❌ Invalid latitude: %s (error: %v)", latStr, err)
 		http.Error(w, "Invalid latitude", http.StatusBadRequest)
 		return
 	}
 
 	lng, err := strconv.ParseFloat(lngStr, 64)
 	if err != nil || lng < -180 || lng > 180 {
+		log.Printf("❌ Invalid longitude: %s (error: %v)", lngStr, err)
 		http.Error(w, "Invalid longitude", http.StatusBadRequest)
 		return
 	}
@@ -715,29 +757,46 @@ func (api *APIServer) locationNearbyHandler(w http.ResponseWriter, r *http.Reque
 	if radiusStr != "" {
 		radius, err = strconv.ParseFloat(radiusStr, 64)
 		if err != nil || radius <= 0 || radius > 50 {
+			log.Printf("❌ Invalid radius: %s (error: %v)", radiusStr, err)
 			http.Error(w, "Invalid radius (must be between 0 and 50 km)", http.StatusBadRequest)
 			return
 		}
 	}
+
+	log.Printf("✅ Parsed values: lat=%.6f, lng=%.6f, radius=%.2f km", lat, lng, radius)
 
 	tableName := "locations"
 	if api.tablePrefix != "" {
 		tableName = api.tablePrefix + "_locations"
 	}
 
-	// Using Haversine formula approximation for nearby search
-	// This calculates distance in kilometers
-	// CORRECTED VERSION - Replace the query section above with this:
+	log.Printf("🗄️  Querying table: %s", tableName)
+
+	// First, let's check if there are ANY locations in the database
+	var totalCount int
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s", tableName)
+	err = api.db.QueryRow(countQuery).Scan(&totalCount)
+	if err != nil {
+		log.Printf("❌ Error counting total locations: %v", err)
+	} else {
+		log.Printf("📊 Total locations in database: %d", totalCount)
+	}
+
+	// Simplified query using CTE to avoid HAVING without GROUP BY
 	query := fmt.Sprintf(`
 		WITH calculated_distances AS (
-			SELECT device_id, latitude, longitude, timestamp,
-			       (6371 * acos(
-			           GREATEST(-1, LEAST(1,
-			               cos(radians($1)) * cos(radians(latitude)) *
-			               cos(radians(longitude) - radians($2)) +
-			               sin(radians($1)) * sin(radians(latitude))
-			           ))
-			       )) AS distance
+			SELECT 
+				device_id, 
+				latitude, 
+				longitude, 
+				timestamp,
+				(6371 * acos(
+					GREATEST(-1, LEAST(1,
+						cos(radians($1)) * cos(radians(latitude)) *
+						cos(radians(longitude) - radians($2)) +
+						sin(radians($1)) * sin(radians(latitude))
+					))
+				)) AS distance
 			FROM %s
 		)
 		SELECT device_id, latitude, longitude, timestamp, distance
@@ -747,33 +806,90 @@ func (api *APIServer) locationNearbyHandler(w http.ResponseWriter, r *http.Reque
 		LIMIT 1000
 	`, tableName)
 
+	log.Printf("📝 Executing query with params: lat=%.6f, lng=%.6f, radius=%.2f", lat, lng, radius)
+	log.Printf("🔍 Query: %s", query)
+
 	rows, err := api.db.Query(query, lat, lng, radius)
 	if err != nil {
-		log.Printf("Database query error: %v", err)
-		http.Error(w, "Database error", http.StatusInternalServerError)
+		log.Printf("❌ Database query error: %v", err)
+		log.Printf("   Query was: %s", query)
+		log.Printf("   Params: lat=%.6f, lng=%.6f, radius=%.2f", lat, lng, radius)
+		http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
 
 	var locations []LocationPacket
+	rowCount := 0
 	for rows.Next() {
 		var location LocationPacket
 		var distance float64
 		if err := rows.Scan(&location.DeviceID, &location.Latitude, &location.Longitude, &location.Timestamp, &distance); err != nil {
-			log.Printf("Row scan error: %v", err)
+			log.Printf("❌ Row scan error: %v", err)
 			continue
 		}
+		rowCount++
+		log.Printf("✅ Found location #%d: device=%s, lat=%.6f, lng=%.6f, distance=%.2f km, time=%s", 
+			rowCount, location.DeviceID, location.Latitude, location.Longitude, distance, location.Timestamp.Format(time.RFC3339))
 		locations = append(locations, location)
 	}
 
 	if err = rows.Err(); err != nil {
-		log.Printf("Rows iteration error: %v", err)
+		log.Printf("❌ Rows iteration error: %v", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 
+	log.Printf("📍 Returning %d locations within %.2f km radius of (%.6f, %.6f)", len(locations), radius, lat, lng)
+	
+	// If no results, let's sample some data from the database
+	if len(locations) == 0 {
+		log.Printf("⚠️  No locations found. Sampling database...")
+		sampleQuery := fmt.Sprintf(`
+			SELECT device_id, latitude, longitude, timestamp
+			FROM %s
+			ORDER BY timestamp DESC
+			LIMIT 5
+		`, tableName)
+		
+		sampleRows, err := api.db.Query(sampleQuery)
+		if err == nil {
+			defer sampleRows.Close()
+			log.Printf("📋 Sample of most recent locations in database:")
+			sampleCount := 0
+			for sampleRows.Next() {
+				var loc LocationPacket
+				if err := sampleRows.Scan(&loc.DeviceID, &loc.Latitude, &loc.Longitude, &loc.Timestamp); err == nil {
+					sampleCount++
+					// Calculate distance for debugging
+					sampleDist := haversineDistance(lat, lng, loc.Latitude, loc.Longitude)
+					log.Printf("   Sample #%d: device=%s, lat=%.6f, lng=%.6f, time=%s, distance=%.2f km", 
+						sampleCount, loc.DeviceID, loc.Latitude, loc.Longitude, loc.Timestamp.Format(time.RFC3339), sampleDist)
+				}
+			}
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(locations)
+	if err := json.NewEncoder(w).Encode(locations); err != nil {
+		log.Printf("❌ JSON encoding error: %v", err)
+	} else {
+		log.Printf("✅ Successfully returned JSON response")
+	}
+}
+
+// Helper function to calculate distance (for debugging)
+func haversineDistance(lat1, lng1, lat2, lng2 float64) float64 {
+	const earthRadius = 6371.0 // km
+	dLat := (lat2 - lat1) * (3.14159265359 / 180.0)
+	dLng := (lng2 - lng1) * (3.14159265359 / 180.0)
+	
+	a := math.Sin(dLat/2)*math.Sin(dLat/2) +
+		math.Cos(lat1*(3.14159265359/180.0))*math.Cos(lat2*(3.14159265359/180.0))*
+		math.Sin(dLng/2)*math.Sin(dLng/2)
+	
+	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
+	return earthRadius * c
 }
 
 func (api *APIServer) deviceLocationHistoryHandler(w http.ResponseWriter, r *http.Request) {
@@ -867,6 +983,11 @@ func NewApp() (*App, error) {
 
 	if err := db.InitializeSchema(config.TablePrefix); err != nil {
 		return nil, fmt.Errorf("failed to initialize database schema: %w", err)
+	}
+
+	// ✅ ADD THIS TEST
+	if err := db.TestConnection(config.TablePrefix); err != nil {
+		return nil, fmt.Errorf("database connection test failed: %w", err)
 	}
 
 	wsHub := NewWebSocketHub()
