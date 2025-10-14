@@ -795,11 +795,27 @@ class LocationTracker {
         const overlay = document.getElementById('no-filter-overlay');
         if (overlay) {
             console.log('Overlay found, adding show class');
-
+        
+            // Update text to prompt user to choose a filter
+            const title = overlay.querySelector('h3');
+            const message = overlay.querySelector('p');
+            
+            if (title) {
+                title.textContent = this.currentLanguage === 'es' 
+                    ? '⚠️ No se Aplicó Filtro' 
+                    : '⚠️ No Filter Applied';
+            }
+            
+            if (message) {
+                message.textContent = this.currentLanguage === 'es'
+                    ? 'Por favor seleccione un filtro de tiempo o ubicación en Ajustes de Historial para ver datos históricos.'
+                    : 'Please select a time or location filter in History Settings to view historical data.';
+            }
+        
             overlay.style.display = 'none';
             overlay.offsetHeight;
             overlay.style.display = 'block';
-
+        
             requestAnimationFrame(() => {
                 overlay.classList.add('show');
             });
@@ -1358,7 +1374,22 @@ class LocationTracker {
     }
 
     showEmptyResultsPopup() {
-        document.getElementById('empty-results-popup').classList.add('show');
+        const popup = document.getElementById('empty-results-popup');
+        const message = popup.querySelector('p');
+    
+        // Update message based on active filter type
+        if (this.activeFilterType === 'location') {
+            if (message) {
+                message.textContent = this.currentLanguage === 'es' 
+                    ? 'No se encontraron ubicaciones en el área seleccionada.'
+                    : 'No locations found in the selected area.';
+            }
+        } else {
+            if (message) {
+                message.textContent = this.t('noResultsMessage');
+            }
+        }
+        popup.classList.add('show');
     }
 
     closeEmptyResultsPopup() {
@@ -1554,21 +1585,9 @@ class LocationTracker {
                 if (this.filteredLocations.length > 0) {
                     this.fitMapToLocations(this.filteredLocations);
                 } else {
-                    console.log('No locations found, showing empty results popup');
-
+                    // Show empty results popup for location filter with no results
                     setTimeout(() => {
-                        const emptyPopup = document.getElementById('empty-results-popup');
-                        if (emptyPopup) {
-                            console.log('Showing empty results popup');
-                            emptyPopup.classList.add('show');
-
-                            const message = emptyPopup.querySelector('p');
-                            if (message) {
-                                message.textContent = this.t('noResultsMessage');
-                            }
-                        } else {
-                            console.error('Empty results popup not found!');
-                        }
+                        this.showEmptyResultsPopup();
                     }, 300);
                 }
             } else {

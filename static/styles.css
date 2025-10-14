@@ -38,6 +38,27 @@ body {
     opacity: 0.9; 
 }
 
+#language-selector {
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 2px solid rgba(255,255,255,0.3);
+    background: rgba(255,255,255,0.9);
+    color: #374151;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+#language-selector:hover {
+    background: rgba(255,255,255,1);
+    border-color: rgba(255,255,255,0.5);
+}
+
+#language-selector option {
+    background: white;
+    color: #374151;
+}
+
 .dashboard {
     position: relative;
     height: calc(100vh - 160px);
