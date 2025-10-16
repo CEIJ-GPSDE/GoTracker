@@ -128,6 +128,67 @@
         .time-filter-indicator.no-filter {
             background: rgba(156, 163, 175, 0.95);
         }
+
+        .mode-indicator {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(10px);
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            z-index: 1000;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+            border: 2px solid;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .mode-indicator.live-mode {
+            border-color: #ef4444;
+            color: #dc2626;
+        }
+
+        .mode-indicator.history-mode {
+            border-color: #3b82f6;
+            color: #2563eb;
+        }
+
+        .mode-indicator-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .mode-indicator.live-mode .mode-indicator-dot {
+            background: #ef4444;
+        }
+
+        .mode-indicator.history-mode .mode-indicator-dot {
+            background: #3b82f6;
+        }
+
+        .route-legend {
+            position: absolute;
+            bottom: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(10px);
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            z-index: 1000;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+            border: 2px solid #e5e7eb;
+        }
         .menu-toggle-btn:hover {
             box-shadow: 0 8px 20px rgba(139, 92, 246, 0.4);
         }
@@ -682,7 +743,39 @@
           opacity: 1 !important;
           z-index: 1001;
         }
-        /* Add these new styles */
+
+        .direction-arrow {
+            position: absolute;
+            width: 3px;
+            height: 16px;
+            background: #3b82f6;
+            opacity: 0.8;
+            pointer-events: none;
+            z-index: 999;
+            transition: opacity 0.2s;
+        }
+
+        .direction-arrow::before {
+            content: '';
+            position: absolute;
+            top: -6px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-bottom: 8px solid #3b82f6;
+        }
+
+        .direction-arrow.hidden {
+            opacity: 0;
+        }
+
+        .direction-arrow.always-visible {
+            opacity: 0.8 !important;
+        }
+
         .filter-popup {
             position: fixed;
             top: 50%;
@@ -733,6 +826,12 @@
     <div class="header">
         <h1>🌍 Real-time Location Tracker</h1>
         <p>Monitoring device locations with live updates and historical view</p>
+        <div style="margin-top: 15px;">
+            <select id="language-selector" style="padding: 8px 12px; border-radius: 8px; border: 2px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.2); color: white; font-weight: 500; cursor: pointer;">
+                <option value="en">English</option>
+                <option value="es">Español</option>
+            </select>
+        </div>
     </div>
 
     <div class="dashboard">
@@ -769,6 +868,19 @@
                 </button>
             </div>
             <div id="map"></div>
+            <div class="mode-indicator live-mode" id="mode-indicator">
+                <div class="mode-indicator-dot"></div>
+                <span>🔴 LIVE MODE</span>
+            </div>
+            <div class="route-legend" id="route-legend" style="display: none;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <div style="width: 12px; height: 12px; background: #10b981; border-radius: 50%; border: 2px solid white;"></div>
+                    <span style="font-size: 11px;" id="legend-start">Start</span>
+                    <div style="flex: 1; height: 4px; background: linear-gradient(to right, #10b981, #f59e0b, #ef4444); margin: 0 5px;"></div>
+                    <span style="font-size: 11px;" id="legend-end">End</span>
+                    <div style="width: 12px; height: 12px; background: #ef4444; border-radius: 50%; border: 2px solid white;"></div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -784,7 +896,6 @@
             <div class="menu-tabs">
                 <button class="tab-button active" data-tab="controls">⚙️ Controls</button>
                 <button class="tab-button" data-tab="locations">📍 Locations</button>
-                <button class="tab-button" data-tab="stats">📊 Statistics</button>
             </div>
             
             <!-- Controls Tab -->
@@ -803,8 +914,8 @@
                     </div>
                     <div class="control-item">
                       <label style="display:flex; align-items:center; gap:6px; cursor:pointer; width:100%;">
-                        <input type="checkbox" id="toggle-trace-dots">
-                        <span>Show trace dots</span>
+                        <input type="checkbox" id="toggle-trace-dots" checked>
+                        <span id="trace-dots-label">Show trace dots</span>
                       </label>
                     </div>
                 </div>
@@ -821,8 +932,8 @@
                 </div>
             </div>
             
-            <!-- Statistics Tab -->
-            <div class="tab-content" id="stats-tab">
+            <!-- Statistics Tab - Hidden but kept for stats polling -->
+            <div class="tab-content" id="stats-tab" style="display: none !important;">
                 <div class="card">
                     <div class="card-body stats">
                         <div class="stat-item">
@@ -916,10 +1027,145 @@ class LocationTracker {
         this.timeFilter = null;
         this.suppressUserInteraction = false;
         this.traceMarkers = [];
-        this.showTraceDots = false;
+        this.showTraceDots = true;
         this.liveUpdateQueue = []; 
         this.persistedTimeFilter = null;
-        this.selectedLocationMarker = null; // Add this line
+        this.selectedLocationMarker = null;
+        this.liveUpdateQueue = []; 
+        this.persistedTimeFilter = null;
+        this.selectedLocationMarker = null;
+        this.liveLocations = []; 
+        this.initialDbLocation = null; 
+        this.hasReceivedLiveUpdate = false;
+        this.translations = {
+            en: {
+                title: "🌍 Real-time Location Tracker",
+                subtitle: "Monitoring device locations with live updates and historical view",
+                connecting: "Connecting...",
+                connected: "Connected",
+                disconnected: "Disconnected",
+                connectionError: "Connection Error",
+                reconnecting: "Reconnecting in {0}s... ({1}/{2})",
+                connectionFailed: "Connection failed - refresh page",
+                trackLatest: "Track Latest",
+                trackingOff: "Tracking Off",
+                historyMode: "History Mode",
+                historySettings: "History Settings",
+                liveMode: "Live Mode",
+                menu: "Menu",
+                liveModeBadge: "🔴 LIVE MODE",
+                historyModeBadge: "📅 HISTORY MODE",
+                legendStart: "Start (oldest)",
+                legendEnd: "End (newest)",
+                filterLabel: "Filter:",
+                to: "to",
+                noTimeFilterApplied: "No time filter applied",
+                configureInHistorySettings: "Configure in History Settings",
+                controlsAndInfo: "Controls & Information",
+                controls: "⚙️ Controls",
+                locations: "📍 Locations",
+                filterByDevice: "Filter by Device:",
+                allDevices: "All Devices",
+                historyLimit: "History Limit:",
+                refreshData: "Refresh Data",
+                refreshDataHistorical: "Refresh Data (Historical Mode)",
+                showTraceDots: "Show trace dots",
+                loadingLocations: "Loading locations...",
+                noLocationsFound: "No locations found",
+                historicalViewConfig: "📅 Historical View Configuration",
+                quickRanges: ["1h", "6h", "24h", "1w", "All"],
+                from: "From:",
+                to: "To:",
+                applyTimeFilter: "Apply Time Filter",
+                clearFilter: "Clear Filter",
+                noResultsTitle: "No Results Found",
+                noResultsMessage: "The selected time range contains no location data.",
+                ok: "OK",
+                deviceId: "Device ID",
+                coordinates: "Coordinates",
+                time: "Time",
+                start: "START",
+                end: "END",
+                selected: "SELECTED",
+                clearSelection: "Clear Selection",
+                noTimeFilter: "No time filter applied",
+                configureInSettings: "Configure in History Settings",
+                filterLabel: "Filter:",
+                validationErrors: {
+                    required: "Both start and end times are required",
+                    invalidFormat: "Invalid date format",
+                    startAfterEnd: "Start time must be before end time",
+                    futureEnd: "End time cannot be in the future",
+                    rangeTooLarge: "Time range cannot exceed 1 year",
+                    rangeTooSmall: "Time range must be at least 1 minute",
+                    tooFarBack: "Start time cannot be more than 10 years ago"
+                }
+            },
+            es: {
+                title: "🌍 Rastreador de Ubicación en Tiempo Real",
+                subtitle: "Monitoreando ubicaciones de dispositivos con actualizaciones en vivo y vista histórica",
+                connecting: "Conectando...",
+                connected: "Conectado",
+                disconnected: "Desconectado",
+                connectionError: "Error de Conexión",
+                reconnecting: "Reconectando en {0}s... ({1}/{2})",
+                connectionFailed: "Conexión fallida - actualice la página",
+                trackLatest: "Seguir Último",
+                trackingOff: "Seguimiento Desactivado",
+                historyMode: "Modo Histórico",
+                historySettings: "Configuración Histórica",
+                liveMode: "Modo en Vivo",
+                menu: "Menú",
+                liveModeBadge: "🔴 MODO EN VIVO",
+                historyModeBadge: "📅 MODO HISTÓRICO",
+                legendStart: "Inicio (más antiguo)",
+                legendEnd: "Fin (más reciente)",
+                filterLabel: "Filtro:",
+                to: "hasta",
+                noTimeFilterApplied: "No se aplicó filtro de tiempo",
+                configureInHistorySettings: "Configurar en Ajustes de Historial",
+                controlsAndInfo: "Controles e Información",
+                controls: "⚙️ Controles",
+                locations: "📍 Ubicaciones",
+                filterByDevice: "Filtrar por Dispositivo:",
+                allDevices: "Todos los Dispositivos",
+                historyLimit: "Límite de Historial:",
+                refreshData: "Actualizar Datos",
+                refreshDataHistorical: "Actualizar Datos (Modo Histórico)",
+                showTraceDots: "Mostrar puntos de ruta",
+                loadingLocations: "Cargando ubicaciones...",
+                noLocationsFound: "No se encontraron ubicaciones",
+                historicalViewConfig: "📅 Configuración de Vista Histórica",
+                quickRanges: ["1h", "6h", "24h", "1sem", "Todo"],
+                from: "Desde:",
+                to: "Hasta:",
+                applyTimeFilter: "Aplicar Filtro de Tiempo",
+                clearFilter: "Limpiar Filtro",
+                noResultsTitle: "No se Encontraron Resultados",
+                noResultsMessage: "El rango de tiempo seleccionado no contiene datos de ubicación.",
+                ok: "Aceptar",
+                deviceId: "ID de Dispositivo",
+                coordinates: "Coordenadas",
+                time: "Hora",
+                start: "INICIO",
+                end: "FIN",
+                selected: "SELECCIONADO",
+                clearSelection: "Limpiar Selección",
+                noTimeFilter: "No se aplicó filtro de tiempo",
+                configureInSettings: "Configurar en Ajustes de Historial",
+                filterLabel: "Filtro:",
+                validationErrors: {
+                    required: "Se requieren hora de inicio y fin",
+                    invalidFormat: "Formato de fecha inválido",
+                    startAfterEnd: "La hora de inicio debe ser anterior a la hora de fin",
+                    futureEnd: "La hora de fin no puede estar en el futuro",
+                    rangeTooLarge: "El rango de tiempo no puede exceder 1 año",
+                    rangeTooSmall: "El rango de tiempo debe ser de al menos 1 minuto",
+                    tooFarBack: "La hora de inicio no puede ser hace más de 10 años"
+                }
+            }
+        };
+        this.currentLanguage = this.detectLanguage();
 
         this.config = {
             apiBaseUrl: window.location.origin + ('${BASE_PATH}' || ''),
@@ -932,6 +1178,94 @@ class LocationTracker {
         this.initializeApp();
     }
 
+    detectLanguage() {
+        const browserLang = navigator.language || navigator.userLanguage;
+        return browserLang.startsWith('es') ? 'es' : 'en';
+    }
+
+    t(key) {
+        const keys = key.split('.');
+        let value = this.translations[this.currentLanguage];
+        for (const k of keys) {
+            value = value[k];
+            if (value === undefined) return key;
+        }
+        return value;
+    }
+
+    setLanguage(lang) {
+        if (this.translations[lang]) {
+            this.currentLanguage = lang;
+            this.updateUILanguage();
+        }
+    }
+
+    updateUILanguage() {
+        // Update header
+        document.querySelector('.header h1').textContent = this.t('title');
+        document.querySelector('.header p').textContent = this.t('subtitle');
+
+        // Update buttons
+        const trackBtn = document.getElementById('track-latest-btn');
+        if (trackBtn) {
+            trackBtn.querySelector('span:last-child').textContent = 
+                this.isTrackingLatest ? this.t('trackLatest') : this.t('trackingOff');
+        }
+
+        document.querySelector('#history-mode-btn span:last-child').textContent = this.t('historyMode');
+        document.querySelector('#history-config-btn span:last-child').textContent = this.t('historySettings');
+        document.querySelector('#live-mode-btn span:last-child').textContent = this.t('liveMode');
+        document.querySelector('#menu-toggle-btn span:last-child').textContent = this.t('menu');
+
+        // Update mode indicator
+        const modeIndicator = document.getElementById('mode-indicator');
+        if (this.isHistoryMode) {
+            modeIndicator.innerHTML = `<div class="mode-indicator-dot"></div><span>${this.t('historyModeBadge')}</span>`;
+        } else {
+            modeIndicator.innerHTML = `<div class="mode-indicator-dot"></div><span>${this.t('liveModeBadge')}</span>`;
+        }
+
+        // Update popup menu
+        document.querySelector('#popup-menu .popup-header h2').textContent = this.t('controlsAndInfo');
+        document.querySelector('[data-tab="controls"]').textContent = this.t('controls');
+        document.querySelector('[data-tab="locations"]').textContent = this.t('locations');
+
+        // Update controls tab
+        document.querySelector('label[for="device-filter"]').textContent = this.t('filterByDevice');
+        document.querySelector('label[for="history-limit"]').textContent = this.t('historyLimit');
+        document.getElementById('refresh-data-btn').textContent = 
+            this.isHistoryMode ? this.t('refreshDataHistorical') : this.t('refreshData');
+
+        document.getElementById('trace-dots-label').textContent = this.t('showTraceDots');
+
+        // Update history config popup
+        document.querySelector('#history-config-popup .popup-header h2').textContent = this.t('historicalViewConfig');
+        document.querySelector('label[for="start-time-popup"]').textContent = this.t('from');
+        document.querySelector('label[for="end-time-popup"]').textContent = this.t('to');
+        document.getElementById('apply-time-filter-popup').textContent = this.t('applyTimeFilter');
+        document.getElementById('clear-time-filter-popup').textContent = this.t('clearFilter');
+
+        // Update empty results popup
+        document.querySelector('#empty-results-popup h3').textContent = this.t('noResultsTitle');
+        document.querySelector('#empty-results-popup p').textContent = this.t('noResultsMessage');
+        document.querySelector('#empty-results-popup .btn').textContent = this.t('ok');
+        
+        // Update route legend
+        const legendStart = document.getElementById('legend-start');
+        const legendEnd = document.getElementById('legend-end');
+        if (legendStart) legendStart.textContent = this.t('legendStart');
+        if (legendEnd) legendEnd.textContent = this.t('legendEnd');
+
+        // Refresh displays
+        this.updateConnectionStatus(
+            this.ws && this.ws.readyState === WebSocket.OPEN ? this.t('connected') : this.t('connecting'),
+            this.ws && this.ws.readyState === WebSocket.OPEN ? 'connected' : 'disconnected'
+        );
+        this.updateTimeFilterIndicator();
+        this.displayLocations();
+        this.updateDevicesList();
+    }
+
     async initializeApp() {
         try {
             this.initializeMap();
@@ -942,7 +1276,9 @@ class LocationTracker {
             this.startStatsPolling();
             this.initializeTimePickers();
             this.updateRefreshButtonState();
-            this.updateTimeFilterIndicator(); // Add this line
+            this.updateTimeFilterIndicator();
+            this.updateUILanguage();
+            document.getElementById('language-selector').value = this.currentLanguage;
         } catch (error) {
             console.error('Failed to initialize app:', error);
             this.showError('Failed to initialize application');
@@ -1073,45 +1409,144 @@ class LocationTracker {
     }
 
     initializeRouteLine() {
+        // Remove existing route layers and source
         if (this.map.getSource('route')) {
-            this.map.removeLayer('route-line');
+            if (this.map.getLayer('route-line')) {
+                this.map.removeLayer('route-line');
+            }
             this.map.removeSource('route');
         }
+
+        // Remove any existing segment layers
+        for (let i = 0; i < 100; i++) {
+            if (this.map.getLayer(`route-segment-${i}`)) {
+                this.map.removeLayer(`route-segment-${i}`);
+            }
+        }
+
         this.map.addSource('route', {
             type: 'geojson',
             data: {
-                type: 'Feature',
-                geometry: {
-                    type: 'LineString',
-                    coordinates: []
-                }
-            }
-        });
-        this.map.addLayer({
-            id: 'route-line',
-            type: 'line',
-            source: 'route',
-            layout: {
-                'line-cap': 'round',
-                'line-join': 'round'
-            },
-            paint: {
-                'line-color': '#3b82f6',
-                'line-width': 4,
-                'line-opacity': 0.8
+                type: 'FeatureCollection',
+                features: []
             }
         });
     }
 
     updateRouteLine() {
         if (!this.map.getSource('route')) return;
+        
+        const coordinates = this.routeCoords;
+        
+        if (coordinates.length < 2) {
+            // Remove all segment layers
+            for (let i = 0; i < 100; i++) {
+                if (this.map.getLayer(`route-segment-${i}`)) {
+                    this.map.removeLayer(`route-segment-${i}`);
+                }
+            }
+            this.map.getSource('route').setData({
+                type: 'FeatureCollection',
+                features: []
+            });
+            this.updateRouteLegend();
+            return;
+        }
+
+        // Create colored segments
+        const features = [];
+        const totalSegments = coordinates.length - 1;
+
+        // NOTE: coordinates array is ordered from NEWEST to OLDEST (index 0 = newest, last index = oldest)
+        // We want: oldest (last index) = GREEN, newest (index 0) = RED
+
+        for (let i = 0; i < totalSegments; i++) {
+            // Calculate progress: 0 = oldest (green), 1 = newest (red)
+        // Since array is reversed (newest first), we need to invert the progress
+            const progress = 1 - (i / totalSegments);
+
+            // Calculate color based on progress
+            // progress = 0 (oldest) -> Green #10b981
+            // progress = 0.5 (middle) -> Orange #f59e0b  
+            // progress = 1 (newest) -> Red #ef4444
+            let color;
+            if (progress < 0.5) {
+                // Green to Orange (oldest to middle)
+                const localProgress = progress * 2;
+                const r = Math.round(16 + (245 - 16) * localProgress);
+                const g = Math.round(185 - (185 - 158) * localProgress);
+                const b = Math.round(129 - (129 - 11) * localProgress);
+                color = `rgb(${r}, ${g}, ${b})`;
+            } else {
+                // Orange to Red (middle to newest)
+                const localProgress = (progress - 0.5) * 2;
+                const r = Math.round(245 + (239 - 245) * localProgress);
+                const g = Math.round(158 - (158 - 68) * localProgress);
+                const b = Math.round(11 + (68 - 11) * localProgress);
+                color = `rgb(${r}, ${g}, ${b})`;
+            }
+
+            features.push({
+                type: 'Feature',
+                properties: {
+                    color: color,
+                    segmentIndex: i
+                },
+                geometry: {
+                    type: 'LineString',
+                    coordinates: [coordinates[i], coordinates[i + 1]]
+                }
+            });
+        }
+
+        // Remove existing segment layers
+        for (let i = 0; i < 100; i++) {
+            if (this.map.getLayer(`route-segment-${i}`)) {
+                this.map.removeLayer(`route-segment-${i}`);
+            }
+        }
+
+        // Update source data
         this.map.getSource('route').setData({
-            type: 'Feature',
-            geometry: {
-                type: 'LineString',
-                coordinates: this.routeCoords
+            type: 'FeatureCollection',
+            features: features
+        });
+
+        // Add layers for each segment with its specific color
+        features.forEach((feature, index) => {
+            const layerId = `route-segment-${index}`;
+
+            if (!this.map.getLayer(layerId)) {
+                this.map.addLayer({
+                    id: layerId,
+                    type: 'line',
+                    source: 'route',
+                    filter: ['==', 'segmentIndex', index],
+                    layout: {
+                        'line-cap': 'round',
+                        'line-join': 'round'
+                    },
+                    paint: {
+                        'line-color': feature.properties.color,
+                        'line-width': 5,
+                        'line-opacity': 0.8
+                    }
+                });
             }
         });
+
+        this.updateRouteLegend();
+    }
+
+    updateRouteLegend() {
+        const legend = document.getElementById('route-legend');
+        if (!legend) return;
+        
+        if (this.routeCoords.length > 1) {
+            legend.style.display = 'block';
+        } else {
+            legend.style.display = 'none';
+        }
     }
 
     createTraceMarker(location, isStart = false, isEnd = false) {
@@ -1150,10 +1585,26 @@ class LocationTracker {
         this.traceMarkers.push(marker);
     }
 
+    calculateBearing(lat1, lon1, lat2, lon2) {
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const lat1Rad = lat1 * Math.PI / 180;
+        const lat2Rad = lat2 * Math.PI / 180;
+        
+        const y = Math.sin(dLon) * Math.cos(lat2Rad);
+        const x = Math.cos(lat1Rad) * Math.sin(lat2Rad) -
+                  Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLon);
+        
+        let bearing = Math.atan2(y, x) * 180 / Math.PI;
+        bearing = (bearing + 360) % 360;
+        
+        return bearing;
+    }
+
     clearTraceMarkers() {
         this.traceMarkers.forEach(m => m.remove());
         this.traceMarkers = [];
     }
+
 
     initializeTimePickers() {
         const now = new Date();
@@ -1184,14 +1635,14 @@ class LocationTracker {
         if (this.isTrackingLatest) {
             btn.classList.add('enabled');
             btn.classList.remove('disabled');
-            btn.querySelector('span:last-child').textContent = 'Track Latest';
+            btn.querySelector('span:last-child').textContent = this.t('trackLatest');
             if (this.locations.length > 0) {
                 this.centerMapOnLatestLocation();
             }
         } else {
             btn.classList.remove('enabled');
             btn.classList.add('disabled');
-            btn.querySelector('span:last-child').textContent = 'Tracking Off';
+            btn.querySelector('span:last-child').textContent = this.t('trackingOff');
         }
     }
 
@@ -1201,11 +1652,14 @@ class LocationTracker {
         const historyConfigBtn = document.getElementById('history-config-btn');
         const liveModeBtn = document.getElementById('live-mode-btn');
         const trackBtn = document.getElementById('track-latest-btn');
+        const modeIndicator = document.getElementById('mode-indicator');
         // Clear any selected location markers when switching modes
         this.clearSelectedLocationMarker();
         this.selectedLocationIndex = -1;
         if (this.isHistoryMode) {        
             // Hide history mode button, show config and live mode buttons
+            modeIndicator.className = 'mode-indicator history-mode';
+            modeIndicator.innerHTML = `<div class="mode-indicator-dot"></div><span>${this.t('historyModeBadge')}</span>`;
             historyBtn.style.display = 'none';
             historyConfigBtn.style.display = 'flex';
             liveModeBtn.style.display = 'flex';
@@ -1233,36 +1687,34 @@ class LocationTracker {
             }
            
         } else {
+            // Update mode indicator
+            modeIndicator.className = 'mode-indicator live-mode';
+            modeIndicator.innerHTML = `<div class="mode-indicator-dot"></div><span>${this.t('liveModeBadge')}</span>`;
+                
             // Store current filter before leaving history mode
             if (this.timeFilter) {
                 this.persistedTimeFilter = { ...this.timeFilter };
             }
-           
+        
             // Show history mode button, hide config and live mode buttons
             historyBtn.style.display = 'flex';
             historyConfigBtn.style.display = 'none';
             liveModeBtn.style.display = 'none';
             trackBtn.style.display = 'flex';
-           
-            // Clear historical data and restore live mode
+        
+            // Clear historical data
             this.clearAllMarkers();
             this.clearTraceMarkers();
             this.filteredLocations = [];
             this.updateTimeFilterIndicator();
-           
-            // Restore live mode display
-            this.updateRouteForDevice();
-            this.displayLocations();
-           
+        
+            // Reset live mode: fetch latest from DB and prepare for live updates
+            this.loadInitialData();
+        
             // Process any queued live updates
             while (this.liveUpdateQueue.length > 0) {
                 const queuedLocation = this.liveUpdateQueue.shift();
                 this.applyLocationUpdate(queuedLocation);
-            }
-           
-            if (this.locations.length > 0) {
-                const latest = this.locations[0];
-                this.updateMapMarker(latest, true);
             }
         }
     
@@ -1300,7 +1752,6 @@ class LocationTracker {
             this.applyTraceDotsVisibility();
         });
 
-
         // Device filter
         document.getElementById('device-filter').addEventListener('change', (e) => {
             this.selectedDevice = e.target.value;
@@ -1312,6 +1763,9 @@ class LocationTracker {
         document.getElementById('history-limit').addEventListener('change', (e) => {
             this.historyLimit = parseInt(e.target.value);
             this.refreshData();
+        });
+        document.getElementById('language-selector').addEventListener('change', (e) => {
+            this.setLanguage(e.target.value);
         });
 
         // Refresh on window focus
@@ -1527,9 +1981,9 @@ class LocationTracker {
                                 this.timeFilter.start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                 const endStr = this.timeFilter.end.toLocaleDateString() + ' ' + 
                               this.timeFilter.end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                textElement.innerHTML = `<div>Filter: ${startStr}</div><div>to ${endStr}</div>`;
+                textElement.innerHTML = `<div>${this.t('filterLabel')} ${startStr}</div><div>${this.t('to')} ${endStr}</div>`;
             } else {
-                textElement.innerHTML = '<div>No time filter applied</div><div>Configure in History Settings</div>';
+                textElement.innerHTML = `<div>${this.t('noTimeFilterApplied')}</div><div>${this.t('configureInHistorySettings')}</div>`;
                 indicator.classList.add('no-filter');
             }
             indicator.classList.add('show');
@@ -1538,10 +1992,14 @@ class LocationTracker {
         }
     }
     showValidationError(message, button, errorElement) {
-        errorElement.textContent = message;
+        // Translate validation error if it's a key
+        const translatedMessage = this.t(`validationErrors.${message}`) !== `validationErrors.${message}` 
+            ? this.t(`validationErrors.${message}`) 
+            : message;
+        errorElement.textContent = translatedMessage;
         errorElement.classList.add('show');
         button.disabled = true;
-        button.title = message;
+        button.title = translatedMessage;
     }
 
     clearValidationError(button, errorElement) {
@@ -1720,33 +2178,35 @@ class LocationTracker {
             this.routeCoords = this.locations.map(loc => [loc.longitude, loc.latitude]);
         }
         this.updateRouteLine();
-        // Only show trace markers in history mode
+
+        // Get filtered locations
+        const locs = this.selectedDevice
+            ? this.locations.filter(loc => loc.device_id === this.selectedDevice)
+            : this.locations;
+
+        // Clear existing markers and arrows
+        this.clearTraceMarkers();
+
+        // Create trace markers
         if (this.isHistoryMode) {
-            this.clearTraceMarkers();
-            const locs = this.selectedDevice
-                ? this.locations.filter(loc => loc.device_id === this.selectedDevice)
-                : this.locations;
             locs.forEach((loc, index) => {
                 const isStart = index === locs.length - 1; // oldest (last in array)
                 const isEnd = index === 0; // newest (first in array)
                 this.createTraceMarker(loc, isStart, isEnd);
             });
-
-            this.applyTraceDotsVisibility();
         } else {
-            // In live mode, create trace markers for the trace dots functionality
-            this.clearTraceMarkers();
-            const locs = this.selectedDevice
-                ? this.locations.filter(loc => loc.device_id === this.selectedDevice)
-                : this.locations;
-
+            // In live mode, create trace markers with start/end indicators
             locs.forEach((loc, index) => {
-                // Don't mark as start/end in live mode, just regular trace markers
-                this.createTraceMarker(loc, false, false);
+                const isStart = index === locs.length - 1; // oldest (last in array) - START
+                const isEnd = index === 0; // newest (first in array) - END (handled by pulse marker)
+                // Mark start point but not end (end is handled by the pulse marker)
+                this.createTraceMarker(loc, isStart, false);
             });
-
-            this.applyTraceDotsVisibility();
         }
+
+
+        this.applyTraceDotsVisibility();
+        this.updateRouteLegend(); // Add this line
     }
 
     updateRouteForFiltered() {
@@ -1756,12 +2216,13 @@ class LocationTracker {
             this.updateRouteLine();
             this.clearTraceMarkers();
             return;
-        }
+        }   
 
         this.routeCoords = this.filteredLocations.map(loc => [loc.longitude, loc.latitude]);
-        this.updateRouteLine();
+        this.updateRouteLine(); 
 
         this.clearTraceMarkers();
+
         this.filteredLocations.forEach((loc, index) => {
             const isStart = index === this.filteredLocations.length - 1; // oldest
             const isEnd = index === 0; // newest
@@ -1769,6 +2230,7 @@ class LocationTracker {
         });
 
         this.applyTraceDotsVisibility();
+        this.updateRouteLegend(); // Add this line
     }
 
     fitMapToLocations(locations) {
@@ -1851,16 +2313,31 @@ class LocationTracker {
 
     async loadInitialData() {
         try {
-            const response = await fetch(`${this.config.apiBaseUrl}/api/locations/history?limit=${this.historyLimit}`);
+            // In live mode, only fetch the latest location from DB
+            const limit = this.isHistoryMode ? this.historyLimit : 1;
+            const response = await fetch(`${this.config.apiBaseUrl}/api/locations/history?limit=${limit}`);
             if (response.ok) {
                 const locations = await response.json();
-                this.locations = locations || [];
+
+                if (this.isHistoryMode) {
+                    // History mode: load all requested locations
+                    this.locations = locations || [];
+                } else {
+                    // Live mode: only store the initial DB location
+                    this.initialDbLocation = locations.length > 0 ? locations[0] : null;
+                    this.liveLocations = [];
+                    this.hasReceivedLiveUpdate = false;
+
+                    // Set locations to show only the initial one
+                    this.locations = this.initialDbLocation ? [this.initialDbLocation] : [];
+                }
+
                 this.updateDevicesList();
                 this.displayLocations();
                 this.updateStatistics();
 
                 // Update route and create trace markers
-                this.updateRouteForDevice(); // This will create trace markers
+                this.updateRouteForDevice();
 
                 if (this.locations.length > 0) {
                     this.updateMapMarker(this.locations[0], true);
@@ -1939,18 +2416,31 @@ class LocationTracker {
     }
 
     applyLocationUpdate(location) {
-        this.locations.unshift(location);
-        
-        // prevent uncontrolled growth
-        if (this.locations.length > this.historyLimit * 2) {
-            this.locations = this.locations.slice(0, this.historyLimit);
+        // Mark that we've received at least one live update
+        if (!this.hasReceivedLiveUpdate) {
+            this.hasReceivedLiveUpdate = true;
+            // Clear the initial DB location from display
+            this.locations = [];
+            this.clearAllMarkers();
+            this.clearTraceMarkers();
         }
-    
+
+        // Add to live locations
+        this.liveLocations.unshift(location);
+
+        // Prevent uncontrolled growth of live locations
+        if (this.liveLocations.length > this.historyLimit) {
+            this.liveLocations = this.liveLocations.slice(0, this.historyLimit);
+        }
+
+        // Update locations to show live data
+        this.locations = [...this.liveLocations];
+
         this.devices.add(location.device_id);
         this.updateDevicesList();
         this.filterAndDisplayLocations();
         this.updateStatistics();
-    
+
         if (this.selectedDevice === '' || this.selectedDevice === location.device_id) {
             this.updateMapMarker(location, !this.isHistoryMode);
             this.updateRouteForDevice(); // This will recreate trace markers
@@ -2118,8 +2608,11 @@ class LocationTracker {
     displayLocations(locations = this.locations) {
         const container = document.getElementById('location-list');
         
+        // In live mode, locations will only contain live updates after first update,
+        // or the initial DB location before any updates
+
         if (locations.length === 0) {
-            container.innerHTML = '<div class="loading">No locations found</div>';
+            container.innerHTML = `<div class="loading">${this.t('noLocationsFound')}</div>`;
             return;
         }
 
@@ -2166,9 +2659,33 @@ class LocationTracker {
     updateConnectionStatus(message, status) {
         const statusElement = document.getElementById('connection-status');
         statusElement.className = `status ${status}`;
-        statusElement.querySelector('span').textContent = message;
-    }
 
+        // Translate common status messages
+        let translatedMessage = message;
+        const translations = {
+            'Connected': this.t('connected'),
+            'Connecting...': this.t('connecting'),
+            'Disconnected': this.t('disconnected'),
+            'Connection Error': this.t('connectionError'),
+            'Connection failed - refresh page': this.t('connectionFailed')
+        };
+
+        // Check if message matches a translatable string
+        if (translations[message]) {
+            translatedMessage = translations[message];
+        } else if (message.includes('Reconnecting in')) {
+            // Handle reconnecting messages with parameters
+            const match = message.match(/Reconnecting in (\d+)s\.\.\. \((\d+)\/(\d+)\)/);
+            if (match) {
+                translatedMessage = this.t('reconnecting')
+                    .replace('{0}', match[1])
+                    .replace('{1}', match[2])
+                    .replace('{2}', match[3]);
+            }
+        }
+
+        statusElement.querySelector('span').textContent = translatedMessage;
+    }
     showError(message) {
         const container = document.getElementById('location-list');
         container.innerHTML = `<div class="error">${message}</div>`;
@@ -2179,6 +2696,9 @@ class LocationTracker {
             if (this.isHistoryMode && this.timeFilter) {
                 await this.loadHistoricalData();
             } else {
+                // In live mode, reset to initial state
+                this.liveLocations = [];
+                this.hasReceivedLiveUpdate = false;
                 await this.loadInitialData();
             }
             console.log('Data refreshed successfully');

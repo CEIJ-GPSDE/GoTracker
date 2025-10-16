@@ -49,7 +49,7 @@ jobs:
         id: prepare
         run: |
           branch="${{ github.event.inputs.branch }}"
-          safe_branch=$(echo "$branch" | tr '/' '-' | tr '[:upper:]' '[:lower:]')
+          safe_branch=$(echo "$branch" | tr '/' '_' | tr '[:upper:]' '[:lower:]')
           echo "safe_branch=$safe_branch" >> $GITHUB_OUTPUT
           echo "Branch: $branch -> Safe: $safe_branch"
 

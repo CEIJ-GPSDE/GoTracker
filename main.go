@@ -24,30 +24,32 @@ import (
 
 // Configuration from environment variables
 type Config struct {
-	DBHost     string
-	DBName     string
-	DBUser     string
-	DBPassword string
-	DBSSLMode  string
-	Port       string
-	UDPPort    string
-	LogFile    string
-	CertFile   string
-	KeyFile    string
+	DBHost      string
+	DBName      string
+	DBUser      string
+	DBPassword  string
+	DBSSLMode   string
+	Port        string
+	UDPPort     string
+	LogFile     string
+	CertFile    string
+	KeyFile     string
+	TablePrefix string
 }
 
 func loadConfig() *Config {
 	return &Config{
-		DBHost:     getEnv("DB_HOST", "localhost"),
-		DBName:     getEnv("DB_NAME", "locationtracker"),
-		DBUser:     getEnv("DB_USER", "postgres"),
-		DBPassword: getEnv("DB_PASSWORD", "password"),
-		DBSSLMode:  getEnv("DB_SSLMODE", "disable"),
-		Port:       getEnv("PORT", "80"),
-		UDPPort:    getEnv("UDP_PORT", "5051"),
-		LogFile:    getEnv("LOG_FILE", ""),
-		CertFile:   getEnv("CERT_FILE", "certs/server.crt"),
-		KeyFile:    getEnv("KEY_FILE", "certs/server.key"),
+		DBHost:      getEnv("DB_HOST", "localhost"),
+		DBName:      getEnv("DB_NAME", "locationtracker"),
+		DBUser:      getEnv("DB_USER", "postgres"),
+		DBPassword:  getEnv("DB_PASSWORD", "password"),
+		DBSSLMode:   getEnv("DB_SSLMODE", "disable"),
+		Port:        getEnv("PORT", "80"),
+		UDPPort:     getEnv("UDP_PORT", "5051"),
+		LogFile:     getEnv("LOG_FILE", ""),
+		CertFile:    getEnv("CERT_FILE", "certs/server.crt"),
+		KeyFile:     getEnv("KEY_FILE", "certs/server.key"),
+		TablePrefix: getEnv("TABLE_PREFIX", ""),
 	}
 }
 
@@ -80,28 +82,33 @@ func NewDatabase(config *Config) (*Database, error) {
 	}
 
 	// Set connection pool settings
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
+	db.SetMaxOpenConns(50)
+	db.SetMaxIdleConns(10)
 	db.SetConnMaxLifetime(5 * time.Minute)
-
+	db.SetConnMaxIdleTime(2 * time.Minute)
 	return &Database{db}, nil
 }
 
-func (db *Database) InitializeSchema() error {
-	schema := `
-	CREATE TABLE IF NOT EXISTS locations (
-		id SERIAL PRIMARY KEY,
-		device_id VARCHAR(255) NOT NULL,
-		latitude DECIMAL(10, 8) NOT NULL,
-		longitude DECIMAL(11, 8) NOT NULL,
-		timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
-		created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-	);
+func (db *Database) InitializeSchema(prefix string) error {
+	tableName := "locations"
+	if prefix != "" {
+		tableName = prefix + "_locations"
+	}
 
-	CREATE INDEX IF NOT EXISTS idx_locations_timestamp ON locations(timestamp DESC);
-	CREATE INDEX IF NOT EXISTS idx_locations_device_timestamp ON locations(device_id, timestamp DESC);
-	CREATE INDEX IF NOT EXISTS idx_locations_timestamp_range ON locations(timestamp);
-	`
+	schema := fmt.Sprintf(`
+    CREATE TABLE IF NOT EXISTS %s (
+        id SERIAL PRIMARY KEY,
+        device_id VARCHAR(255) NOT NULL,
+        latitude DECIMAL(10, 8) NOT NULL,
+        longitude DECIMAL(11, 8) NOT NULL,
+        timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_%s_timestamp ON %s(timestamp DESC);
+    CREATE INDEX IF NOT EXISTS idx_%s_device_timestamp ON %s(device_id, timestamp DESC);
+    CREATE INDEX IF NOT EXISTS idx_%s_timestamp_range ON %s(timestamp);
+    `, tableName, tableName, tableName, tableName, tableName, tableName, tableName)
 
 	_, err := db.Exec(schema)
 	return err
@@ -211,9 +218,9 @@ func (h *WebSocketHub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 			h.unregister <- conn
 		}()
 
-		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		conn.SetReadDeadline(time.Now().Add(90 * time.Second))
 		conn.SetPongHandler(func(string) error {
-			conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+			conn.SetReadDeadline(time.Now().Add(90 * time.Second))
 			return nil
 		})
 
@@ -254,16 +261,18 @@ func (h *WebSocketHub) Broadcast(data interface{}) {
 
 // UDP Sniffer - simplified without leader election
 type UDPSniffer struct {
-	db    *Database
-	wsHub *WebSocketHub
-	port  string
+	db          *Database
+	wsHub       *WebSocketHub
+	port        string
+	tablePrefix string
 }
 
-func NewUDPSniffer(db *Database, wsHub *WebSocketHub, port string) *UDPSniffer {
+func NewUDPSniffer(db *Database, wsHub *WebSocketHub, port string, tablePrefix string) *UDPSniffer {
 	return &UDPSniffer{
-		db:    db,
-		wsHub: wsHub,
-		port:  port,
+		db:          db,
+		wsHub:       wsHub,
+		port:        port,
+		tablePrefix: tablePrefix,
 	}
 }
 
@@ -350,27 +359,34 @@ func (us *UDPSniffer) parsePacket(data []byte) *LocationPacket {
 }
 
 func (us *UDPSniffer) storeLocation(packet *LocationPacket) error {
-	query := `
-		INSERT INTO locations (device_id, latitude, longitude, timestamp)
-		VALUES ($1, $2, $3, $4)
-	`
+	tableName := "locations"
+	if us.tablePrefix != "" {
+		tableName = us.tablePrefix + "_locations"
+	}
+
+	query := fmt.Sprintf(`
+        INSERT INTO %s (device_id, latitude, longitude, timestamp)
+        VALUES ($1, $2, $3, $4)
+    `, tableName)
 	_, err := us.db.Exec(query, packet.DeviceID, packet.Latitude, packet.Longitude, packet.Timestamp)
 	return err
 }
 
 // API Server - enhanced with historical endpoints
 type APIServer struct {
-	db     *Database
-	wsHub  *WebSocketHub
-	server *http.Server
-	port   string
+	db          *Database
+	wsHub       *WebSocketHub
+	server      *http.Server
+	port        string
+	tablePrefix string
 }
 
-func NewAPIServer(db *Database, wsHub *WebSocketHub, port string) *APIServer {
+func NewAPIServer(db *Database, wsHub *WebSocketHub, port string, tablePrefix string) *APIServer {
 	return &APIServer{
-		db:    db,
-		wsHub: wsHub,
-		port:  port,
+		db:          db,
+		wsHub:       wsHub,
+		port:        port,
+		tablePrefix: tablePrefix, // ADD THIS LINE
 		server: &http.Server{
 			Addr:         ":" + port,
 			ReadTimeout:  15 * time.Second,
@@ -460,21 +476,26 @@ func (api *APIServer) dbHealthHandler(w http.ResponseWriter, r *http.Request) {
 func (api *APIServer) statsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	tableName := "locations"
+	if api.tablePrefix != "" {
+		tableName = api.tablePrefix + "_locations"
+	}
+
 	var totalLocations int
 	var activeDevices int
 	var lastUpdate sql.NullTime
 
-	err := api.db.QueryRow("SELECT COUNT(*) FROM locations").Scan(&totalLocations)
+	err := api.db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", tableName)).Scan(&totalLocations)
 	if err != nil {
 		log.Printf("Error counting locations: %v", err)
 	}
 
-	err = api.db.QueryRow("SELECT COUNT(DISTINCT device_id) FROM locations").Scan(&activeDevices)
+	err = api.db.QueryRow(fmt.Sprintf("SELECT COUNT(DISTINCT device_id) FROM %s", tableName)).Scan(&activeDevices)
 	if err != nil {
 		log.Printf("Error counting active devices: %v", err)
 	}
 
-	err = api.db.QueryRow("SELECT MAX(timestamp) FROM locations").Scan(&lastUpdate)
+	err = api.db.QueryRow(fmt.Sprintf("SELECT MAX(timestamp) FROM %s", tableName)).Scan(&lastUpdate)
 	if err != nil {
 		log.Printf("Error getting last update: %v", err)
 	}
@@ -495,12 +516,17 @@ func (api *APIServer) statsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *APIServer) latestLocationHandler(w http.ResponseWriter, r *http.Request) {
-	query := `
+	tableName := "locations"
+	if api.tablePrefix != "" {
+		tableName = api.tablePrefix + "_locations"
+	}
+
+	query := fmt.Sprintf(`
 		SELECT device_id, latitude, longitude, timestamp
-		FROM locations
+		FROM %s
 		ORDER BY timestamp DESC
 		LIMIT 1
-	`
+	`, tableName)
 
 	var location LocationPacket
 	err := api.db.QueryRow(query).Scan(&location.DeviceID, &location.Latitude, &location.Longitude, &location.Timestamp)
@@ -530,12 +556,17 @@ func (api *APIServer) locationHistoryHandler(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	query := `
+	tableName := "locations"
+	if api.tablePrefix != "" {
+		tableName = api.tablePrefix + "_locations"
+	}
+
+	query := fmt.Sprintf(`
 		SELECT device_id, latitude, longitude, timestamp
-		FROM locations
+		FROM %s
 		ORDER BY timestamp DESC
 		LIMIT $1
-	`
+	`, tableName)
 
 	rows, err := api.db.Query(query, limitInt)
 	if err != nil {
@@ -600,26 +631,31 @@ func (api *APIServer) locationRangeHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	tableName := "locations"
+	if api.tablePrefix != "" {
+		tableName = api.tablePrefix + "_locations"
+	}
+
 	var query string
 	var args []interface{}
 
 	if deviceID != "" {
-		query = `
+		query = fmt.Sprintf(`
 			SELECT device_id, latitude, longitude, timestamp
-			FROM locations
+			FROM %s
 			WHERE timestamp >= $1 AND timestamp <= $2 AND device_id = $3
 			ORDER BY timestamp DESC
 			LIMIT 1000
-		`
+		`, tableName)
 		args = []interface{}{startTime, endTime, deviceID}
 	} else {
-		query = `
+		query = fmt.Sprintf(`
 			SELECT device_id, latitude, longitude, timestamp
-			FROM locations
+			FROM %s
 			WHERE timestamp >= $1 AND timestamp <= $2
 			ORDER BY timestamp DESC
 			LIMIT 1000
-		`
+		`, tableName)
 		args = []interface{}{startTime, endTime}
 	}
 
@@ -672,13 +708,18 @@ func (api *APIServer) deviceLocationHistoryHandler(w http.ResponseWriter, r *htt
 		return
 	}
 
-	query := `
+	tableName := "locations"
+	if api.tablePrefix != "" {
+		tableName = api.tablePrefix + "_locations"
+	}
+
+	query := fmt.Sprintf(`
 		SELECT device_id, latitude, longitude, timestamp
-		FROM locations
+		FROM %s
 		WHERE device_id = $1
 		ORDER BY timestamp DESC
 		LIMIT $2
-	`
+	`, tableName)
 
 	rows, err := api.db.Query(query, deviceId, limitInt)
 	if err != nil {
@@ -735,13 +776,13 @@ func NewApp() (*App, error) {
 		return nil, fmt.Errorf("failed to initialize database: %w", err)
 	}
 
-	if err := db.InitializeSchema(); err != nil {
+	if err := db.InitializeSchema(config.TablePrefix); err != nil {
 		return nil, fmt.Errorf("failed to initialize database schema: %w", err)
 	}
 
 	wsHub := NewWebSocketHub()
-	udpSniffer := NewUDPSniffer(db, wsHub, config.UDPPort)
-	apiServer := NewAPIServer(db, wsHub, config.Port)
+	udpSniffer := NewUDPSniffer(db, wsHub, config.UDPPort, config.TablePrefix)
+	apiServer := NewAPIServer(db, wsHub, config.Port, config.TablePrefix)
 
 	return &App{
 		config:     config,
