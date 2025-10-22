@@ -1294,10 +1294,15 @@
   </div>
 
   <!-- Empty Results Popup -->
-  <div class="filter-popup" id="empty-results-popup">
-    <h3 style="margin: 0 0 10px 0; color: #374151;">No Results Found</h3>
-    <p style="margin: 0 0 15px 0; color: #6b7280;">The selected time range contains no location data.</p>
-    <button class="btn" onclick="locationTracker.closeEmptyResultsPopup()">OK</button>
+  <div class="no-filter-overlay" id="empty-results-popup" style="border-color: #ef4444; z-index: 10600;">
+    <h3 id="empty-results-title">⚠️ No Results Found</h3>
+    <p id="empty-results-message">No location data matches your filter criteria. Try adjusting the parameters.</p>
+    <button class="btn" onclick="locationTracker.openHistoryConfigPopup();">
+      <span id="empty-results-adjust-btn">Adjust Filters</span>
+    </button>
+    <button class="btn secondary" onclick="document.getElementById('empty-results-popup').classList.remove('show');">
+      <span id="empty-results-dismiss-btn">Dismiss</span>
+    </button>
   </div>
 
   <script>
@@ -1377,6 +1382,8 @@
             clearFilter: "Clear Filter",
             noResultsTitle: "No Results Found",
             noResultsMessage: "The selected time range contains no location data.",
+            noLocationResultsMessage: "No location data found within {radius} km of the selected coordinates.",
+            adjustFilters: "Adjust Filters",
             ok: "OK",
             deviceId: "Device ID",
             coordinates: "Coordinates",
@@ -1469,6 +1476,8 @@
             clearFilter: "Limpiar Filtro",
             noResultsTitle: "No se Encontraron Resultados",
             noResultsMessage: "El rango de tiempo seleccionado no contiene datos de ubicación.",
+            noLocationResultsMessage: "No se encontraron datos de ubicación dentro de {radius} km de las coordenadas seleccionadas.",
+            adjustFilters: "Ajustar Filtros",
             ok: "Aceptar",
             deviceId: "ID de Dispositivo",
             coordinates: "Coordenadas",
@@ -1622,10 +1631,16 @@
 
 
         // Update empty results popup
-        document.querySelector('#empty-results-popup h3').textContent = this.t('noResultsTitle');
-        document.querySelector('#empty-results-popup p').textContent = this.t('noResultsMessage');
-        document.querySelector('#empty-results-popup .btn').textContent = this.t('ok');
+        const emptyResultsTitle = document.getElementById('empty-results-title');
+        const emptyResultsMessage = document.getElementById('empty-results-message');
+        const emptyResultsAdjustBtn = document.getElementById('empty-results-adjust-btn');
+        const emptyResultsDismissBtn = document.getElementById('empty-results-dismiss-btn');
 
+        if (emptyResultsTitle) emptyResultsTitle.textContent = '⚠️ ' + this.t('noResultsTitle');
+        if (emptyResultsMessage) emptyResultsMessage.textContent = this.t('noResultsMessage');
+        if (emptyResultsAdjustBtn) emptyResultsAdjustBtn.textContent = this.t('adjustFilters');
+        if (emptyResultsDismissBtn) emptyResultsDismissBtn.textContent = this.t('dismiss');
+        
         // Update route legend
         const legendStart = document.getElementById('legend-start');
         const legendEnd = document.getElementById('legend-end');
@@ -2791,6 +2806,26 @@
         document.getElementById('empty-results-popup').classList.add('show');
       }
 
+      showEmptyResultsPopup(isLocationFilter = false, radius = 0) {
+          const emptyPopup = document.getElementById('empty-results-popup');
+          if (!emptyPopup) {
+              console.error('Empty results popup not found!');
+              return;
+          }
+
+          // Update the message based on filter type
+          const message = emptyPopup.querySelector('p');
+          if (message) {
+              if (isLocationFilter) {
+                  message.textContent = this.t('noLocationResultsMessage').replace('{radius}', radius);
+              } else {
+                  message.textContent = this.t('noResultsMessage');
+              }
+          }
+
+          emptyPopup.classList.add('show');
+      }
+
       closeEmptyResultsPopup() {
         document.getElementById('empty-results-popup').classList.remove('show');
       }
@@ -3042,85 +3077,65 @@
       }
 
       async loadHistoricalByLocation(latitude, longitude, radiusKm = 0.5) {
-        console.log('loadHistoricalByLocation called with:', { latitude, longitude, radiusKm });
-
-        try {
-          const url = `${this.config.apiBaseUrl}/api/locations/nearby?lat=${latitude}&lng=${longitude}&radius=${radiusKm}`;
-          console.log('Fetching from URL:', url);
+          console.log('loadHistoricalByLocation called with:', { latitude, longitude, radiusKm });
       
-          const response = await fetch(url);
-          console.log('Response status:', response.status);
-
-          if (response.ok) {
-            const locations = await response.json();
-            console.log('Received locations:', locations.length);
-
-            this.filteredLocations = locations || [];
-
-            // Clear time filter inputs when applying location filter
-            document.getElementById('start-time-popup').value = '';
-            document.getElementById('end-time-popup').value = '';
-            document.querySelectorAll('.quick-range-btn').forEach(btn => btn.classList.remove('active'));
-
-            // Set location filter as active and clear time filter
-            this.locationFilter = { lat: latitude, lng: longitude, radius: radiusKm };
-            this.activeFilterType = 'location';
-            this.timeFilter = null;
-            this.persistedTimeFilter = null;
-            this.persistedLocationFilter = { lat: latitude, lng: longitude, radius: radiusKm };
-
-            this.clearAllMarkers();
-            this.displayFilteredLocations();
-            this.updateRouteForFiltered();
-            this.updateTimeFilterIndicator();
-            this.hideNoFilterOverlay(); // Make sure to hide the overlay
-
-            if (this.filteredLocations.length > 0) {
-                this.fitMapToLocations(this.filteredLocations);
-            } else {
-                // Show empty results popup for location filter with specific message
-                console.log('No locations found, showing empty results popup');
-            
-                // Close the history config popup first
-                const historyConfigPopup = document.getElementById('history-config-popup');
-                if (historyConfigPopup) {
-                    historyConfigPopup.classList.remove('active');
-                }
+          try {
+              const url = `${this.config.apiBaseUrl}/api/locations/nearby?lat=${latitude}&lng=${longitude}&radius=${radiusKm}`;
+              console.log('Fetching from URL:', url);
+          
+              const response = await fetch(url);
+              console.log('Response status:', response.status);
+          
+              if (response.ok) {
+                  const locations = await response.json();
+                  console.log('Received locations:', locations.length);
               
-                // Make sure we wait a bit for the UI to update
-                setTimeout(() => {
-                    const emptyPopup = document.getElementById('empty-results-popup');
-                    if (emptyPopup) {
-                        console.log('Showing empty results popup');
-                        
-                        // Update the title for location filter
-                        const title = emptyPopup.querySelector('h3');
-                        if (title) {
-                            title.textContent = this.t('noResultsTitle');
-                        }
-                        
-                        // Update the message to be specific for location filter
-                        const message = emptyPopup.querySelector('p');
-                        if (message) {
-                            message.textContent = this.t('noLocationResultsMessage') || 
-                                `No location data found within ${radiusKm} km of the selected coordinates.`;
-                        }
-                        
-                        emptyPopup.classList.add('show');
-                    } else {
-                        console.error('Empty results popup not found!');
-                    }
-                }, 300);
-            }
-          } else {
-            const errorText = await response.text();
-            console.error('Failed to load location data:', response.status, errorText);
-            this.showError('Failed to load location data: ' + response.status);
+                  this.filteredLocations = locations || [];
+              
+                  // Clear time filter inputs when applying location filter
+                  document.getElementById('start-time-popup').value = '';
+                  document.getElementById('end-time-popup').value = '';
+                  document.querySelectorAll('.quick-range-btn').forEach(btn => btn.classList.remove('active'));
+              
+                  // Set location filter as active and clear time filter
+                  this.locationFilter = { lat: latitude, lng: longitude, radius: radiusKm };
+                  this.activeFilterType = 'location';
+                  this.timeFilter = null;
+                  this.persistedTimeFilter = null;
+                  this.persistedLocationFilter = { lat: latitude, lng: longitude, radius: radiusKm };
+              
+                  this.clearAllMarkers();
+                  this.displayFilteredLocations();
+                  this.updateRouteForFiltered();
+                  this.updateTimeFilterIndicator();
+                  this.hideNoFilterOverlay();
+              
+                  if (this.filteredLocations.length > 0) {
+                      this.fitMapToLocations(this.filteredLocations);
+                  } else {
+                      // ✅ FIXED: Show empty results popup for location filter
+                      console.log('No locations found, showing empty results popup');
+
+                      // Close the history config popup first
+                      const historyConfigPopup = document.getElementById('history-config-popup');
+                      if (historyConfigPopup) {
+                          historyConfigPopup.classList.remove('active');
+                      }
+
+                      // Wait a bit for UI to update, then show the popup
+                      setTimeout(() => {
+                          this.showEmptyResultsPopup(true, radiusKm);
+                      }, 300);
+                  }
+              } else {
+                  const errorText = await response.text();
+                  console.error('Failed to load location data:', response.status, errorText);
+                  this.showError('Failed to load location data: ' + response.status);
+              }
+          } catch (error) {
+              console.error('Error loading location data:', error);
+              this.showError('Failed to load location data: ' + error.message);
           }
-        } catch (error) {
-          console.error('Error loading location data:', error);
-          this.showError('Failed to load location data: ' + error.message);
-        }
       }
 
       startMapLocationSelection() {
