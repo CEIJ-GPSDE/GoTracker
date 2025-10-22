@@ -302,7 +302,6 @@ func (us *UDPSniffer) Run(ctx context.Context) {
 			conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 			buffer := make([]byte, 1024)
 			n, addr, err := conn.ReadFromUDP(buffer)
-
 			if err != nil {
 				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 					continue // Timeout is expected
@@ -399,14 +398,15 @@ func (api *APIServer) Run(ctx context.Context) {
 	r := mux.NewRouter()
 
 	// API routes
+	r.HandleFunc("/api/devices", api.activeDevicesHandler).Methods("GET")
 	r.HandleFunc("/api/health", api.healthHandler).Methods("GET")
 	r.HandleFunc("/api/health/db", api.dbHealthHandler).Methods("GET")
-	r.HandleFunc("/api/stats", api.statsHandler).Methods("GET")
 	r.HandleFunc("/api/locations/latest", api.latestLocationHandler).Methods("GET")
 	r.HandleFunc("/api/locations/history", api.locationHistoryHandler).Methods("GET")
 	r.HandleFunc("/api/locations/range", api.locationRangeHandler).Methods("GET") // New endpoint
 	r.HandleFunc("/api/locations/nearby", api.locationNearbyHandler).Methods("GET")
 	r.HandleFunc("/api/locations/device/{deviceId}", api.deviceLocationHistoryHandler).Methods("GET")
+	r.HandleFunc("/api/stats", api.statsHandler).Methods("GET")
 	r.HandleFunc("/ws", api.wsHub.HandleWebSocket)
 
 	// Static files
@@ -628,8 +628,8 @@ func (api *APIServer) locationRangeHandler(w http.ResponseWriter, r *http.Reques
 	// Limit the time range to prevent huge queries
 	maxDuration := 365 * 24 * time.Hour // 365 days (1 year)
 	if endTime.Sub(startTime) > maxDuration {
-	    http.Error(w, "Time range too large, maximum 365 days", http.StatusBadRequest)
-	    return
+		http.Error(w, "Time range too large, maximum 365 days", http.StatusBadRequest)
+		return
 	}
 
 	tableName := "locations"
@@ -689,47 +689,47 @@ func (api *APIServer) locationRangeHandler(w http.ResponseWriter, r *http.Reques
 }
 
 func (api *APIServer) locationNearbyHandler(w http.ResponseWriter, r *http.Request) {
-    latStr := r.URL.Query().Get("lat")
-    lngStr := r.URL.Query().Get("lng")
-    radiusStr := r.URL.Query().Get("radius")
+	latStr := r.URL.Query().Get("lat")
+	lngStr := r.URL.Query().Get("lng")
+	radiusStr := r.URL.Query().Get("radius")
 
-    if latStr == "" || lngStr == "" {
-        w.WriteHeader(http.StatusBadRequest)
-        json.NewEncoder(w).Encode(map[string]string{
-            "error": "lat and lng parameters are required",
-        })
-        return
-    }
+	if latStr == "" || lngStr == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "lat and lng parameters are required",
+		})
+		return
+	}
 
-    lat, err := strconv.ParseFloat(latStr, 64)
-    if err != nil || lat < -90 || lat > 90 {
-        w.WriteHeader(http.StatusBadRequest)
-        json.NewEncoder(w).Encode(map[string]string{
-            "error": "Invalid latitude",
-        })
-        return
-    }
+	lat, err := strconv.ParseFloat(latStr, 64)
+	if err != nil || lat < -90 || lat > 90 {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Invalid latitude",
+		})
+		return
+	}
 
-    lng, err := strconv.ParseFloat(lngStr, 64)
-    if err != nil || lng < -180 || lng > 180 {
-        w.WriteHeader(http.StatusBadRequest)
-        json.NewEncoder(w).Encode(map[string]string{
-            "error": "Invalid longitude",
-        })
-        return
-    }
+	lng, err := strconv.ParseFloat(lngStr, 64)
+	if err != nil || lng < -180 || lng > 180 {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Invalid longitude",
+		})
+		return
+	}
 
-    radius := 0.5 // default 500m
-    if radiusStr != "" {
-        radius, err = strconv.ParseFloat(radiusStr, 64)
-        if err != nil || radius <= 0 || radius > 50 {
-            w.WriteHeader(http.StatusBadRequest)
-            json.NewEncoder(w).Encode(map[string]string{
-                "error": "Invalid radius (must be between 0 and 50 km)",
-            })
-            return
-        }
-    }
+	radius := 0.5 // default 500m
+	if radiusStr != "" {
+		radius, err = strconv.ParseFloat(radiusStr, 64)
+		if err != nil || radius <= 0 || radius > 50 {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{
+				"error": "Invalid radius (must be between 0 and 50 km)",
+			})
+			return
+		}
+	}
 
 	tableName := "locations"
 	if api.tablePrefix != "" {
@@ -782,6 +782,55 @@ func (api *APIServer) locationNearbyHandler(w http.ResponseWriter, r *http.Reque
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(locations)
+}
+
+func (api *APIServer) activeDevicesHandler(w http.ResponseWriter, r *http.Request) {
+	tableName := "locations"
+	if api.tablePrefix != "" {
+		tableName = api.tablePrefix + "_locations"
+	}
+
+	query := fmt.Sprintf(`
+        SELECT DISTINCT device_id, 
+               MAX(timestamp) as last_seen,
+               COUNT(*) as location_count
+        FROM %s
+        GROUP BY device_id
+        ORDER BY last_seen DESC
+    `, tableName)
+
+	rows, err := api.db.Query(query)
+	if err != nil {
+		log.Printf("Database query error: %v", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	type DeviceInfo struct {
+		DeviceID      string    `json:"device_id"`
+		LastSeen      time.Time `json:"last_seen"`
+		LocationCount int       `json:"location_count"`
+	}
+
+	var devices []DeviceInfo
+	for rows.Next() {
+		var device DeviceInfo
+		if err := rows.Scan(&device.DeviceID, &device.LastSeen, &device.LocationCount); err != nil {
+			log.Printf("Row scan error: %v", err)
+			continue
+		}
+		devices = append(devices, device)
+	}
+
+	if err = rows.Err(); err != nil {
+		log.Printf("Rows iteration error: %v", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(devices)
 }
 
 func (api *APIServer) deviceLocationHistoryHandler(w http.ResponseWriter, r *http.Request) {
@@ -859,7 +908,7 @@ func NewApp() (*App, error) {
 	config := loadConfig()
 
 	if config.LogFile != "" {
-		f, err := os.OpenFile(config.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		f, err := os.OpenFile(config.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 		if err != nil {
 			log.Printf("Failed to open log file %s: %v", config.LogFile, err)
 		} else {

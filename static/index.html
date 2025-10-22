@@ -255,12 +255,13 @@
     }
 
     #empty-results-popup {
-    z-index: 10600 !important; /* Higher than config popup which is 10000 */
+      z-index: 10600 !important;
+      /* Higher than config popup which is 10000 */
     }
 
     #empty-results-popup.show {
-        display: block !important;
-        animation: pulseScale 0.5s ease-out;
+      display: block !important;
+      animation: pulseScale 0.5s ease-out;
     }
 
     @keyframes pulseScale {
@@ -1089,6 +1090,142 @@
     .validation-error.show {
       display: block;
     }
+
+    /* Device Legend */
+    .device-legend {
+      position: absolute;
+      bottom: 80px;
+      left: 20px;
+      background: rgba(255, 255, 255, 0.98);
+      backdrop-filter: blur(10px);
+      padding: 15px;
+      border-radius: 12px;
+      box-shadow: 0 5px 20px rgba(0, 0, 0, 0.15);
+      z-index: 1000;
+      max-width: 250px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    .device-legend h4 {
+      margin: 0 0 12px 0;
+      font-size: 14px;
+      color: #374151;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s;
+      margin-bottom: 4px;
+    }
+
+    .legend-item:hover {
+      background: #f3f4f6;
+    }
+
+    .legend-item.disabled {
+      opacity: 0.4;
+    }
+
+    .legend-checkbox {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+      accent-color: #667eea;
+    }
+
+    .legend-color {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 3px solid white;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      flex-shrink: 0;
+    }
+
+    .legend-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .legend-device-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #374151;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .legend-stats {
+      font-size: 11px;
+      color: #6b7280;
+    }
+
+    /* Device Filter Checkboxes */
+    .device-filter-section {
+      margin-bottom: 20px;
+    }
+
+    .device-filter-section h4 {
+      margin-bottom: 10px;
+      color: #374151;
+      font-size: 14px;
+    }
+
+    .device-filter-list {
+      max-height: 200px;
+      overflow-y: auto;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 8px;
+      background: #f9fafb;
+    }
+
+    .device-filter-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .device-filter-item:hover {
+      background: #f3f4f6;
+    }
+
+    .device-filter-checkbox {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+      accent-color: #667eea;
+    }
+
+    .device-filter-color {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: 2px solid white;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    }
+
+    .device-color-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 2px solid white;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    }
   </style>
 </head>
 
@@ -1098,7 +1235,8 @@
       <h1>🌍 Real-time Location Tracker</h1>
       <p>Monitoring device locations with live updates and historical view</p>
       <div style="margin-top: 15px;">
-        <select id="language-selector" style="padding: 8px 12px; border-radius: 8px; border: 2px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.2); color: white; font-weight: 500; cursor: pointer;">
+        <select id="language-selector"
+          style="padding: 8px 12px; border-radius: 8px; border: 2px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.2); color: white; font-weight: 500; cursor: pointer;">
           <option value="en" style="color: #374151; background: white;">English</option>
           <option value="es" style="color: #374151; background: white;">Español</option>
         </select>
@@ -1112,6 +1250,14 @@
             <div class="status-dot"></div>
             <span>Connecting...</span>
           </div>
+        </div>
+        <!-- Device Legend -->
+        <div class="device-legend" id="device-legend">
+          <h4>
+            📱 Devices
+            <span id="device-count" style="font-size: 12px; font-weight: normal; color: #6b7280;">0</span>
+          </h4>
+          <div id="legend-items"></div>
         </div>
         <div class="time-filter-indicator" id="time-filter-indicator">
           <div id="time-filter-text">-</div>
@@ -1201,11 +1347,11 @@
         <div class="tab-content active" id="controls-tab">
           <div class="card">
             <div class="card-body">
-              <div class="control-group">
-                <label for="device-filter">Filter by Device:</label>
-                <select id="device-filter">
-                  <option value="">All Devices</option>
-                </select>
+              <div class="device-filter-section">
+                <h4>📱 Filter Devices</h4>
+                <div class="device-filter-list" id="device-filter-list">
+                  <div class="loading">Loading devices...</div>
+                </div>
               </div>
               <div class="control-group">
                 <label for="history-limit">History Limit:</label>
@@ -1356,11 +1502,15 @@
         this.map = null;
         this.markers = new Map();
         this.locations = [];
+        this.devices = new Map(); // Map<deviceId, {color, visible, count}>
+        this.selectedDevices = new Set(); // Devices to show
+        this.deviceColors = [
+          '#ef4444', '#10b981', '#3b82f6', '#f59e0b',
+          '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16'
+        ];
         this.filteredLocations = [];
-        this.devices = new Set();
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 10;
-        this.selectedDevice = '';
         this.historyLimit = 50;
         this.isTrackingLatest = true;
         this.selectedLocationIndex = -1;
@@ -1696,7 +1846,7 @@
         if (emptyResultsMessage) emptyResultsMessage.textContent = this.t('noResultsMessage');
         if (emptyResultsAdjustBtn) emptyResultsAdjustBtn.textContent = this.t('adjustFilters');
         if (emptyResultsDismissBtn) emptyResultsDismissBtn.textContent = this.t('dismiss');
-        
+
         // Update route legend
         const legendStart = document.getElementById('legend-start');
         const legendEnd = document.getElementById('legend-end');
@@ -1742,6 +1892,7 @@
           this.setupEventListeners();
           this.setupPopupMenu();
           this.setupOverlayEventListeners();
+          await this.loadDevices();
           await this.loadInitialData();
           this.connectWebSocket();
           this.startStatsPolling();
@@ -1774,7 +1925,7 @@
             this.hideNoFilterOverlay();
           });
         }
-      
+
         // Empty results overlay buttons
         const emptyResultsAdjustBtn = document.getElementById('empty-results-adjust-btn-element');
         const emptyResultsDismissBtn = document.getElementById('empty-results-dismiss-btn-element');
@@ -1793,7 +1944,7 @@
             this.hideNoResultsOverlay()
           });
         }
-      
+
         // Prevent clicks inside overlays from closing them
         const noFilterOverlay = document.getElementById('no-filter-overlay');
         const emptyResultsPopup = document.getElementById('empty-results-popup');
@@ -1850,48 +2001,48 @@
       setupPopupMenu() {
         const menuToggle = document.getElementById('menu-toggle-btn');
         const popupMenu = document.getElementById('popup-menu');
-        const popupClose = document.getElementById('popup-close');      
+        const popupClose = document.getElementById('popup-close');
 
         // History config popup elements
         const historyConfigPopup = document.getElementById('history-config-popup');
-        const historyConfigClose = document.getElementById('history-config-close');     
+        const historyConfigClose = document.getElementById('history-config-close');
 
         const tabButtons = document.querySelectorAll('.tab-button');
-        const tabContents = document.querySelectorAll('.tab-content');      
+        const tabContents = document.querySelectorAll('.tab-content');
 
         // Toggle main menu
         menuToggle.addEventListener('click', () => {
           popupMenu.classList.add('active');
-        });     
+        });
 
         // Close main menu
         const closeMenu = () => {
           popupMenu.classList.remove('active');
-        };      
+        };
 
         // Close history config popup
         const closeHistoryConfig = () => {
           historyConfigPopup.classList.remove('active');
-        };      
+        };
 
         popupClose.addEventListener('click', closeMenu);
-        historyConfigClose.addEventListener('click', closeHistoryConfig);     
+        historyConfigClose.addEventListener('click', closeHistoryConfig);
 
         // ✅ FIX: Stop event propagation when clicking inside popup content
         popupMenu.querySelector('.popup-content').addEventListener('click', (e) => {
           e.stopPropagation();
-        });     
+        });
 
         historyConfigPopup.querySelector('.popup-content').addEventListener('click', (e) => {
           e.stopPropagation();
-        });     
+        });
 
         // Close when clicking outside content (background only)
         popupMenu.addEventListener('click', (e) => {
           if (e.target === popupMenu) {
             closeMenu();
           }
-        });     
+        });
 
         historyConfigPopup.addEventListener('click', (e) => {
           if (e.target === historyConfigPopup) {
@@ -2641,34 +2792,34 @@
             const lat = parseFloat(latInput.value);
             const lng = parseFloat(lngInput.value);
             const radius = parseFloat(radiusInput.value);
-                  
+
             // Clear previous errors
             this.clearValidationError(applyLocationBtn, errorElement);
-                  
+
             // Check if inputs are empty (valid state - user hasn't entered anything yet)
             if (latInput.value === '' || lngInput.value === '') {
-                applyLocationBtn.disabled = true;
-                return false;
+              applyLocationBtn.disabled = true;
+              return false;
             }
-          
+
             // Check for invalid numbers
             if (isNaN(lat) || isNaN(lng)) {
-                this.showValidationError('validLocationRequired', applyLocationBtn, errorElement);
-                return false;
+              this.showValidationError('validLocationRequired', applyLocationBtn, errorElement);
+              return false;
             }
-          
+
             // Check coordinate ranges
             if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-                this.showValidationError('invalidCoordinates', applyLocationBtn, errorElement);
-                return false;
+              this.showValidationError('invalidCoordinates', applyLocationBtn, errorElement);
+              return false;
             }
-          
+
             // Check radius
             if (isNaN(radius) || radius <= 0) {
-                this.showValidationError('invalidRadius', applyLocationBtn, errorElement);
-                return false;
+              this.showValidationError('invalidRadius', applyLocationBtn, errorElement);
+              return false;
             }
-          
+
             // All validations passed
             applyLocationBtn.disabled = false;
             return true;
@@ -2933,43 +3084,43 @@
       }
 
       showEmptyResultsPopup(isLocationFilter = false, radius = 0) {
-          console.log('showEmptyResultsPopup called with:', { isLocationFilter, radius });
-            
-          const emptyPopup = document.getElementById('no-results-overlay');
-          if (!emptyPopup) {
-              console.error('Empty results popup not found!');
-              return;
+        console.log('showEmptyResultsPopup called with:', {isLocationFilter, radius});
+
+        const emptyPopup = document.getElementById('no-results-overlay');
+        if (!emptyPopup) {
+          console.error('Empty results popup not found!');
+          return;
+        }
+
+        // Update the message based on filter type
+        const message = emptyPopup.querySelector('p');
+        if (message) {
+          if (isLocationFilter) {
+            const translatedMessage = this.t('noLocationResultsMessage') ||
+              `No location data found within ${radius} km of the selected coordinates.`;
+            message.textContent = translatedMessage.replace('{radius}', radius);
+          } else {
+            message.textContent = this.t('noResultsMessage');
           }
-        
-          // Update the message based on filter type
-          const message = emptyPopup.querySelector('p');
-          if (message) {
-              if (isLocationFilter) {
-                  const translatedMessage = this.t('noLocationResultsMessage') || 
-                      `No location data found within ${radius} km of the selected coordinates.`;
-                  message.textContent = translatedMessage.replace('{radius}', radius);
-              } else {
-                  message.textContent = this.t('noResultsMessage');
-              }
-          }
-        
-          // Force show the popup
-          emptyPopup.style.display = 'block';
-          emptyPopup.classList.add('show');
-          
-          console.log('Empty results popup should now be visible');
+        }
+
+        // Force show the popup
+        emptyPopup.style.display = 'block';
+        emptyPopup.classList.add('show');
+
+        console.log('Empty results popup should now be visible');
       }
 
       hideEmptyResultsPopup() {
-          const emptyPopup = document.getElementById('empty-results-popup');
-          if (!emptyPopup) {
-              console.error('Empty results popup not found!');
-              return;
-          }
-        
-          emptyPopup.classList.remove('show');
-          emptyPopup.style.display = 'none';
-          console.log('Empty results popup hidden');
+        const emptyPopup = document.getElementById('empty-results-popup');
+        if (!emptyPopup) {
+          console.error('Empty results popup not found!');
+          return;
+        }
+
+        emptyPopup.classList.remove('show');
+        emptyPopup.style.display = 'none';
+        console.log('Empty results popup hidden');
       }
 
       closeEmptyResultsPopup() {
@@ -3104,38 +3255,38 @@
       }
 
       async loadHistoricalData() {
-          if (!this.timeFilter) return;
+        if (!this.timeFilter) return;
 
-          try {
-            const startTimestamp = this.timeFilter.start.toISOString();
-            const endTimestamp = this.timeFilter.end.toISOString();     
-            let url = `${this.config.apiBaseUrl}/api/locations/range?start=${startTimestamp}&end=${endTimestamp}`;
-            if (this.selectedDevice) {
-                url += `&device=${encodeURIComponent(this.selectedDevice)}`;
-            }
-          
-            const response = await fetch(url);
-            if (response.ok) {
-              const locations = await response.json();
-              this.filteredLocations = locations || [];    
-              // Clear all existing markers before showing historical data
-              this.clearAllMarkers();    
-              this.displayFilteredLocations();
-              this.updateRouteForFiltered();     
-              if (this.filteredLocations.length > 0) {
-                  this.fitMapToLocations(this.filteredLocations);
-              } else {
-                  // Show popup for empty results
-                  setTimeout(() => this.showEmptyResultsPopup(), 500);
-              }
+        try {
+          const startTimestamp = this.timeFilter.start.toISOString();
+          const endTimestamp = this.timeFilter.end.toISOString();
+          let url = `${this.config.apiBaseUrl}/api/locations/range?start=${startTimestamp}&end=${endTimestamp}`;
+          if (this.selectedDevice) {
+            url += `&device=${encodeURIComponent(this.selectedDevice)}`;
+          }
+
+          const response = await fetch(url);
+          if (response.ok) {
+            const locations = await response.json();
+            this.filteredLocations = locations || [];
+            // Clear all existing markers before showing historical data
+            this.clearAllMarkers();
+            this.displayFilteredLocations();
+            this.updateRouteForFiltered();
+            if (this.filteredLocations.length > 0) {
+              this.fitMapToLocations(this.filteredLocations);
             } else {
-              // Handle error response from backend
-              const errorText = await response.text();
-              console.error('Failed to load historical data:', response.status, errorText);
-              // Show user-friendly error message
-              const errorDiv = document.createElement('div');
-              errorDiv.className = 'error';
-              errorDiv.style.cssText = `
+              // Show popup for empty results
+              setTimeout(() => this.showEmptyResultsPopup(), 500);
+            }
+          } else {
+            // Handle error response from backend
+            const errorText = await response.text();
+            console.error('Failed to load historical data:', response.status, errorText);
+            // Show user-friendly error message
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error';
+            errorDiv.style.cssText = `
                 position: fixed;
                 top: 20px;
                 left: 50%;
@@ -3148,14 +3299,14 @@
                 z-index: 10000;
                 box-shadow: 0 10px 30px rgba(0,0,0,0.3);
               `;
-              errorDiv.textContent = `Failed to load data: ${errorText}`;
-              document.body.appendChild(errorDiv);
-              setTimeout(() => errorDiv.remove(), 5000);
-            }
-          } catch (error) {
-              console.error('Error loading historical data:', error);
-              this.showError('Failed to load historical data: ' + error.message);
+            errorDiv.textContent = `Failed to load data: ${errorText}`;
+            document.body.appendChild(errorDiv);
+            setTimeout(() => errorDiv.remove(), 5000);
           }
+        } catch (error) {
+          console.error('Error loading historical data:', error);
+          this.showError('Failed to load historical data: ' + error.message);
+        }
       }
 
       updateRouteForDevice() {
@@ -3223,90 +3374,90 @@
       }
 
       async loadHistoricalByLocation(latitude, longitude, radiusKm = 0.5) {
-          console.log('loadHistoricalByLocation called with:', { latitude, longitude, radiusKm });
-            
-          try {
-              const url = `${this.config.apiBaseUrl}/api/locations/nearby?lat=${latitude}&lng=${longitude}&radius=${radiusKm}`;
-              console.log('Fetching from URL:', url);
-          
-              const response = await fetch(url);
-              console.log('Response status:', response.status);
-          
-              if (response.ok) {
-                  const locations = await response.json();
-                  console.log('Received locations:', locations?.length || 0);
-              
-                  // ✅ CRITICAL FIX: ALWAYS set the filter state FIRST, regardless of results
-                  this.locationFilter = { lat: latitude, lng: longitude, radius: radiusKm };
-                  this.activeFilterType = 'location';
-                  this.timeFilter = null;
-                  this.persistedTimeFilter = null;
-                  this.persistedLocationFilter = { lat: latitude, lng: longitude, radius: radiusKm };
-                  
-                  // ✅ ALWAYS set filteredLocations (even if empty array)
-                  this.filteredLocations = locations || [];
-              
-                  console.log('Filter state set:', {
-                      locationFilter: this.locationFilter,
-                      activeFilterType: this.activeFilterType,
-                      filteredLocationsCount: this.filteredLocations.length
-                  });
-                
-                  // Clear time filter inputs when applying location filter
-                  document.getElementById('start-time-popup').value = '';
-                  document.getElementById('end-time-popup').value = '';
-                  document.querySelectorAll('.quick-range-btn').forEach(btn => btn.classList.remove('active'));
-                
-                  // ✅ ALWAYS clear markers and update display (even if no results)
-                  this.clearAllMarkers();
-                  this.clearTraceMarkers();
-                  this.routeCoords = [];
-                  this.updateRouteLine();
-                  this.displayFilteredLocations();
-                  this.updateTimeFilterIndicator();
-                  this.hideNoFilterOverlay();
-                
-                  // ✅ Close the history config popup
-                  const historyConfigPopup = document.getElementById('history-config-popup');
-                  if (historyConfigPopup) {
-                      historyConfigPopup.classList.remove('active');
-                  }
-                
-                  // ✅ Now check results and show appropriate feedback
-                  if (this.filteredLocations.length > 0) {
-                      console.log('Has results, fitting map');
-                      this.fitMapToLocations(this.filteredLocations);
-                      this.updateRouteForFiltered();
-                  } else {
-                      console.log('No results, showing empty results popup');
-                      // Show empty results popup after a short delay
-                      setTimeout(() => {
-                          this.showEmptyResultsPopup(true, radiusKm);
-                      }, 300);
-                  }
-              } else {
-                  const errorText = await response.text();
-                  console.error('Failed to load location data:', response.status, errorText);
-                  
-                  // Even on error, close the popup
-                  const historyConfigPopup = document.getElementById('history-config-popup');
-                  if (historyConfigPopup) {
-                      historyConfigPopup.classList.remove('active');
-                  }
-                  
-                  this.showError('Failed to load location data: ' + response.status);
-              }
-          } catch (error) {
-              console.error('Error loading location data:', error);
-              
-              // Even on error, close the popup  
-              const historyConfigPopup = document.getElementById('history-config-popup');
-              if (historyConfigPopup) {
-                  historyConfigPopup.classList.remove('active');
-              }
-              
-              this.showError('Failed to load location data: ' + error.message);
+        console.log('loadHistoricalByLocation called with:', {latitude, longitude, radiusKm});
+
+        try {
+          const url = `${this.config.apiBaseUrl}/api/locations/nearby?lat=${latitude}&lng=${longitude}&radius=${radiusKm}`;
+          console.log('Fetching from URL:', url);
+
+          const response = await fetch(url);
+          console.log('Response status:', response.status);
+
+          if (response.ok) {
+            const locations = await response.json();
+            console.log('Received locations:', locations?.length || 0);
+
+            // ✅ CRITICAL FIX: ALWAYS set the filter state FIRST, regardless of results
+            this.locationFilter = {lat: latitude, lng: longitude, radius: radiusKm};
+            this.activeFilterType = 'location';
+            this.timeFilter = null;
+            this.persistedTimeFilter = null;
+            this.persistedLocationFilter = {lat: latitude, lng: longitude, radius: radiusKm};
+
+            // ✅ ALWAYS set filteredLocations (even if empty array)
+            this.filteredLocations = locations || [];
+
+            console.log('Filter state set:', {
+              locationFilter: this.locationFilter,
+              activeFilterType: this.activeFilterType,
+              filteredLocationsCount: this.filteredLocations.length
+            });
+
+            // Clear time filter inputs when applying location filter
+            document.getElementById('start-time-popup').value = '';
+            document.getElementById('end-time-popup').value = '';
+            document.querySelectorAll('.quick-range-btn').forEach(btn => btn.classList.remove('active'));
+
+            // ✅ ALWAYS clear markers and update display (even if no results)
+            this.clearAllMarkers();
+            this.clearTraceMarkers();
+            this.routeCoords = [];
+            this.updateRouteLine();
+            this.displayFilteredLocations();
+            this.updateTimeFilterIndicator();
+            this.hideNoFilterOverlay();
+
+            // ✅ Close the history config popup
+            const historyConfigPopup = document.getElementById('history-config-popup');
+            if (historyConfigPopup) {
+              historyConfigPopup.classList.remove('active');
+            }
+
+            // ✅ Now check results and show appropriate feedback
+            if (this.filteredLocations.length > 0) {
+              console.log('Has results, fitting map');
+              this.fitMapToLocations(this.filteredLocations);
+              this.updateRouteForFiltered();
+            } else {
+              console.log('No results, showing empty results popup');
+              // Show empty results popup after a short delay
+              setTimeout(() => {
+                this.showEmptyResultsPopup(true, radiusKm);
+              }, 300);
+            }
+          } else {
+            const errorText = await response.text();
+            console.error('Failed to load location data:', response.status, errorText);
+
+            // Even on error, close the popup
+            const historyConfigPopup = document.getElementById('history-config-popup');
+            if (historyConfigPopup) {
+              historyConfigPopup.classList.remove('active');
+            }
+
+            this.showError('Failed to load location data: ' + response.status);
           }
+        } catch (error) {
+          console.error('Error loading location data:', error);
+
+          // Even on error, close the popup  
+          const historyConfigPopup = document.getElementById('history-config-popup');
+          if (historyConfigPopup) {
+            historyConfigPopup.classList.remove('active');
+          }
+
+          this.showError('Failed to load location data: ' + error.message);
+        }
       }
 
       startMapLocationSelection() {
@@ -3395,11 +3546,11 @@
       }
 
       selectLocationFromMap(lat, lng) {
-        console.log('Location selected from map:', { lat, lng });
-          
+        console.log('Location selected from map:', {lat, lng});
+
         // Clean up selection mode first
         this.cancelMapLocationSelection();
-          
+
         // Show success message briefly
         const successDiv = document.createElement('div');
         successDiv.style.cssText = `
@@ -3418,35 +3569,35 @@
         `;
         successDiv.textContent = this.t('locationSelected');
         document.body.appendChild(successDiv);
-          
+
         setTimeout(() => {
-            successDiv.remove();
-            
-            // Reopen the history config popup on the location filter tab
-            this.lastActiveConfigTab = 'location-filter';
-            this.openHistoryConfigPopup();
-            
-            // Update the input fields AFTER popup opens to ensure they exist
-            setTimeout(() => {
-                const latInput = document.getElementById('location-lat-input');
-                const lngInput = document.getElementById('location-lng-input');
-                
-                if (latInput && lngInput) {
-                    // Force update the values
-                    latInput.value = lat.toFixed(6);
-                    lngInput.value = lng.toFixed(6);
-                    
-                    // Trigger validation
-                    latInput.dispatchEvent(new Event('input', { bubbles: true }));
-                    lngInput.dispatchEvent(new Event('change', { bubbles: true }));
-                    
-                    console.log('Coordinates updated:', { lat: latInput.value, lng: lngInput.value });
-                } else {
-                    console.error('Input fields not found after reopening popup');
-                }
-            }, 100);
+          successDiv.remove();
+
+          // Reopen the history config popup on the location filter tab
+          this.lastActiveConfigTab = 'location-filter';
+          this.openHistoryConfigPopup();
+
+          // Update the input fields AFTER popup opens to ensure they exist
+          setTimeout(() => {
+            const latInput = document.getElementById('location-lat-input');
+            const lngInput = document.getElementById('location-lng-input');
+
+            if (latInput && lngInput) {
+              // Force update the values
+              latInput.value = lat.toFixed(6);
+              lngInput.value = lng.toFixed(6);
+
+              // Trigger validation
+              latInput.dispatchEvent(new Event('input', {bubbles: true}));
+              lngInput.dispatchEvent(new Event('change', {bubbles: true}));
+
+              console.log('Coordinates updated:', {lat: latInput.value, lng: lngInput.value});
+            } else {
+              console.error('Input fields not found after reopening popup');
+            }
+          }, 100);
         }, 1500);
-    }
+      }
 
       fitMapToLocations(locations) {
         if (locations.length === 0) return;
@@ -3583,50 +3734,58 @@
       updateMapMarker(location, isLatest = false) {
         const deviceId = location.device_id;
         let marker = this.markers.get(deviceId);
+
+        // Get device color
+        const deviceColor = this.getDeviceColor(deviceId);
+        const deviceInfo = this.devices.get(deviceId);
+
         const popupContent = `
-            <div style="font-family: system-ui; min-width: 200px;">
-                <h4 style="margin: 0 0 10px 0; color: #374151;">${deviceId}</h4>
-                <div style="font-size: 12px; color: #6b7280; margin-bottom: 5px;">
-                    <strong>Coordinates:</strong><br>
-                    ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}
-                </div>
-                <div style="font-size: 12px; color: #6b7280;">
-                    <strong>Time:</strong><br>
-                    ${new Date(location.timestamp).toLocaleString()}
-                </div>
+          <div style="font-family: system-ui; min-width: 200px;">
+            <h4 style="margin: 0 0 10px 0; color: #374151; display: flex; align-items: center; gap: 8px;">
+              <div style="width: 12px; height: 12px; border-radius: 50%; background: ${deviceColor};"></div>
+              ${deviceId}
+            </h4>
+            <div style="font-size: 12px; color: #6b7280; margin-bottom: 5px;">
+              <strong>Coordinates:</strong><br>
+              ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}
             </div>
+            <div style="font-size: 12px; color: #6b7280;">
+              <strong>Time:</strong><br>
+              ${new Date(location.timestamp).toLocaleString()}
+            </div>
+          </div>
         `;
 
         if (!marker) {
-          // Create marker if not exist
           let el;
           if (isLatest) {
             el = document.createElement('div');
             el.className = 'pulse-marker';
+            el.style.backgroundColor = deviceColor;
           }
 
           marker = new maplibregl.Marker({
             element: el || undefined,
-            color: isLatest ? undefined : this.getDeviceColor(deviceId)
+            color: isLatest ? undefined : deviceColor
           })
             .setLngLat([location.longitude, location.latitude])
             .setPopup(new maplibregl.Popup().setHTML(popupContent))
             .addTo(this.map);
 
           this.markers.set(deviceId, marker);
+
+          // Hide if device not visible
+          if (deviceInfo && !deviceInfo.visible) {
+            marker.getElement().style.display = 'none';
+          }
         } else {
-          // Just update existing marker
           marker.setLngLat([location.longitude, location.latitude]);
           marker.setPopup(new maplibregl.Popup().setHTML(popupContent));
-        }
 
-        // Ensure pulse only applies to the latest
-        const el = marker.getElement();
-        if (isLatest) {
-          el.classList.add('pulse-marker');
-          el.style.zIndex = "9999";
-        } else {
-          el.classList.remove('pulse-marker');
+          const el = marker.getElement();
+          if (isLatest) {
+            el.style.backgroundColor = deviceColor;
+          }
         }
       }
 
@@ -3652,6 +3811,16 @@
         this.locations = [...this.liveLocations];
 
         this.devices.add(location.device_id);
+        const deviceInfo = this.devices.get(location.device_id);
+        if (deviceInfo) {
+          deviceInfo.count++;
+        } else {
+          this.getDeviceColor(location.device_id);
+          this.selectedDevices.add(location.device_id);
+        }
+
+        this.updateDeviceLegend(); // ADD
+        this.updateDeviceFilterList(); // ADD
         this.updateDevicesList();
         this.filterAndDisplayLocations();
         this.updateStatistics();
@@ -3663,6 +3832,7 @@
             this.centerMapOnLocation(location);
           }
         }
+        this.updateDeviceRoute(location.device_id);
       }
 
       getDeviceColor(deviceId) {
@@ -3823,40 +3993,40 @@
       displayLocations(locations = this.locations) {
         const container = document.getElementById('location-list');
 
-        // In live mode, locations will only contain live updates after first update,
-        // or the initial DB location before any updates
-
         if (locations.length === 0) {
           container.innerHTML = `<div class="loading">${this.t('noLocationsFound')}</div>`;
           return;
         }
 
-        container.innerHTML = locations.slice(0, this.historyLimit).map((location, index) => `
-            <div class="location-item ${index === 0 ? 'latest' : ''} ${index === this.selectedLocationIndex ? 'selected' : ''}" 
-                 onclick="locationTracker.selectLocation(${index})">
-                <div class="device-id">${location.device_id}</div>
-                <div class="coordinates">${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}</div>
-                <div class="timestamp">${new Date(location.timestamp).toLocaleString()}</div>
-            </div>
-        `).join('');
+        container.innerHTML = locations.slice(0, this.historyLimit).map((location, index) => {
+          const deviceInfo = this.devices.get(location.device_id);
+          const color = deviceInfo ? deviceInfo.color : '#6b7280';
 
-        // Clean up any event listeners that might interfere with popups
-        // Remove any orphaned quick-range-btn elements that might have been created
-        const orphanedButtons = container.querySelectorAll('.quick-range-btn');
-        orphanedButtons.forEach(btn => btn.remove());
+          return `
+            <div class="location-item ${index === 0 ? 'latest' : ''} ${index === this.selectedLocationIndex ? 'selected' : ''}" 
+                onclick="locationTracker.selectLocation(${index})">
+              <div class="device-id">
+                <div class="device-color-dot" style="background-color: ${color}"></div>
+                ${location.device_id}
+              </div>
+              <div class="coordinates">${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}</div>
+              <div class="timestamp">${new Date(location.timestamp).toLocaleString()}</div>
+            </div>
+          `;
+        }).join('');
       }
 
       displayFilteredLocations() {
-          const container = document.getElementById('location-list');
+        const container = document.getElementById('location-list');
 
-          console.log('displayFilteredLocations called with', this.filteredLocations.length, 'locations'); // ✅ Debug log
+        console.log('displayFilteredLocations called with', this.filteredLocations.length, 'locations'); // ✅ Debug log
 
-          if (this.filteredLocations.length === 0) {
-              container.innerHTML = `<div class="loading">${this.t('noLocationsFound')}</div>`;
-              return;
-          }
-        
-          container.innerHTML = this.filteredLocations.map((location, index) => `
+        if (this.filteredLocations.length === 0) {
+          container.innerHTML = `<div class="loading">${this.t('noLocationsFound')}</div>`;
+          return;
+        }
+
+        container.innerHTML = this.filteredLocations.map((location, index) => `
               <div class="location-item ${index === this.selectedLocationIndex ? 'selected' : ''}" 
                    onclick="locationTracker.selectLocation(${index})">
                   <div class="device-id">${location.device_id}</div>
@@ -3942,6 +4112,225 @@
 
         fetchAndUpdate();
         setInterval(fetchAndUpdate, 5000);
+      }
+      getDeviceColor(deviceId) {
+        if (!this.devices.has(deviceId)) {
+          const colorIndex = this.devices.size % this.deviceColors.length;
+          this.devices.set(deviceId, {
+            color: this.deviceColors[colorIndex],
+            visible: true,
+            count: 0
+          });
+        }
+        return this.devices.get(deviceId).color;
+      }
+
+      async loadDevices() {
+        try {
+          const response = await fetch(`${this.config.apiBaseUrl}/api/devices`);
+          if (response.ok) {
+            const deviceList = await response.json();
+
+            deviceList.forEach(device => {
+              if (!this.devices.has(device.device_id)) {
+                const colorIndex = this.devices.size % this.deviceColors.length;
+                this.devices.set(device.device_id, {
+                  color: this.deviceColors[colorIndex],
+                  visible: true,
+                  count: device.location_count,
+                  lastSeen: device.last_seen
+                });
+              }
+              this.selectedDevices.add(device.device_id);
+            });
+
+            this.updateDeviceLegend();
+            this.updateDeviceFilterList();
+          }
+        } catch (error) {
+          console.error('Error loading devices:', error);
+        }
+      }
+
+      updateDeviceLegend() {
+        const container = document.getElementById('legend-items');
+        const countElement = document.getElementById('device-count');
+
+        countElement.textContent = this.devices.size;
+
+        if (this.devices.size === 0) {
+          container.innerHTML = '<div style="color: #9ca3af; font-size: 12px;">No devices found</div>';
+          return;
+        }
+
+        container.innerHTML = '';
+
+        this.devices.forEach((info, deviceId) => {
+          const item = document.createElement('div');
+          item.className = `legend-item ${!info.visible ? 'disabled' : ''}`;
+
+          item.innerHTML = `
+            <input type="checkbox" class="legend-checkbox" ${info.visible ? 'checked' : ''} 
+                  data-device="${deviceId}">
+            <div class="legend-color" style="background-color: ${info.color}"></div>
+            <div class="legend-info">
+              <div class="legend-device-name">${deviceId}</div>
+              <div class="legend-stats">${info.count} locations</div>
+            </div>
+          `;
+
+          const checkbox = item.querySelector('.legend-checkbox');
+          checkbox.addEventListener('change', (e) => {
+            e.stopPropagation();
+            this.toggleDeviceVisibility(deviceId, checkbox.checked);
+          });
+
+          item.addEventListener('click', (e) => {
+            if (e.target !== checkbox) {
+              checkbox.checked = !checkbox.checked;
+              this.toggleDeviceVisibility(deviceId, checkbox.checked);
+            }
+          });
+
+          container.appendChild(item);
+        });
+      }
+
+      updateDeviceFilterList() {
+        const container = document.getElementById('device-filter-list');
+
+        if (this.devices.size === 0) {
+          container.innerHTML = '<div style="color: #9ca3af; padding: 10px;">No devices found</div>';
+          return;
+        }
+
+        container.innerHTML = '';
+
+        this.devices.forEach((info, deviceId) => {
+          const item = document.createElement('div');
+          item.className = 'device-filter-item';
+
+          item.innerHTML = `
+            <input type="checkbox" class="device-filter-checkbox" ${info.visible ? 'checked' : ''} 
+                  data-device="${deviceId}">
+            <div class="device-filter-color" style="background-color: ${info.color}"></div>
+            <span style="font-size: 13px; color: #374151;">${deviceId}</span>
+          `;
+
+          const checkbox = item.querySelector('.device-filter-checkbox');
+          checkbox.addEventListener('change', (e) => {
+            e.stopPropagation();
+            this.toggleDeviceVisibility(deviceId, checkbox.checked);
+          });
+
+          item.addEventListener('click', (e) => {
+            if (e.target !== checkbox) {
+              checkbox.checked = !checkbox.checked;
+              this.toggleDeviceVisibility(deviceId, checkbox.checked);
+            }
+          });
+
+          container.appendChild(item);
+        });
+      }
+
+      toggleDeviceVisibility(deviceId, visible) {
+        const deviceInfo = this.devices.get(deviceId);
+        if (deviceInfo) {
+          deviceInfo.visible = visible;
+
+          if (visible) {
+            this.selectedDevices.add(deviceId);
+          } else {
+            this.selectedDevices.delete(deviceId);
+          }
+
+          // Update marker visibility
+          const marker = this.markers.get(deviceId);
+          if (marker) {
+            const el = marker.getElement();
+            el.style.display = visible ? 'block' : 'none';
+          }
+
+          // Update routes
+          this.updateRoutesVisibility();
+          this.updateDeviceLegend();
+          this.updateDeviceFilterList();
+          this.filterAndDisplayLocations();
+        }
+      }
+
+      updateRoutesVisibility() {
+        this.devices.forEach((info, deviceId) => {
+          const layerId = `route-${deviceId}`;
+          if (this.map.getLayer(layerId)) {
+            this.map.setLayoutProperty(
+              layerId,
+              'visibility',
+              info.visible ? 'visible' : 'none'
+            );
+          }
+        });
+      }
+
+      updateDeviceRoute(deviceId) {
+        const deviceLocations = this.locations
+          .filter(loc => loc.device_id === deviceId)
+          .slice(0, 50);
+
+        if (deviceLocations.length < 2) return;
+
+        const coordinates = deviceLocations.map(loc => [loc.longitude, loc.latitude]);
+        const deviceInfo = this.devices.get(deviceId);
+
+        const sourceId = `route-${deviceId}`;
+        const layerId = `route-${deviceId}`;
+
+        if (this.map.getSource(sourceId)) {
+          this.map.getSource(sourceId).setData({
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'LineString',
+              coordinates: coordinates
+            }
+          });
+        } else {
+          this.map.addSource(sourceId, {
+            type: 'geojson',
+            data: {
+              type: 'Feature',
+              properties: {},
+              geometry: {
+                type: 'LineString',
+                coordinates: coordinates
+              }
+            }
+          });
+
+          this.map.addLayer({
+            id: layerId,
+            type: 'line',
+            source: sourceId,
+            layout: {
+              'line-cap': 'round',
+              'line-join': 'round'
+            },
+            paint: {
+              'line-color': deviceInfo.color,
+              'line-width': 3,
+              'line-opacity': 0.7
+            }
+          });
+        }
+
+        if (this.map.getLayer(layerId)) {
+          this.map.setLayoutProperty(
+            layerId,
+            'visibility',
+            deviceInfo.visible ? 'visible' : 'none'
+          );
+        }
       }
     }
 
