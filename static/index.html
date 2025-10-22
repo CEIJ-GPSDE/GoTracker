@@ -1141,8 +1141,8 @@
   <div class="popup-menu" id="popup-menu">
     <div class="popup-content">
       <div class="popup-header">
-        <h2>Controls & Information</h2>
-        <button class="popup-close" id="popup-close">×</button>
+          <h2 id="main-menu-title">Controls & Information</h2>
+          <button class="popup-close" id="popup-close" title="">×</button>
       </div>
       <div class="popup-body">
         <div class="menu-tabs">
@@ -1347,6 +1347,8 @@
         this.activeFilterType = null;
         this.isSelectingLocationOnMap = false;
         this.mapSelectionHandler = null;
+        this.lastOpenedPopupContext = null;
+        this.isSelectingLocationOnMap = false;
         this.lastActiveConfigTab = 'time-filter';
         this.translations = {
           en: {
@@ -1432,6 +1434,17 @@
             selectLocationOnMap: "Click on the map to select a location",
             clickMapToSelect: "Click anywhere on the map to set the location for filtering",
             cancelSelection: "Cancel",
+            controlsAndInfo: "Controls & Information",
+            close: "Close",
+            loading: "Loading...",
+            noData: "No data available",
+            error: "Error",
+            invalidInput: "Invalid input",
+            requiredField: "This field is required",
+            controlsTab: "Controls",
+            locationsTab: "Locations",
+            statisticsTab: "Statistics",
+            mainMenuTitle: "Controls & Information",
             locationSelected: "Location selected! Coordinates updated.",
             validationErrors: {
               required: "Both start and end times are required",
@@ -1526,6 +1539,17 @@
             selectLocationOnMap: "Haga clic en el mapa para seleccionar una ubicación",
             clickMapToSelect: "Haga clic en cualquier lugar del mapa para establecer la ubicación del filtro",
             cancelSelection: "Cancelar",
+            controlsAndInfo: "Controles e Información",
+            close: "Cerrar",
+            loading: "Cargando...",
+            noData: "No hay datos disponibles",
+            error: "Error",
+            invalidInput: "Entrada inválida",
+            requiredField: "Este campo es requerido",
+            controlsTab: "Controles",
+            locationsTab: "Ubicaciones",
+            statisticsTab: "Estadísticas",
+            mainMenuTitle: "Controles e Información",
             locationSelected: "¡Ubicación seleccionada! Coordenadas actualizadas.",
             validationErrors: {
               required: "Se requieren hora de inicio y fin",
@@ -1597,7 +1621,14 @@
         } else {
           modeIndicator.innerHTML = `<div class="mode-indicator-dot"></div><span>${this.t('liveModeBadge')}</span>`;
         }
+        // Update main menu title
+        const mainMenuTitle = document.getElementById('main-menu-title');
+        if (mainMenuTitle) mainMenuTitle.textContent = this.t('mainMenuTitle');
 
+        // Update close button titles
+        document.querySelectorAll('.popup-close').forEach(btn => {
+            btn.title = this.t('close');
+        });
         // Update popup menu
         document.querySelector('#popup-menu .popup-header h2').textContent = this.t('controlsAndInfo');
         document.querySelector('[data-tab="controls"]').textContent = this.t('controls');
@@ -1749,42 +1780,58 @@
         const popupMenu = document.getElementById('popup-menu');
         const popupClose = document.getElementById('popup-close');
 
-        // History config popup elements
         const historyConfigPopup = document.getElementById('history-config-popup');
         const historyConfigClose = document.getElementById('history-config-close');
 
-        const tabButtons = document.querySelectorAll('.tab-button');
-        const tabContents = document.querySelectorAll('.tab-content');
+        // ... existing tab setup code ...
 
-        // Toggle main menu
-        menuToggle.addEventListener('click', () => {
-          popupMenu.classList.add('active');
+        // IMPROVED: Toggle main menu
+        menuToggle.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent event bubbling
+            this.lastOpenedPopupContext = 'menu'; // Track context
+            popupMenu.classList.add('active');
         });
 
-        // Close main menu
+        // IMPROVED: Close main menu
         const closeMenu = () => {
-          popupMenu.classList.remove('active');
+            popupMenu.classList.remove('active');
+            this.lastOpenedPopupContext = null; // Clear context
         };
 
-        // Close history config popup
+        // IMPROVED: Close history config popup
         const closeHistoryConfig = () => {
-          historyConfigPopup.classList.remove('active');
+            historyConfigPopup.classList.remove('active');
+            // Don't clear context here - we may want to reopen
         };
 
-        popupClose.addEventListener('click', closeMenu);
-        historyConfigClose.addEventListener('click', closeHistoryConfig);
+        // FIX: Make sure close buttons work
+        if (popupClose) {
+            popupClose.onclick = (e) => {
+                e.stopPropagation();
+                closeMenu();
+            };
+        }
 
-        // Close when clicking outside content
+        if (historyConfigClose) {
+            historyConfigClose.onclick = (e) => {
+                e.stopPropagation();
+                closeHistoryConfig();
+            };
+        }
+
+        // FIX: Click outside to close - use proper event handling
         popupMenu.addEventListener('click', (e) => {
-          if (e.target === popupMenu) {
-            closeMenu();
-          }
+            if (e.target === popupMenu) {
+                e.stopPropagation();
+                closeMenu();
+            }
         });
 
         historyConfigPopup.addEventListener('click', (e) => {
-          if (e.target === historyConfigPopup) {
-            closeHistoryConfig();
-          }
+            if (e.target === historyConfigPopup) {
+                e.stopPropagation();
+                closeHistoryConfig();
+            }
         });
 
         // Tab switching
@@ -1817,6 +1864,30 @@
             }
           }
         });
+      }
+
+      rememberPopupContext(context) {
+          this.lastOpenedPopupContext = context;
+      }
+
+      restorePopupContext() {
+          if (this.lastOpenedPopupContext === 'location-history') {
+              // Reopen the main menu on locations tab
+              const popupMenu = document.getElementById('popup-menu');
+              popupMenu.classList.add('active');
+
+              // Switch to locations tab
+              const tabButtons = document.querySelectorAll('.tab-button');
+              const locationTab = document.getElementById('locations-tab');
+
+              tabButtons.forEach(btn => btn.classList.remove('active'));
+              document.querySelector('[data-tab="locations"]').classList.add('active');
+
+              document.querySelectorAll('.tab-content').forEach(content => {
+                  content.classList.remove('active');
+              });
+              locationTab.classList.add('active');
+          }
       }
 
       handleUserInteraction() {
@@ -2140,6 +2211,13 @@
           }
 
         } else {
+          document.getElementById('popup-menu').classList.remove('active');
+          document.getElementById('history-config-popup').classList.remove('active');
+          document.getElementById('no-filter-overlay').classList.remove('show');
+          document.getElementById('empty-results-popup').classList.remove('show');
+          
+          // Clear popup context
+          this.lastOpenedPopupContext = null;
           // Update mode indicator
           modeIndicator.className = 'mode-indicator live-mode';
           modeIndicator.innerHTML = `<div class="mode-indicator-dot"></div><span>${this.t('liveModeBadge')}</span>`;
@@ -3568,24 +3646,26 @@
       }
 
       selectLocation(locationIndex) {
-        this.selectedLocationIndex = locationIndex;
-        this.userInteracted = false;
+          this.selectedLocationIndex = locationIndex;
+          this.userInteracted = false;
 
-        if (locationIndex >= 0) {
-          this.toggleTracking(false);
-          const locations = this.isHistoryMode ? this.filteredLocations : this.getFilteredLocations();
-          const location = locations[locationIndex];
-          if (location) {
-            this.centerMapOnLocation(location);
-            // Create a temporary marker for the selected location, don't interfere with the latest marker
-            this.showSelectedLocationMarker(location);
+          // CLOSE any open popups first
+          document.getElementById('popup-menu').classList.remove('active');
+          document.getElementById('history-config-popup').classList.remove('active');
+
+          if (locationIndex >= 0) {
+              this.toggleTracking(false);
+              const locations = this.isHistoryMode ? this.filteredLocations : this.getFilteredLocations();
+              const location = locations[locationIndex];
+              if (location) {
+                  this.centerMapOnLocation(location);
+                  this.showSelectedLocationMarker(location);
+              }
+          } else {
+              this.clearSelectedLocationMarker();
           }
-        } else {
-          // Clear any selected location marker when deselecting
-          this.clearSelectedLocationMarker();
-        }
 
-        this.updateLocationSelection();
+          this.updateLocationSelection();
       }
 
       showSelectedLocationMarker(location) {
@@ -3688,44 +3768,34 @@
       }
 
       displayLocations(locations = this.locations) {
-        const container = document.getElementById('location-list');
+          const container = document.getElementById('location-list');
 
-        // In live mode, locations will only contain live updates after first update,
-        // or the initial DB location before any updates
+          if (locations.length === 0) {
+              container.innerHTML = `<div class="loading">${this.t('noLocationsFound')}</div>`;
+              return;
+          }
 
-        if (locations.length === 0) {
-          container.innerHTML = `<div class="loading">${this.t('noLocationsFound')}</div>`;
-          return;
-        }
-
-        container.innerHTML = locations.slice(0, this.historyLimit).map((location, index) => `
-            <div class="location-item ${index === 0 ? 'latest' : ''} ${index === this.selectedLocationIndex ? 'selected' : ''}" 
-                 onclick="locationTracker.selectLocation(${index})">
-                <div class="device-id">${location.device_id}</div>
-                <div class="coordinates">${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}</div>
-                <div class="timestamp">${new Date(location.timestamp).toLocaleString()}</div>
-            </div>
-        `).join('');
-
-        // Clean up any event listeners that might interfere with popups
-        // Remove any orphaned quick-range-btn elements that might have been created
-        const orphanedButtons = container.querySelectorAll('.quick-range-btn');
-        orphanedButtons.forEach(btn => btn.remove());
+          container.innerHTML = locations.slice(0, this.historyLimit).map((location, index) => `
+              <div class="location-item ${index === 0 ? 'latest' : ''} ${index === this.selectedLocationIndex ? 'selected' : ''}" 
+                   onclick="locationTracker.rememberPopupContext('location-history'); locationTracker.selectLocation(${index})">
+                  <div class="device-id">${location.device_id}</div>
+                  <div class="coordinates">${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}</div>
+                  <div class="timestamp">${new Date(location.timestamp).toLocaleString()}</div>
+              </div>
+          `).join('');
       }
 
       displayFilteredLocations() {
           const container = document.getElementById('location-list');
 
-          console.log('displayFilteredLocations called with', this.filteredLocations.length, 'locations'); // ✅ Debug log
-
           if (this.filteredLocations.length === 0) {
               container.innerHTML = `<div class="loading">${this.t('noLocationsFound')}</div>`;
               return;
           }
-        
+
           container.innerHTML = this.filteredLocations.map((location, index) => `
               <div class="location-item ${index === this.selectedLocationIndex ? 'selected' : ''}" 
-                   onclick="locationTracker.selectLocation(${index})">
+                   onclick="locationTracker.rememberPopupContext('location-history'); locationTracker.selectLocation(${index})">
                   <div class="device-id">${location.device_id}</div>
                   <div class="coordinates">${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}</div>
                   <div class="timestamp">${new Date(location.timestamp).toLocaleString()}</div>
