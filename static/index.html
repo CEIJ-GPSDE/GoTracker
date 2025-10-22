@@ -1097,6 +1097,16 @@
             <span id="no-filter-dismiss-text">Dismiss</span>
           </button>
         </div>
+        <div class="no-filter-overlay" id="empty-results-popup" style="border-color: #ef4444; z-index: 10600;">
+          <h3>⚠️ No Results Found</h3>
+          <p>No location data matches your filter criteria. Try adjusting the parameters.</p>
+          <button class="btn" onclick="locationTracker.openHistoryConfigPopup();">
+            <span>Adjust Filters</span>
+          </button>
+          <button class="btn secondary" onclick="document.getElementById('empty-results-popup').classList.remove('show');">
+            <span>Dismiss</span>
+          </button>
+        </div>
         <div class="mode-indicator live-mode" id="mode-indicator">
           <div class="mode-indicator-dot"></div>
           <span>🔴 LIVE MODE</span>
