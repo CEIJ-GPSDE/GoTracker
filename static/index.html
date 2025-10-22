@@ -2517,43 +2517,39 @@
 
           // Validation function for location filter
           const validateLocationFilter = () => {
-            // Always get fresh reference to the button
-            const currentApplyBtn = locationTab.querySelector('#apply-location-filter');
-            if (!currentApplyBtn) return false;
-
             const lat = parseFloat(latInput.value);
             const lng = parseFloat(lngInput.value);
             const radius = parseFloat(radiusInput.value);
-
-            // Clear previous errors first
-            this.clearValidationError(currentApplyBtn, errorElement);
-
+                  
+            // Clear previous errors
+            this.clearValidationError(applyLocationBtn, errorElement);
+                  
             // Check if inputs are empty (valid state - user hasn't entered anything yet)
             if (latInput.value === '' || lngInput.value === '') {
-              currentApplyBtn.disabled = true;
-              return false;
+                applyLocationBtn.disabled = true;
+                return false;
             }
-
+          
             // Check for invalid numbers
             if (isNaN(lat) || isNaN(lng)) {
-              this.showValidationError('validLocationRequired', currentApplyBtn, errorElement);
-              return false;
+                this.showValidationError('validLocationRequired', applyLocationBtn, errorElement);
+                return false;
             }
-
+          
             // Check coordinate ranges
             if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-              this.showValidationError('invalidCoordinates', currentApplyBtn, errorElement);
-              return false;
+                this.showValidationError('invalidCoordinates', applyLocationBtn, errorElement);
+                return false;
             }
-
+          
             // Check radius
             if (isNaN(radius) || radius <= 0) {
-              this.showValidationError('invalidRadius', currentApplyBtn, errorElement);
-              return false;
+                this.showValidationError('invalidRadius', applyLocationBtn, errorElement);
+                return false;
             }
-
+          
             // All validations passed
-            currentApplyBtn.disabled = false;
+            applyLocationBtn.disabled = false;
             return true;
           };
 
@@ -3122,63 +3118,38 @@
             this.updateTimeFilterIndicator();
             this.hideNoFilterOverlay();
 
-            // ✅ Close the history config popup BEFORE checking results
+            if (this.filteredLocations.length > 0) {
+                // Has results - fit map to show them
+                this.fitMapToLocations(this.filteredLocations);
+                this.updateRouteForFiltered();
+            } else {
+                // No results - show empty results popup
+                console.log('No locations found, showing empty results popup');
+
+                // Wait for config popup to close, then show empty results
+                setTimeout(() => {
+                    this.showEmptyResultsPopup(true, radiusKm); // Pass true for location filter
+                }, 300);
+            }
+            } else {
+                const errorText = await response.text();
+                console.error('Failed to load location data:', response.status, errorText);
+                // ✅ Close popup even on error
+                const historyConfigPopup = document.getElementById('history-config-popup');
+                if (historyConfigPopup) {
+                    historyConfigPopup.classList.remove('active');
+                }
+                this.showError('Failed to load location data: ' + response.status);
+            }
+        } catch (error) {
+            console.error('Error loading location data:', error);
+            // ✅ Close popup even on error
             const historyConfigPopup = document.getElementById('history-config-popup');
             if (historyConfigPopup) {
                 historyConfigPopup.classList.remove('active');
             }
-
-            if (this.filteredLocations.length > 0) {
-                // Has results - fit map to show them
-                this.fitMapToLocations(this.filteredLocations);
-                this.updateRouteForFiltered(); // Add route visualization
-            } else {
-                // ✅ No results - show empty results popup
-                console.log('No locations found, showing empty results popup');
-                
-                // Wait for config popup to close, then show empty results
-                setTimeout(() => {
-                    const emptyPopup = document.getElementById('empty-results-popup');
-                    if (emptyPopup) {
-                        console.log('Showing empty results popup');
-                        
-                        // Update the message to be specific for location filter
-                        const message = emptyPopup.querySelector('p');
-                        if (message) {
-                            const translatedMessage = this.t('noLocationResultsMessage') || 
-                                      `No location data found within ${radiusKm} km of the selected coordinates.`;
-                                  message.textContent = translatedMessage.replace('{radius}', radiusKm);
-                              }
-
-                              emptyPopup.classList.add('show');
-                          } else {
-                              console.error('Empty results popup not found!');
-                          }
-                      }, 300);
-                  }
-              } else {
-                  const errorText = await response.text();
-                  console.error('Failed to load location data:', response.status, errorText);
-
-                  // ✅ Close popup even on error
-                  const historyConfigPopup = document.getElementById('history-config-popup');
-                  if (historyConfigPopup) {
-                      historyConfigPopup.classList.remove('active');
-                  }
-
-                  this.showError('Failed to load location data: ' + response.status);
-              }
-          } catch (error) {
-              console.error('Error loading location data:', error);
-
-              // ✅ Close popup even on error
-              const historyConfigPopup = document.getElementById('history-config-popup');
-              if (historyConfigPopup) {
-                  historyConfigPopup.classList.remove('active');
-              }
-
-              this.showError('Failed to load location data: ' + error.message);
-          }
+            this.showError('Failed to load location data: ' + error.message);
+        }
       }
 
       startMapLocationSelection() {

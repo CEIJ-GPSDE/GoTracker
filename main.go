@@ -688,37 +688,48 @@ func (api *APIServer) locationRangeHandler(w http.ResponseWriter, r *http.Reques
 	json.NewEncoder(w).Encode(locations)
 }
 
-// New handler for location-based queries
 func (api *APIServer) locationNearbyHandler(w http.ResponseWriter, r *http.Request) {
-	latStr := r.URL.Query().Get("lat")
-	lngStr := r.URL.Query().Get("lng")
-	radiusStr := r.URL.Query().Get("radius")
+    latStr := r.URL.Query().Get("lat")
+    lngStr := r.URL.Query().Get("lng")
+    radiusStr := r.URL.Query().Get("radius")
 
-	if latStr == "" || lngStr == "" {
-		http.Error(w, "lat and lng parameters are required", http.StatusBadRequest)
-		return
-	}
+    if latStr == "" || lngStr == "" {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{
+            "error": "lat and lng parameters are required",
+        })
+        return
+    }
 
-	lat, err := strconv.ParseFloat(latStr, 64)
-	if err != nil || lat < -90 || lat > 90 {
-		http.Error(w, "Invalid latitude", http.StatusBadRequest)
-		return
-	}
+    lat, err := strconv.ParseFloat(latStr, 64)
+    if err != nil || lat < -90 || lat > 90 {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{
+            "error": "Invalid latitude",
+        })
+        return
+    }
 
-	lng, err := strconv.ParseFloat(lngStr, 64)
-	if err != nil || lng < -180 || lng > 180 {
-		http.Error(w, "Invalid longitude", http.StatusBadRequest)
-		return
-	}
+    lng, err := strconv.ParseFloat(lngStr, 64)
+    if err != nil || lng < -180 || lng > 180 {
+        w.WriteHeader(http.StatusBadRequest)
+        json.NewEncoder(w).Encode(map[string]string{
+            "error": "Invalid longitude",
+        })
+        return
+    }
 
-	radius := 0.5 // default 500m
-	if radiusStr != "" {
-		radius, err = strconv.ParseFloat(radiusStr, 64)
-		if err != nil || radius <= 0 || radius > 50 {
-			http.Error(w, "Invalid radius (must be between 0 and 50 km)", http.StatusBadRequest)
-			return
-		}
-	}
+    radius := 0.5 // default 500m
+    if radiusStr != "" {
+        radius, err = strconv.ParseFloat(radiusStr, 64)
+        if err != nil || radius <= 0 || radius > 50 {
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]string{
+                "error": "Invalid radius (must be between 0 and 50 km)",
+            })
+            return
+        }
+    }
 
 	tableName := "locations"
 	if api.tablePrefix != "" {
