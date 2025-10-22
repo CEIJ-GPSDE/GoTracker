@@ -2929,13 +2929,13 @@
       }
 
       showEmptyResultsPopup() {
-        document.getElementById('empty-results-popup').classList.add('show');
+        document.getElementById('no-results-overlay').classList.add('show');
       }
 
       showEmptyResultsPopup(isLocationFilter = false, radius = 0) {
           console.log('showEmptyResultsPopup called with:', { isLocationFilter, radius });
             
-          const emptyPopup = document.getElementById('empty-results-popup');
+          const emptyPopup = document.getElementById('no-results-overlay');
           if (!emptyPopup) {
               console.error('Empty results popup not found!');
               return;
