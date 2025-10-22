@@ -3066,27 +3066,41 @@
             this.hideNoFilterOverlay(); // Make sure to hide the overlay
 
             if (this.filteredLocations.length > 0) {
-              this.fitMapToLocations(this.filteredLocations);
+                this.fitMapToLocations(this.filteredLocations);
             } else {
-              // Show empty results popup for location filter
-              console.log('No locations found, showing empty results popup');
-
-              // Make sure we wait a bit for the UI to update
-              setTimeout(() => {
-                const emptyPopup = document.getElementById('empty-results-popup');
-                if (emptyPopup) {
-                  console.log('Showing empty results popup');
-                  emptyPopup.classList.add('show');
-
-                  // Also update the message to be more specific
-                  const message = emptyPopup.querySelector('p');
-                  if (message) {
-                    message.textContent = this.t('noResultsMessage');
-                  }
-                } else {
-                  console.error('Empty results popup not found!');
+                // Show empty results popup for location filter with specific message
+                console.log('No locations found, showing empty results popup');
+            
+                // Close the history config popup first
+                const historyConfigPopup = document.getElementById('history-config-popup');
+                if (historyConfigPopup) {
+                    historyConfigPopup.classList.remove('active');
                 }
-              }, 300);
+              
+                // Make sure we wait a bit for the UI to update
+                setTimeout(() => {
+                    const emptyPopup = document.getElementById('empty-results-popup');
+                    if (emptyPopup) {
+                        console.log('Showing empty results popup');
+                        
+                        // Update the title for location filter
+                        const title = emptyPopup.querySelector('h3');
+                        if (title) {
+                            title.textContent = this.t('noResultsTitle');
+                        }
+                        
+                        // Update the message to be specific for location filter
+                        const message = emptyPopup.querySelector('p');
+                        if (message) {
+                            message.textContent = this.t('noLocationResultsMessage') || 
+                                `No location data found within ${radiusKm} km of the selected coordinates.`;
+                        }
+                        
+                        emptyPopup.classList.add('show');
+                    } else {
+                        console.error('Empty results popup not found!');
+                    }
+                }, 300);
             }
           } else {
             const errorText = await response.text();
@@ -3185,15 +3199,11 @@
       }
 
       selectLocationFromMap(lat, lng) {
-        console.log('Location selected from map:', {lat, lng});
-
-        // Update the input fields
-        document.getElementById('location-lat-input').value = lat.toFixed(6);
-        document.getElementById('location-lng-input').value = lng.toFixed(6);
-
-        // Clean up selection mode
+        console.log('Location selected from map:', { lat, lng });
+          
+        // Clean up selection mode first
         this.cancelMapLocationSelection();
-
+          
         // Show success message briefly
         const successDiv = document.createElement('div');
         successDiv.style.cssText = `
@@ -3212,23 +3222,35 @@
         `;
         successDiv.textContent = this.t('locationSelected');
         document.body.appendChild(successDiv);
-
+          
         setTimeout(() => {
-          successDiv.remove();
-
-          // Reopen the history config popup on the location filter tab
-          this.lastActiveConfigTab = 'location-filter';
-          this.openHistoryConfigPopup();
-
-          // Trigger validation after popup opens
-          setTimeout(() => {
-            const latInput = document.getElementById('location-lat-input');
-            if (latInput) {
-              latInput.dispatchEvent(new Event('input', {bubbles: true}));
-            }
-          }, 100);
+            successDiv.remove();
+            
+            // Reopen the history config popup on the location filter tab
+            this.lastActiveConfigTab = 'location-filter';
+            this.openHistoryConfigPopup();
+            
+            // Update the input fields AFTER popup opens to ensure they exist
+            setTimeout(() => {
+                const latInput = document.getElementById('location-lat-input');
+                const lngInput = document.getElementById('location-lng-input');
+                
+                if (latInput && lngInput) {
+                    // Force update the values
+                    latInput.value = lat.toFixed(6);
+                    lngInput.value = lng.toFixed(6);
+                    
+                    // Trigger validation
+                    latInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    lngInput.dispatchEvent(new Event('change', { bubbles: true }));
+                    
+                    console.log('Coordinates updated:', { lat: latInput.value, lng: lngInput.value });
+                } else {
+                    console.error('Input fields not found after reopening popup');
+                }
+            }, 100);
         }, 1500);
-      }
+    }
 
       fitMapToLocations(locations) {
         if (locations.length === 0) return;
