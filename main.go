@@ -626,10 +626,10 @@ func (api *APIServer) locationRangeHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Limit the time range to prevent huge queries
-	maxDuration := 30 * 24 * time.Hour // 30 days
+	maxDuration := 365 * 24 * time.Hour // 365 days (1 year)
 	if endTime.Sub(startTime) > maxDuration {
-		http.Error(w, "Time range too large, maximum 30 days", http.StatusBadRequest)
-		return
+	    http.Error(w, "Time range too large, maximum 365 days", http.StatusBadRequest)
+	    return
 	}
 
 	tableName := "locations"
