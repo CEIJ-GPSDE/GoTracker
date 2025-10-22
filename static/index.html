@@ -1095,24 +1095,26 @@
           </button>
         </div>
         <div id="map"></div>
+        <!-- No Filter Overlay -->
         <div class="no-filter-overlay" id="no-filter-overlay">
           <h3 id="no-filter-title">⚠️ No Time Filter Applied</h3>
           <p id="no-filter-message">Please configure a time filter in History Settings to view historical data.</p>
-          <button class="btn"
-            onclick="locationTracker.hideNoFilterOverlay(); locationTracker.openHistoryConfigPopup();">
+          <button class="btn" id="no-filter-open-settings-btn">
             <span id="no-filter-btn-text">Open History Settings</span>
           </button>
-          <button class="btn secondary" onclick="locationTracker.hideNoFilterOverlay()">
+          <button class="btn secondary" id="no-filter-dismiss-btn">
             <span id="no-filter-dismiss-text">Dismiss</span>
           </button>
         </div>
+
+        <!-- Empty Results Popup -->
         <div class="no-filter-overlay" id="empty-results-popup" style="border-color: #ef4444; z-index: 10600;">
           <h3 id="empty-results-title">⚠️ No Results Found</h3>
           <p id="empty-results-message">No location data matches your filter criteria. Try adjusting the parameters.</p>
-          <button class="btn" onclick="locationTracker.openHistoryConfigPopup(); document.getElementById('empty-results-popup').classList.remove('show');">
+          <button class="btn" id="empty-results-adjust-btn-element">
             <span id="empty-results-adjust-btn">Adjust Filters</span>
           </button>
-          <button class="btn secondary" onclick="document.getElementById('empty-results-popup').classList.remove('show');">
+          <button class="btn secondary" id="empty-results-dismiss-btn-element">
             <span id="empty-results-dismiss-btn">Dismiss</span>
           </button>
         </div>
@@ -1433,6 +1435,12 @@
             clickMapToSelect: "Click anywhere on the map to set the location for filtering",
             cancelSelection: "Cancel",
             locationSelected: "Location selected! Coordinates updated.",
+            noFilterOpenSettings: "Open History Settings",
+            noFilterDismiss: "Dismiss",
+            emptyResultsAdjust: "Adjust Filters",
+            emptyResultsDismiss: "Dismiss",
+            loadingLocations: "Loading locations...",
+            noLocationsFound: "No locations found",
             validationErrors: {
               required: "Both start and end times are required",
               invalidFormat: "Invalid date format",
@@ -1527,6 +1535,12 @@
             clickMapToSelect: "Haga clic en cualquier lugar del mapa para establecer la ubicación del filtro",
             cancelSelection: "Cancelar",
             locationSelected: "¡Ubicación seleccionada! Coordenadas actualizadas.",
+            noFilterOpenSettings: "Abrir Ajustes de Historial",
+            noFilterDismiss: "Cerrar",
+            emptyResultsAdjust: "Ajustar Filtros",
+            emptyResultsDismiss: "Cerrar",
+            loadingLocations: "Cargando ubicaciones...",
+            noLocationsFound: "No se encontraron ubicaciones",
             validationErrors: {
               required: "Se requieren hora de inicio y fin",
               invalidFormat: "Formato de fecha inválido",
@@ -1626,8 +1640,8 @@
 
         if (noFilterTitle) noFilterTitle.textContent = this.t('noFilterTitle');
         if (noFilterMessage) noFilterMessage.textContent = this.t('noFilterMessage');
-        if (noFilterBtnText) noFilterBtnText.textContent = this.t('openHistorySettings');
-        if (noFilterDismissText) noFilterDismissText.textContent = this.t('dismiss');
+        if (noFilterBtnText) noFilterBtnText.textContent = this.t('noFilterOpenSettings');
+        if (noFilterDismissText) noFilterDismissText.textContent = this.t('noFilterDismiss');
 
         // Update no filter selected message
         const noFilterSelectedTitle = document.getElementById('no-filter-selected-title');
@@ -1694,6 +1708,7 @@
           this.initializeMap();
           this.setupEventListeners();
           this.setupPopupMenu();
+          this.setupOverlayEventListeners();
           await this.loadInitialData();
           this.connectWebSocket();
           this.startStatsPolling();
@@ -1705,6 +1720,61 @@
         } catch (error) {
           console.error('Failed to initialize app:', error);
           this.showError('Failed to initialize application');
+        }
+      }
+      setupOverlayEventListeners() {
+        // No filter overlay buttons
+        const noFilterOpenBtn = document.getElementById('no-filter-open-settings-btn');
+        const noFilterDismissBtn = document.getElementById('no-filter-dismiss-btn');
+
+        if (noFilterOpenBtn) {
+          noFilterOpenBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.hideNoFilterOverlay();
+            this.openHistoryConfigPopup();
+          });
+        }
+
+        if (noFilterDismissBtn) {
+          noFilterDismissBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.hideNoFilterOverlay();
+          });
+        }
+      
+        // Empty results overlay buttons
+        const emptyResultsAdjustBtn = document.getElementById('empty-results-adjust-btn-element');
+        const emptyResultsDismissBtn = document.getElementById('empty-results-dismiss-btn-element');
+
+        if (emptyResultsAdjustBtn) {
+          emptyResultsAdjustBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            document.getElementById('empty-results-popup').classList.remove('show');
+            this.openHistoryConfigPopup();
+          });
+        }
+
+        if (emptyResultsDismissBtn) {
+          emptyResultsDismissBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            document.getElementById('empty-results-popup').classList.remove('show');
+          });
+        }
+      
+        // Prevent clicks inside overlays from closing them
+        const noFilterOverlay = document.getElementById('no-filter-overlay');
+        const emptyResultsPopup = document.getElementById('empty-results-popup');
+
+        if (noFilterOverlay) {
+          noFilterOverlay.addEventListener('click', (e) => {
+            e.stopPropagation();
+          });
+        }
+
+        if (emptyResultsPopup) {
+          emptyResultsPopup.addEventListener('click', (e) => {
+            e.stopPropagation();
+          });
         }
       }
 
@@ -1747,39 +1817,48 @@
       setupPopupMenu() {
         const menuToggle = document.getElementById('menu-toggle-btn');
         const popupMenu = document.getElementById('popup-menu');
-        const popupClose = document.getElementById('popup-close');
+        const popupClose = document.getElementById('popup-close');      
 
         // History config popup elements
         const historyConfigPopup = document.getElementById('history-config-popup');
-        const historyConfigClose = document.getElementById('history-config-close');
+        const historyConfigClose = document.getElementById('history-config-close');     
 
         const tabButtons = document.querySelectorAll('.tab-button');
-        const tabContents = document.querySelectorAll('.tab-content');
+        const tabContents = document.querySelectorAll('.tab-content');      
 
         // Toggle main menu
         menuToggle.addEventListener('click', () => {
           popupMenu.classList.add('active');
-        });
+        });     
 
         // Close main menu
         const closeMenu = () => {
           popupMenu.classList.remove('active');
-        };
+        };      
 
         // Close history config popup
         const closeHistoryConfig = () => {
           historyConfigPopup.classList.remove('active');
-        };
+        };      
 
         popupClose.addEventListener('click', closeMenu);
-        historyConfigClose.addEventListener('click', closeHistoryConfig);
+        historyConfigClose.addEventListener('click', closeHistoryConfig);     
 
-        // Close when clicking outside content
+        // ✅ FIX: Stop event propagation when clicking inside popup content
+        popupMenu.querySelector('.popup-content').addEventListener('click', (e) => {
+          e.stopPropagation();
+        });     
+
+        historyConfigPopup.querySelector('.popup-content').addEventListener('click', (e) => {
+          e.stopPropagation();
+        });     
+
+        // Close when clicking outside content (background only)
         popupMenu.addEventListener('click', (e) => {
           if (e.target === popupMenu) {
             closeMenu();
           }
-        });
+        });     
 
         historyConfigPopup.addEventListener('click', (e) => {
           if (e.target === historyConfigPopup) {
