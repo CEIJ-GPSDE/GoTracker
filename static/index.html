@@ -209,6 +209,51 @@
       font-size: 1rem;
     }
 
+    .no-results-overlay {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(255, 255, 255, 0.98);
+      backdrop-filter: blur(10px);
+      padding: 40px 60px;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      z-index: 10500;
+      display: none;
+      text-align: center;
+      border: 3px solid #f59e0b;
+      max-width: 90%;
+      pointer-events: auto;
+      /* Ensure clicks work */
+    }
+
+    .no-results-overlay.show {
+      display: block !important;
+      /* Force display */
+      animation: pulseScale 0.5s ease-out;
+    }
+
+    .no-results-overlay h3 {
+      margin: 0 0 15px 0;
+      color: #f59e0b;
+      font-size: 1.8rem;
+      font-weight: 700;
+    }
+
+    .no-results-overlay p {
+      margin: 0 0 25px 0;
+      color: #6b7280;
+      font-size: 1.1rem;
+      line-height: 1.6;
+    }
+
+    .no-results-overlay .btn {
+      margin: 5px;
+      padding: 15px 30px;
+      font-size: 1rem;
+    }
+
     #empty-results-popup {
     z-index: 10600 !important; /* Higher than config popup which is 10000 */
     }
@@ -1108,7 +1153,7 @@
         </div>
 
         <!-- Empty Results Popup -->
-        <div class="no-filter-overlay" id="empty-results-popup" style="border-color: #ef4444; z-index: 10600;">
+        <div class="no-results-overlay" id="no-results-overlay" style="border-color: #ef4444; z-index: 10600;">
           <h3 id="empty-results-title">⚠️ No Results Found</h3>
           <p id="empty-results-message">No location data matches your filter criteria. Try adjusting the parameters.</p>
           <button class="btn" id="empty-results-adjust-btn-element">
@@ -1737,7 +1782,7 @@
         if (emptyResultsAdjustBtn) {
           emptyResultsAdjustBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            document.getElementById('empty-results-popup').classList.remove('show');
+            this.hideNoResultsOverlay()
             this.openHistoryConfigPopup();
           });
         }
@@ -1745,7 +1790,7 @@
         if (emptyResultsDismissBtn) {
           emptyResultsDismissBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            document.getElementById('empty-results-popup').classList.remove('show');
+            this.hideNoResultsOverlay()
           });
         }
       
@@ -2274,6 +2319,15 @@
       hideNoFilterOverlay() {
         console.log('hideNoFilterOverlay called'); // Debug log
         const overlay = document.getElementById('no-filter-overlay');
+        if (overlay) {
+          overlay.classList.remove('show');
+          overlay.style.display = 'none';
+        }
+      }
+
+      hideNoResultsOverlay() {
+        console.log('hideNoResultsOverlay called'); // Debug log
+        const overlay = document.getElementById('no-results-overlay');
         if (overlay) {
           overlay.classList.remove('show');
           overlay.style.display = 'none';
@@ -2904,6 +2958,18 @@
           emptyPopup.classList.add('show');
           
           console.log('Empty results popup should now be visible');
+      }
+
+      hideEmptyResultsPopup() {
+          const emptyPopup = document.getElementById('empty-results-popup');
+          if (!emptyPopup) {
+              console.error('Empty results popup not found!');
+              return;
+          }
+        
+          emptyPopup.classList.remove('show');
+          emptyPopup.style.display = 'none';
+          console.log('Empty results popup hidden');
       }
 
       closeEmptyResultsPopup() {
