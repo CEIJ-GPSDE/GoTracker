@@ -1933,37 +1933,56 @@ class LocationTracker {
             return false;
         }
 
-        // Check if start is after end
+        // Auto-correct: If start is after end, set end to 24 hours after start
         if (startTime >= endTime) {
-            this.showValidationError('Start time must be before end time', applyBtn, errorElement);
-            return false;
+            const correctedEnd = new Date(startTime.getTime() + 24 * 60 * 60 * 1000);
+            // If corrected end is in the future, set it to now
+            if (correctedEnd > now) {
+                endInput.value = this.formatDateTimeLocal(now);
+            } else {
+                endInput.value = this.formatDateTimeLocal(correctedEnd);
+            }
+            // Revalidate after correction
+            return this.validateTimeFilter();
         }
 
-        // Check if end time is in the future (with 1 minute tolerance)
+        // Auto-correct: If end time is in the future, set it to now
         if (endTime > new Date(now.getTime() + 60000)) {
-            this.showValidationError('End time cannot be in the future', applyBtn, errorElement);
-            return false;
+            endInput.value = this.formatDateTimeLocal(now);
+            // Revalidate after correction
+            return this.validateTimeFilter();
         }
 
         // Check if time range is too large (more than 1 year)
         const maxDuration = 365 * 24 * 60 * 60 * 1000;
         if (endTime.getTime() - startTime.getTime() > maxDuration) {
-            this.showValidationError('Time range cannot exceed 1 year', applyBtn, errorElement);
-            return false;
+            // Auto-correct: Set start to 1 year before end
+            const correctedStart = new Date(endTime.getTime() - maxDuration);
+            startInput.value = this.formatDateTimeLocal(correctedStart);
+            // Revalidate after correction
+            return this.validateTimeFilter();
         }
 
         // Check if time range is too small (less than 1 minute)
         const minDuration = 60 * 1000;
         if (endTime.getTime() - startTime.getTime() < minDuration) {
-            this.showValidationError('Time range must be at least 1 minute', applyBtn, errorElement);
-            return false;
+            // Auto-correct: Set end to 1 hour after start
+            const correctedEnd = new Date(startTime.getTime() + 60 * 60 * 1000);
+            if (correctedEnd > now) {
+                endInput.value = this.formatDateTimeLocal(now);
+            } else {
+                endInput.value = this.formatDateTimeLocal(correctedEnd);
+            }
+            // Revalidate after correction
+            return this.validateTimeFilter();
         }
 
-        // Check if start time is too far in the past (more than 10 years)
+        // Auto-correct: If start time is too far in the past (more than 10 years), set it to 10 years ago
         const tenYearsAgo = new Date(now.getTime() - 10 * 365 * 24 * 60 * 60 * 1000);
         if (startTime < tenYearsAgo) {
-            this.showValidationError('Start time cannot be more than 10 years ago', applyBtn, errorElement);
-            return false;
+            startInput.value = this.formatDateTimeLocal(tenYearsAgo);
+            // Revalidate after correction
+            return this.validateTimeFilter();
         }
 
         // All validations passed
@@ -2748,45 +2767,5 @@ document.addEventListener('visibilitychange', () => {
     }
 });
 </script>
-<script>
-  // --- Validación automática y bloqueo de fechas inválidas ---
-  const startPopup = document.getElementById("start-time-popup");
-  const endPopup = document.getElementById("end-time-popup");
-
-  // Al iniciar, el campo "To" se desactiva
-  endPopup.disabled = true;
-
-  // Cuando el usuario cambia el inicio
-  startPopup.addEventListener("change", () => {
-    const startValue = startPopup.value;
-
-    if (startValue) {
-      // Habilita el campo "To"
-      endPopup.disabled = false;
-      // Establece el mínimo permitido
-      endPopup.min = startValue;
-
-      // Corrige si la fecha final es menor
-      if (endPopup.value && endPopup.value < startValue) {
-        endPopup.value = startValue;
-      }
-    } else {
-      // Si borra la fecha inicial, se desactiva el campo final
-      endPopup.value = "";
-      endPopup.disabled = true;
-      endPopup.removeAttribute("min");
-    }
-  });
-
-  // Cuando el usuario cambia el final
-  endPopup.addEventListener("change", () => {
-    const startValue = startPopup.value;
-    const endValue = endPopup.value;
-    if (startValue && endValue < startValue) {
-      endPopup.value = startValue;
-    }
-  });
-</script>
-
 </body>
 </html>
