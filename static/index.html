@@ -1549,6 +1549,8 @@
         };
 
         this.initializeApp();
+        this.lastActiveMenuTab = 'controls';
+        this.popupTriggerContext = null;
       }
 
       detectLanguage() {
@@ -1745,67 +1747,60 @@
       }
 
       setupPopupMenu() {
-        const menuToggle = document.getElementById('menu-toggle-btn');
-        const popupMenu = document.getElementById('popup-menu');
-        const popupClose = document.getElementById('popup-close');
-
-        // History config popup elements
-        const historyConfigPopup = document.getElementById('history-config-popup');
-        const historyConfigClose = document.getElementById('history-config-close');
-
-        const tabButtons = document.querySelectorAll('.tab-button');
-        const tabContents = document.querySelectorAll('.tab-content');
-
-        // Toggle main menu
-        menuToggle.addEventListener('click', () => {
-          popupMenu.classList.add('active');
-        });
-
-        // Close main menu
-        const closeMenu = () => {
-          popupMenu.classList.remove('active');
-        };
-
-        // Close history config popup
-        const closeHistoryConfig = () => {
-          historyConfigPopup.classList.remove('active');
-        };
-
-        popupClose.addEventListener('click', closeMenu);
-        historyConfigClose.addEventListener('click', closeHistoryConfig);
-
-        // Close when clicking outside content
-        popupMenu.addEventListener('click', (e) => {
-          if (e.target === popupMenu) {
-            closeMenu();
-          }
-        });
-
-        historyConfigPopup.addEventListener('click', (e) => {
-          if (e.target === historyConfigPopup) {
-            closeHistoryConfig();
-          }
-        });
-
-        // Tab switching
-        tabButtons.forEach(button => {
-          button.addEventListener('click', () => {
-            const tabId = button.dataset.tab;
-
-            // Update button states
-            tabButtons.forEach(btn => btn.classList.remove('active'));
-            button.classList.add('active');
-
-            // Update content visibility
-            tabContents.forEach(content => {
-              content.classList.remove('active');
-              if (content.id === `${tabId}-tab`) {
-                content.classList.add('active');
-              }
-            });
+          const menuToggle = document.getElementById('menu-toggle-btn');
+          const popupMenu = document.getElementById('popup-menu');
+      
+          // Toggle main menu
+          menuToggle.addEventListener('click', () => {
+              popupMenu.classList.add('active');
           });
-        });
+        
+          // Use event delegation for close buttons
+          document.addEventListener('click', (e) => {
+              // Close main menu
+              if (e.target.id === 'popup-close' || e.target.closest('#popup-close')) {
+                  popupMenu.classList.remove('active');
+              }
 
+              // Close history config popup
+              if (e.target.id === 'history-config-close' || e.target.closest('#history-config-close')) {
+                  document.getElementById('history-config-popup').classList.remove('active');
+              }
+          });
+        
+          // Close when clicking outside content
+          popupMenu.addEventListener('click', (e) => {
+              if (e.target === popupMenu) {
+                  popupMenu.classList.remove('active');
+              }
+          });
+        
+          const historyConfigPopup = document.getElementById('history-config-popup');
+          historyConfigPopup.addEventListener('click', (e) => {
+              if (e.target === historyConfigPopup) {
+                  historyConfigPopup.classList.remove('active');
+              }
+          });
+
+        // In the tab switching section of setupPopupMenu, add:
+tabButtons.forEach(button => {
+    button.addEventListener('click', () => {
+        const tabId = button.dataset.tab;
+        this.lastActiveMenuTab = tabId; // Remember the last active tab
+        
+        // Update button states
+        tabButtons.forEach(btn => btn.classList.remove('active'));
+        button.classList.add('active');
+
+        // Update content visibility
+        tabContents.forEach(content => {
+            content.classList.remove('active');
+            if (content.id === `${tabId}-tab`) {
+                content.classList.add('active');
+            }
+        });
+    });
+});
         // Close menus with Escape key
         document.addEventListener('keydown', (e) => {
           if (e.key === 'Escape') {
@@ -1973,41 +1968,50 @@
       }
 
       createTraceMarker(location, isStart = false, isEnd = false) {
-        const popupContent = `
-            <div style="font-family: system-ui; min-width: 200px;">
-                <h4 style="margin: 0 0 10px 0; color: #374151;">
-                    ${location.device_id}
-                    ${isStart ? ' <span style="color: #10b981; font-size: 12px;">(START)</span>' : ''}
-                    ${isEnd ? ' <span style="color: #ef4444; font-size: 12px;">(END)</span>' : ''}
-                </h4>
-                <div style="font-size: 12px; color: #6b7280; margin-bottom: 5px;">
-                    <strong>Coordinates:</strong><br>
-                    ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}
-                </div>
-                <div style="font-size: 12px; color: #6b7280;">
-                    <strong>Time:</strong><br>
-                    ${new Date(location.timestamp).toLocaleString()}
-                </div>
+    const popupContent = `
+        <div style="font-family: system-ui; min-width: 200px;">
+            <h4 style="margin: 0 0 10px 0; color: #374151;">
+                ${location.device_id}
+                ${isStart ? ' <span style="color: #10b981; font-size: 12px;">(START)</span>' : ''}
+                ${isEnd ? ' <span style="color: #ef4444; font-size: 12px;">(END)</span>' : ''}
+            </h4>
+            <div style="font-size: 12px; color: #6b7280; margin-bottom: 5px;">
+                <strong>Coordinates:</strong><br>
+                ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}
             </div>
-        `;
+            <div style="font-size: 12px; color: #6b7280;">
+                <strong>Time:</strong><br>
+                ${new Date(location.timestamp).toLocaleString()}
+            </div>
+            <button onclick="locationTracker.openMenuWithLocationContext(${JSON.stringify(location).replace(/"/g, '&quot;')})" 
+                    style="margin-top: 10px; background: #3b82f6; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                Show in List
+            </button>
+        </div>
+    `;
 
-        const el = document.createElement('div');
-        el.className = 'trace-marker';
+    const el = document.createElement('div');
+    el.className = 'trace-marker';
 
-        if (isStart) {
-          el.classList.add('start-point');
-        } else if (isEnd) {
-          el.classList.add('end-point');
-        }
+    if (isStart) {
+        el.classList.add('start-point');
+    } else if (isEnd) {
+        el.classList.add('end-point');
+    }
 
-        const marker = new maplibregl.Marker({element: el})
-          .setLngLat([location.longitude, location.latitude])
-          .setPopup(new maplibregl.Popup().setHTML(popupContent))
-          .addTo(this.map);
+    const marker = new maplibregl.Marker({element: el})
+        .setLngLat([location.longitude, location.latitude])
+        .setPopup(new maplibregl.Popup().setHTML(popupContent))
+        .addTo(this.map);
 
-        this.traceMarkers.push(marker);
-      }
+    // Add click handler to the marker itself
+    el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.openMenuWithLocationContext(location);
+    });
 
+    this.traceMarkers.push(marker);
+}
       calculateBearing(lat1, lon1, lat2, lon2) {
         const dLon = (lon2 - lon1) * Math.PI / 180;
         const lat1Rad = lat1 * Math.PI / 180;
@@ -2070,119 +2074,74 @@
       }
 
       toggleHistoryMode() {
-        this.isHistoryMode = !this.isHistoryMode;
-        const historyBtn = document.getElementById('history-mode-btn');
-        const historyConfigBtn = document.getElementById('history-config-btn');
-        const liveModeBtn = document.getElementById('live-mode-btn');
-        const trackBtn = document.getElementById('track-latest-btn');
-        const modeIndicator = document.getElementById('mode-indicator');
+    this.isHistoryMode = !this.isHistoryMode;
+    const historyBtn = document.getElementById('history-mode-btn');
+    const historyConfigBtn = document.getElementById('history-config-btn');
+    const liveModeBtn = document.getElementById('live-mode-btn');
+    const trackBtn = document.getElementById('track-latest-btn');
+    const modeIndicator = document.getElementById('mode-indicator');
 
-        // Clear any selected location markers when switching modes
-        this.clearSelectedLocationMarker();
-        this.selectedLocationIndex = -1;
+    // Clear any selected location markers when switching modes
+    this.clearSelectedLocationMarker();
+    this.selectedLocationIndex = -1;
 
-        if (this.isHistoryMode) {
-          // Update mode indicator
-          modeIndicator.className = 'mode-indicator history-mode';
-          modeIndicator.innerHTML = `<div class="mode-indicator-dot"></div><span>${this.t('historyModeBadge')}</span>`;
+    if (this.isHistoryMode) {
+        // ... existing history mode setup code ...
+    } else {
+        // === CLEAN UP HISTORY ELEMENTS WHEN RETURNING TO LIVE MODE ===
+        
+        // Close all popups
+        this.hideNoFilterOverlay();
+        this.closeEmptyResultsPopup();
+        document.getElementById('history-config-popup').classList.remove('active');
+        document.getElementById('popup-menu').classList.remove('active');
+        
+        // Clear filter indicators
+        this.timeFilter = null;
+        this.locationFilter = null;
+        this.activeFilterType = null;
+        this.filteredLocations = [];
+        this.updateTimeFilterIndicator();
+        
+        // Update mode indicator
+        modeIndicator.className = 'mode-indicator live-mode';
+        modeIndicator.innerHTML = `<div class="mode-indicator-dot"></div><span>${this.t('liveModeBadge')}</span>`;
 
-          // Hide history mode button, show config and live mode buttons
-          historyBtn.style.display = 'none';
-          historyConfigBtn.style.display = 'flex';
-          liveModeBtn.style.display = 'flex';
-          trackBtn.style.display = 'none';
+        // Show history mode button, hide config and live mode buttons
+        historyBtn.style.display = 'flex';
+        historyConfigBtn.style.display = 'none';
+        liveModeBtn.style.display = 'none';
+        trackBtn.style.display = 'flex';
 
-          this.toggleTracking(false);
+        // Clear historical data display but keep filter data
+        this.clearAllMarkers();
+        this.clearTraceMarkers();
+        
+        // Reset live mode: fetch latest from DB and prepare for live updates
+        this.loadInitialData();
 
-          // Clear all live markers and route when entering history mode
-          this.clearAllMarkers();
-          this.clearTraceMarkers();
-          this.routeCoords = [];
-          this.updateRouteLine();
-
-          // Check if we have any persisted filters
-          const hasPersistedTimeFilter = this.persistedTimeFilter !== null;
-          const hasPersistedLocationFilter = this.persistedLocationFilter !== null;
-
-          if (hasPersistedTimeFilter) {
-            // Restore time filter
-            this.timeFilter = {...this.persistedTimeFilter};
-            this.activeFilterType = 'time';
-            this.locationFilter = null; // Clear location filter when restoring time
-            this.restoreTimePickerValues();
-            this.updateTimeFilterIndicator();
-            this.loadHistoricalData();
-            this.hideNoFilterOverlay();
-          } else if (hasPersistedLocationFilter) {
-            // Restore location filter
-            this.locationFilter = {...this.persistedLocationFilter};
-            this.activeFilterType = 'location';
-            this.timeFilter = null; // Clear time filter when restoring location
-            this.updateTimeFilterIndicator();
-            this.loadHistoricalByLocation(
-              this.locationFilter.lat,
-              this.locationFilter.lng,
-              this.locationFilter.radius
-            );
-            this.hideNoFilterOverlay();
-          } else {
-            // No persisted filters - show empty state
-            this.filteredLocations = [];
-            this.activeFilterType = null;
-            this.locationFilter = null;
-            this.timeFilter = null;
-            this.displayFilteredLocations();
-            this.updateTimeFilterIndicator();
-
-            setTimeout(() => {
-              this.showNoFilterOverlay();
-            }, 100);
-          }
-
-        } else {
-          // Update mode indicator
-          modeIndicator.className = 'mode-indicator live-mode';
-          modeIndicator.innerHTML = `<div class="mode-indicator-dot"></div><span>${this.t('liveModeBadge')}</span>`;
-
-          // Store current filters before leaving history mode
-          if (this.timeFilter && this.activeFilterType === 'time') {
-            this.persistedTimeFilter = {...this.timeFilter};
-            this.persistedLocationFilter = null; // Clear persisted location filter
-          } else if (this.locationFilter && this.activeFilterType === 'location') {
-            this.persistedLocationFilter = {...this.locationFilter};
-            this.persistedTimeFilter = null; // Clear persisted time filter
-          }
-
-          // Show history mode button, hide config and live mode buttons
-          historyBtn.style.display = 'flex';
-          historyConfigBtn.style.display = 'none';
-          liveModeBtn.style.display = 'none';
-          trackBtn.style.display = 'flex';
-
-          // Clear historical data display but keep filter data
-          this.clearAllMarkers();
-          this.clearTraceMarkers();
-          this.filteredLocations = [];
-          this.updateTimeFilterIndicator();
-
-          // Reset live mode: fetch latest from DB and prepare for live updates
-          this.loadInitialData();
-
-          // Process any queued live updates
-          while (this.liveUpdateQueue.length > 0) {
+        // Process any queued live updates
+        while (this.liveUpdateQueue.length > 0) {
             const queuedLocation = this.liveUpdateQueue.shift();
             this.applyLocationUpdate(queuedLocation);
-          }
         }
+    }
 
-        // Update refresh button state based on current mode
-        this.updateRefreshButtonState();
-        this.updateLocationSelection();
-        this.hideNoFilterOverlay();
+    // Update refresh button state based on current mode
+    this.updateRefreshButtonState();
+    this.updateLocationSelection();
 
-        // Re-apply translations after mode switch
-        this.updateUILanguage();
-      }
+    // Re-apply translations after mode switch
+    this.updateUILanguage();
+}
+
+// Add this helper method
+closeEmptyResultsPopup() {
+    const emptyPopup = document.getElementById('empty-results-popup');
+    if (emptyPopup) {
+        emptyPopup.classList.remove('show');
+    }
+}
 
       showNoFilterOverlay() {
         console.log('showNoFilterOverlay called');
@@ -2293,6 +2252,40 @@
 
         document.getElementById('toggle-trace-dots').checked = this.showTraceDots;
       }
+      // Add method to open menu with location context
+openMenuWithLocationContext(location) {
+    this.popupTriggerContext = {
+        type: 'location',
+        location: location,
+        timestamp: Date.now()
+    };
+    
+    // Open the main menu
+    document.getElementById('popup-menu').classList.add('active');
+    
+    // Switch to locations tab and highlight the relevant location
+    setTimeout(() => {
+        document.querySelector('[data-tab="locations"]').click();
+        
+        // Try to find and select this location in the list
+        if (location && this.locations.length > 0) {
+            const index = this.locations.findIndex(loc => 
+                loc.device_id === location.device_id && 
+                loc.timestamp === location.timestamp
+            );
+            if (index !== -1) {
+                this.selectedLocationIndex = index;
+                this.updateLocationSelection();
+                
+                // Scroll to the selected item
+                const locationItems = document.querySelectorAll('.location-item');
+                if (locationItems[index]) {
+                    locationItems[index].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+            }
+        }
+    }, 100);
+}
 
       openHistoryConfigPopup() {
         console.log('Opening history config popup');
@@ -2386,7 +2379,41 @@
       }
 
       setupConfigPopupEvents(popup) {
-        console.log('Setting up config popup events'); // Debug log
+        console.log('Setting up config popup events');
+          
+        // === CLOSE BUTTONS - Use event delegation instead of cloning ===
+        popup.addEventListener('click', (e) => {
+            // Close button for history config
+            if (e.target.id === 'history-config-close' || e.target.closest('#history-config-close')) {
+                popup.classList.remove('active');
+            }
+        });
+      
+        // Close empty results popup when clicking dismiss
+        document.addEventListener('click', (e) => {
+            const emptyPopup = document.getElementById('empty-results-popup');
+            if (emptyPopup && emptyPopup.classList.contains('show')) {
+                if (e.target.id === 'empty-results-dismiss-btn' || 
+                    e.target.closest('#empty-results-dismiss-btn') ||
+                    e.target.id === 'empty-results-adjust-btn' || 
+                    e.target.closest('#empty-results-adjust-btn')) {
+                    emptyPopup.classList.remove('show');
+                }
+            }
+        });
+      
+        // Close no-filter overlay
+        document.addEventListener('click', (e) => {
+            const noFilterOverlay = document.getElementById('no-filter-overlay');
+            if (noFilterOverlay && noFilterOverlay.classList.contains('show')) {
+                if (e.target.id === 'no-filter-dismiss-text' || 
+                    e.target.closest('#no-filter-dismiss-text') ||
+                    e.target.id === 'no-filter-btn-text' || 
+                    e.target.closest('#no-filter-btn-text')) {
+                    this.hideNoFilterOverlay();
+                }
+            }
+        });
 
         // === TIME FILTER TAB SETUP ===
         const controlsContainer = popup.querySelector('#historical-controls-popup');
@@ -2813,7 +2840,7 @@
 
       showEmptyResultsPopup(isLocationFilter = false, radius = 0) {
           console.log('showEmptyResultsPopup called with:', { isLocationFilter, radius });
-            
+
           const emptyPopup = document.getElementById('empty-results-popup');
           if (!emptyPopup) {
               console.error('Empty results popup not found!');
@@ -2835,7 +2862,7 @@
           // Force show the popup
           emptyPopup.style.display = 'block';
           emptyPopup.classList.add('show');
-          
+
           console.log('Empty results popup should now be visible');
       }
 
