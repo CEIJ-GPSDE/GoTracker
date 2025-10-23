@@ -1648,6 +1648,10 @@
             emptyResultsDismiss: "Dismiss",
             loadingLocations: "Loading locations...",
             noLocationsFound: "No locations found",
+            devices: "Devices",
+            noDevicesFound: "No devices found",
+            locationsCount: "{0} locations",
+            filterDevices: "Filter Devices",
             validationErrors: {
               required: "Both start and end times are required",
               invalidFormat: "Invalid date format",
@@ -1748,6 +1752,10 @@
             emptyResultsDismiss: "Cerrar",
             loadingLocations: "Cargando ubicaciones...",
             noLocationsFound: "No se encontraron ubicaciones",
+            devices: "Dispositivos",
+            noDevicesFound: "No se encontraron dispositivos",
+            locationsCount: "{0} ubicaciones",
+            filterDevices: "Filtrar Dispositivos",
             validationErrors: {
               required: "Se requieren hora de inicio y fin",
               invalidFormat: "Formato de fecha inválido",
@@ -1884,6 +1892,18 @@
         if (legendStart) legendStart.textContent = this.t('legendStart');
         if (legendEnd) legendEnd.textContent = this.t('legendEnd');
 
+        // Update device legend title
+        const deviceLegendTitle = document.querySelector('#device-legend h4');
+        if (deviceLegendTitle) {
+          const countSpan = deviceLegendTitle.querySelector('#device-count');
+          // Preserve the span, just change the text
+          deviceLegendTitle.innerHTML = `📱 ${this.t('devices')} ${countSpan ? countSpan.outerHTML : ''}`;
+        }
+        // Update device filter title in popup
+        const filterDevicesTitle = document.querySelector('#controls-tab .device-filter-section h4');
+        if (filterDevicesTitle) {
+          filterDevicesTitle.innerHTML = `📱 ${this.t('filterDevices')}`;
+        }
         // Update history config popup tabs
         const timeFilterTabBtn = document.querySelector('#time-filter-tab-label');
         const locationFilterTabBtn = document.querySelector('#location-filter-tab-label');
@@ -1914,6 +1934,9 @@
         );
         this.updateTimeFilterIndicator();
         this.displayLocations();
+        // Refresh dynamic device lists that contain translated text
+        this.updateDeviceLegend();
+        this.updateDeviceFilterList();
       }
 
       async initializeApp() {
@@ -2274,15 +2297,15 @@
             <h4 style="margin: 0 0 10px 0; color: #374151; display: flex; align-items: center; gap: 8px;">
               <div style="width: 12px; height: 12px; border-radius: 50%; background: ${deviceColor};"></div>
               ${location.device_id}
-              ${isStart ? ' <span style="color: #10b981; font-size: 12px;">(START)</span>' : ''}
-              ${isEnd ? ' <span style="color: #ef4444; font-size: 12px;">(END)</span>' : ''}
+              ${isStart ? ` <span style="color: #10b981; font-size: 12px;">(${this.t('start')})</span>` : ''}
+              ${isEnd ? ` <span style="color: #ef4444; font-size: 12px;">(${this.t('end')})</span>` : ''}
             </h4>
             <div style="font-size: 12px; color: #6b7280; margin-bottom: 5px;">
-              <strong>Coordinates:</strong><br>
+              <strong>${this.t('coordinates')}:</strong><br>
               ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}
             </div>
             <div style="font-size: 12px; color: #6b7280;">
-              <strong>Time:</strong><br>
+              <strong>${this.t('time')}:</strong><br>
               ${new Date(location.timestamp).toLocaleString()}
             </div>
           </div>
@@ -3880,11 +3903,11 @@
               ${deviceId}
             </h4>
             <div style="font-size: 12px; color: #6b7280; margin-bottom: 5px;">
-              <strong>Coordinates:</strong><br>
+              <strong>${this.t('coordinates')}:</strong><br>
               ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}
             </div>
             <div style="font-size: 12px; color: #6b7280;">
-              <strong>Time:</strong><br>
+              <strong>${this.t('time')}:</strong><br>
               ${new Date(location.timestamp).toLocaleString()}
             </div>
           </div>
@@ -4061,17 +4084,17 @@
 
         const popupContent = `
             <div style="font-family: system-ui; min-width: 200px;">
-                <h4 style="margin: 0 0 10px 0; color: #374151;">${location.device_id} <span style="color: #f59e0b; font-size: 12px;">(SELECTED)</span></h4>
+                <h4 style="margin: 0 0 10px 0; color: #374151;">${location.device_id} <span style="color: #f59e0b; font-size: 12px;">(${this.t('selected')})</span></h4>
                 <div style="font-size: 12px; color: #6b7280; margin-bottom: 5px;">
-                    <strong>Coordinates:</strong><br>
+                    <strong>${this.t('coordinates')}:</strong><br>
                     ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}
                 </div>
                 <div style="font-size: 12px; color: #6b7280;">
-                    <strong>Time:</strong><br>
+                    <strong>${this.t('time')}:</strong><br>
                     ${new Date(location.timestamp).toLocaleString()}
                 </div>
                 <button onclick="locationTracker.clearSelectedLocation()" style="margin-top: 10px; background: #ef4444; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;">
-                    Clear Selection
+                    ${this.t('clearSelection')}
                 </button>
             </div>
         `;
@@ -4309,7 +4332,7 @@
         countElement.textContent = this.devices.size;
 
         if (this.devices.size === 0) {
-          container.innerHTML = '<div style="color: #9ca3af; font-size: 12px;">No devices found</div>';
+          container.innerHTML = `<div style="color: #9ca3af; font-size: 12px;">${this.t('noDevicesFound')}</div>`;
           return;
         }
 
@@ -4325,7 +4348,7 @@
             <div class="legend-color" style="background-color: ${info.color}"></div>
             <div class="legend-info">
               <div class="legend-device-name">${deviceId}</div>
-              <div class="legend-stats">${info.count} locations</div>
+              <div class="legend-stats">${this.t('locationsCount').replace('{0}', info.count)}</div>
             </div>
           `;
 
@@ -4350,7 +4373,7 @@
         const container = document.getElementById('device-filter-list');
 
         if (this.devices.size === 0) {
-          container.innerHTML = '<div style="color: #9ca3af; padding: 10px;">No devices found</div>';
+          container.innerHTML = `<div style="color: #9ca3af; padding: 10px;">${this.t('noDevicesFound')}</div>`;
           return;
         }
 
