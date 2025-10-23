@@ -974,28 +974,39 @@
       height: 10px;
       border-radius: 50%;
       background: #3b82f6;
-      /* blue */
       border: 2px solid white;
       box-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
       cursor: pointer;
       opacity: 0;
-      /* hidden by default */
       transition: opacity 0.2s;
+      position: relative;
     }
+
+
+    .trace-marker::before {
+      content: '';
+      position: absolute;
+      top: -4px;
+      left: -4px;
+      right: -4px;
+      bottom: -4px;
+      border-radius: 50%;
+      border: 2px solid var(--halo-color, currentColor);
+      opacity: 0.6;
+      pointer-events: none;
+    }
+
 
     .trace-marker:hover {
       opacity: 1;
-      /* show when hovered */
     }
 
     .trace-marker.always-visible {
       opacity: 1 !important;
-      /* forced visible */
     }
 
     .trace-marker.start-point {
       background: #10b981;
-      /* green for start */
       width: 14px;
       height: 14px;
       border: 3px solid white;
@@ -1004,15 +1015,24 @@
       z-index: 1001;
     }
 
+    .trace-marker.start-point::before {
+      border-color: #10b981;
+      opacity: 0.8;
+    }
+
     .trace-marker.end-point {
       background: #ef4444;
-      /* red for end */
       width: 14px;
       height: 14px;
       border: 3px solid white;
       box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
       opacity: 1 !important;
       z-index: 1001;
+    }
+
+    .trace-marker.end-point::before {
+      border-color: #ef4444;
+      opacity: 0.8;
     }
 
     .direction-arrow {
@@ -2235,32 +2255,68 @@
         }
       }
 
-      createTraceMarker(location, isStart = false, isEnd = false) {
+      createTraceMarker(location, isStart = false, isEnd = false, progress = 0.5) {
+        const deviceInfo = this.devices.get(location.device_id);
+        const deviceColor = deviceInfo ? deviceInfo.color : '#3b82f6';
+
         const popupContent = `
-            <div style="font-family: system-ui; min-width: 200px;">
-                <h4 style="margin: 0 0 10px 0; color: #374151;">
-                    ${location.device_id}
-                    ${isStart ? ' <span style="color: #10b981; font-size: 12px;">(START)</span>' : ''}
-                    ${isEnd ? ' <span style="color: #ef4444; font-size: 12px;">(END)</span>' : ''}
-                </h4>
-                <div style="font-size: 12px; color: #6b7280; margin-bottom: 5px;">
-                    <strong>Coordinates:</strong><br>
-                    ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}
-                </div>
-                <div style="font-size: 12px; color: #6b7280;">
-                    <strong>Time:</strong><br>
-                    ${new Date(location.timestamp).toLocaleString()}
-                </div>
+          <div style="font-family: system-ui; min-width: 200px;">
+            <h4 style="margin: 0 0 10px 0; color: #374151; display: flex; align-items: center; gap: 8px;">
+              <div style="width: 12px; height: 12px; border-radius: 50%; background: ${deviceColor};"></div>
+              ${location.device_id}
+              ${isStart ? ' <span style="color: #10b981; font-size: 12px;">(START)</span>' : ''}
+              ${isEnd ? ' <span style="color: #ef4444; font-size: 12px;">(END)</span>' : ''}
+            </h4>
+            <div style="font-size: 12px; color: #6b7280; margin-bottom: 5px;">
+              <strong>Coordinates:</strong><br>
+              ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}
             </div>
+            <div style="font-size: 12px; color: #6b7280;">
+              <strong>Time:</strong><br>
+              ${new Date(location.timestamp).toLocaleString()}
+            </div>
+          </div>
         `;
 
         const el = document.createElement('div');
         el.className = 'trace-marker';
 
+        // Apply visibility based on showTraceDots setting
+        if (this.showTraceDots) {
+          el.classList.add('always-visible');
+        }
+
         if (isStart) {
           el.classList.add('start-point');
+          el.style.backgroundColor = deviceColor;
         } else if (isEnd) {
           el.classList.add('end-point');
+          el.style.backgroundColor = deviceColor;
+        } else {
+          // Regular trace point - use device color with gradient halo
+          el.style.backgroundColor = deviceColor;
+
+          // Calculate gradient color for halo (green -> yellow -> red)
+          let haloColor;
+          if (progress < 0.5) {
+            // Green to Yellow (oldest to middle)
+            const localProgress = progress * 2;
+            const r = Math.round(16 + (245 - 16) * localProgress);
+            const g = Math.round(185 - (185 - 158) * localProgress);
+            const b = Math.round(129 - (129 - 11) * localProgress);
+            haloColor = `rgb(${r}, ${g}, ${b})`;
+          } else {
+            // Yellow to Red (middle to newest)
+            const localProgress = (progress - 0.5) * 2;
+            const r = Math.round(245 + (239 - 245) * localProgress);
+            const g = Math.round(158 - (158 - 68) * localProgress);
+            const b = Math.round(11 + (68 - 11) * localProgress);
+            haloColor = `rgb(${r}, ${g}, ${b})`;
+          }
+
+          // Set halo color via ::before pseudo-element style
+          el.style.setProperty('--halo-color', haloColor);
+          el.style.borderColor = haloColor;
         }
 
         const marker = new maplibregl.Marker({element: el})
@@ -2322,9 +2378,9 @@
           btn.classList.add('enabled');
           btn.classList.remove('disabled');
           btn.querySelector('span:last-child').textContent = this.t('trackLatest');
-          if (this.locations.length > 0) {
-            this.centerMapOnLatestLocation();
-          }
+
+          // Center on all visible devices
+          this.centerMapOnDevices();
         } else {
           btn.classList.remove('enabled');
           btn.classList.add('disabled');
@@ -3260,48 +3316,38 @@
         try {
           const startTimestamp = this.timeFilter.start.toISOString();
           const endTimestamp = this.timeFilter.end.toISOString();
+
+          // Build URL with selected devices
           let url = `${this.config.apiBaseUrl}/api/locations/range?start=${startTimestamp}&end=${endTimestamp}`;
-          if (this.selectedDevice) {
-            url += `&device=${encodeURIComponent(this.selectedDevice)}`;
+
+          // Add device filter if any devices are selected (not all)
+          const selectedDeviceIds = Array.from(this.selectedDevices);
+          if (selectedDeviceIds.length > 0 && selectedDeviceIds.length < this.devices.size) {
+            // Only add device parameter if not all devices are selected
+            selectedDeviceIds.forEach(deviceId => {
+              url += `&device=${encodeURIComponent(deviceId)}`;
+            });
           }
 
           const response = await fetch(url);
           if (response.ok) {
             const locations = await response.json();
             this.filteredLocations = locations || [];
+
             // Clear all existing markers before showing historical data
             this.clearAllMarkers();
             this.displayFilteredLocations();
             this.updateRouteForFiltered();
+
             if (this.filteredLocations.length > 0) {
               this.fitMapToLocations(this.filteredLocations);
             } else {
-              // Show popup for empty results
               setTimeout(() => this.showEmptyResultsPopup(), 500);
             }
           } else {
-            // Handle error response from backend
             const errorText = await response.text();
             console.error('Failed to load historical data:', response.status, errorText);
-            // Show user-friendly error message
-            const errorDiv = document.createElement('div');
-            errorDiv.className = 'error';
-            errorDiv.style.cssText = `
-                position: fixed;
-                top: 20px;
-                left: 50%;
-                transform: translateX(-50%);
-                background: #fef2f2;
-                color: #ef4444;
-                padding: 15px 25px;
-                border-radius: 10px;
-                border: 1px solid #fecaca;
-                z-index: 10000;
-                box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-              `;
-            errorDiv.textContent = `Failed to load data: ${errorText}`;
-            document.body.appendChild(errorDiv);
-            setTimeout(() => errorDiv.remove(), 5000);
+            this.showError('Failed to load historical data: ' + errorText);
           }
         } catch (error) {
           console.error('Error loading historical data:', error);
@@ -3350,7 +3396,6 @@
       }
 
       updateRouteForFiltered() {
-        // Only use filtered locations for historical mode
         if (!this.isHistoryMode || this.filteredLocations.length === 0) {
           this.routeCoords = [];
           this.updateRouteLine();
@@ -3358,19 +3403,78 @@
           return;
         }
 
-        this.routeCoords = this.filteredLocations.map(loc => [loc.longitude, loc.latitude]);
-        this.updateRouteLine();
+        // Group locations by device
+        const locationsByDevice = new Map();
+        this.filteredLocations.forEach(loc => {
+          if (!locationsByDevice.has(loc.device_id)) {
+            locationsByDevice.set(loc.device_id, []);
+          }
+          locationsByDevice.get(loc.device_id).push(loc);
+        });
 
         this.clearTraceMarkers();
 
-        this.filteredLocations.forEach((loc, index) => {
-          const isStart = index === this.filteredLocations.length - 1; // oldest
-          const isEnd = index === 0; // newest
-          this.createTraceMarker(loc, isStart, isEnd);
+        // Create routes and markers for each device
+        locationsByDevice.forEach((deviceLocs, deviceId) => {
+          if (deviceLocs.length < 1) return;
+
+          const deviceInfo = this.devices.get(deviceId);
+          if (!deviceInfo || !deviceInfo.visible) return;
+
+          const coordinates = deviceLocs.map(loc => [loc.longitude, loc.latitude]);
+          const sourceId = `route-${deviceId}`;
+          const layerId = `route-${deviceId}`;
+
+          // Create/update route line
+          if (this.map.getSource(sourceId)) {
+            this.map.getSource(sourceId).setData({
+              type: 'Feature',
+              properties: {},
+              geometry: {
+                type: 'LineString',
+                coordinates: coordinates
+              }
+            });
+          } else {
+            this.map.addSource(sourceId, {
+              type: 'geojson',
+              data: {
+                type: 'Feature',
+                properties: {},
+                geometry: {
+                  type: 'LineString',
+                  coordinates: coordinates
+                }
+              }
+            });
+
+            this.map.addLayer({
+              id: layerId,
+              type: 'line',
+              source: sourceId,
+              layout: {
+                'line-cap': 'round',
+                'line-join': 'round'
+              },
+              paint: {
+                'line-color': deviceInfo.color,
+                'line-width': 4,
+                'line-opacity': 0.8
+              }
+            });
+          }
+
+          // Create trace markers with gradient
+          deviceLocs.forEach((loc, index) => {
+            const progress = 1 - (index / (deviceLocs.length - 1));
+            const isStart = index === deviceLocs.length - 1;
+            const isEnd = index === 0;
+            this.createTraceMarker(loc, isStart, isEnd, progress);
+          });
         });
 
         this.applyTraceDotsVisibility();
-        this.updateRouteLegend(); // Add this line
+        this.updateRouteLegend();
       }
 
       async loadHistoricalByLocation(latitude, longitude, radiusKm = 0.5) {
@@ -3790,27 +3894,21 @@
       }
 
       applyLocationUpdate(location) {
-        // Mark that we've received at least one live update
         if (!this.hasReceivedLiveUpdate) {
           this.hasReceivedLiveUpdate = true;
-          // Clear the initial DB location from display
           this.locations = [];
           this.clearAllMarkers();
           this.clearTraceMarkers();
         }
 
-        // Add to live locations
         this.liveLocations.unshift(location);
 
-        // Prevent uncontrolled growth of live locations
         if (this.liveLocations.length > this.historyLimit) {
           this.liveLocations = this.liveLocations.slice(0, this.historyLimit);
         }
 
-        // Update locations to show live data
         this.locations = [...this.liveLocations];
 
-        this.devices.add(location.device_id);
         const deviceInfo = this.devices.get(location.device_id);
         if (deviceInfo) {
           deviceInfo.count++;
@@ -3819,22 +3917,27 @@
           this.selectedDevices.add(location.device_id);
         }
 
-        this.updateDeviceLegend(); // ADD
-        this.updateDeviceFilterList(); // ADD
-        this.updateDevicesList();
+        this.updateDeviceLegend();
+        this.updateDeviceFilterList();
         this.filterAndDisplayLocations();
         this.updateStatistics();
 
-        if (this.selectedDevice === '' || this.selectedDevice === location.device_id) {
+        if (this.selectedDevices.has(location.device_id)) {
           this.updateMapMarker(location, !this.isHistoryMode);
-          this.updateRouteForDevice(); // This will recreate trace markers
+          this.updateDeviceRoute(location.device_id);
+
+          // Only auto-center if tracking is enabled
           if (this.isTrackingLatest && !this.userInteracted) {
-            this.centerMapOnLocation(location);
+            // If only one device is visible, center on it
+            if (this.selectedDevices.size === 1) {
+              this.centerMapOnLocation(location);
+            } else {
+              // Multiple devices - fit all visible devices
+              this.centerMapOnDevices();
+            }
           }
         }
-        this.updateDeviceRoute(location.device_id);
       }
-
       getDeviceColor(deviceId) {
         const colors = ['#ef4444', '#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#06b6d4', '#f97316'];
         const hash = deviceId.split('').reduce((a, b) => {
@@ -3869,7 +3972,39 @@
           setTimeout(() => {this.suppressUserInteraction = false;}, 50);
         });
       }
+      centerMapOnDevices() {
+        // Get latest location for each visible device
+        const latestByDevice = new Map();
 
+        this.locations.forEach(loc => {
+          if (this.selectedDevices.has(loc.device_id) && !latestByDevice.has(loc.device_id)) {
+            latestByDevice.set(loc.device_id, loc);
+          }
+        });
+
+        if (latestByDevice.size === 0) return;
+
+        if (latestByDevice.size === 1) {
+          this.centerMapOnLocation(Array.from(latestByDevice.values())[0]);
+          return;
+        }
+
+        const bounds = new maplibregl.LngLatBounds();
+        latestByDevice.forEach(loc => {
+          bounds.extend([loc.longitude, loc.latitude]);
+        });
+
+        this.suppressUserInteraction = true;
+        this.map.fitBounds(bounds, {
+          padding: 100,
+          maxZoom: 15,
+          duration: 800
+        });
+
+        this.map.once('moveend', () => {
+          setTimeout(() => {this.suppressUserInteraction = false;}, 50);
+        });
+      }
       selectLocation(locationIndex) {
         this.selectedLocationIndex = locationIndex;
         this.userInteracted = false;
@@ -4318,12 +4453,13 @@
             },
             paint: {
               'line-color': deviceInfo.color,
-              'line-width': 3,
-              'line-opacity': 0.7
+              'line-width': 4,
+              'line-opacity': 0.8
             }
           });
         }
 
+        // Update visibility
         if (this.map.getLayer(layerId)) {
           this.map.setLayoutProperty(
             layerId,
@@ -4331,6 +4467,20 @@
             deviceInfo.visible ? 'visible' : 'none'
           );
         }
+
+        // Create trace markers with gradient halos
+        deviceLocations.forEach((loc, index) => {
+          const progress = 1 - (index / (deviceLocations.length - 1)); // 0 = oldest, 1 = newest
+          const isStart = index === deviceLocations.length - 1;
+          const isEnd = index === 0;
+
+          if (!this.isHistoryMode && isEnd) {
+            // Skip end marker in live mode (pulse marker handles it)
+            return;
+          }
+
+          this.createTraceMarker(loc, isStart, isEnd, progress);
+        });
       }
     }
 

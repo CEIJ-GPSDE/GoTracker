@@ -601,7 +601,7 @@ func (api *APIServer) locationHistoryHandler(w http.ResponseWriter, r *http.Requ
 func (api *APIServer) locationRangeHandler(w http.ResponseWriter, r *http.Request) {
 	startTimeStr := r.URL.Query().Get("start")
 	endTimeStr := r.URL.Query().Get("end")
-	deviceID := r.URL.Query().Get("device")
+	deviceIDs := r.URL.Query()["device"] // Get array of device IDs
 
 	if startTimeStr == "" || endTimeStr == "" {
 		http.Error(w, "start and end parameters are required", http.StatusBadRequest)
@@ -625,8 +625,7 @@ func (api *APIServer) locationRangeHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Limit the time range to prevent huge queries
-	maxDuration := 365 * 24 * time.Hour // 365 days (1 year)
+	maxDuration := 365 * 24 * time.Hour
 	if endTime.Sub(startTime) > maxDuration {
 		http.Error(w, "Time range too large, maximum 365 days", http.StatusBadRequest)
 		return
@@ -640,15 +639,22 @@ func (api *APIServer) locationRangeHandler(w http.ResponseWriter, r *http.Reques
 	var query string
 	var args []interface{}
 
-	if deviceID != "" {
+	if len(deviceIDs) > 0 {
+		// Build query with multiple device IDs
+		placeholders := make([]string, len(deviceIDs))
+		args = append(args, startTime, endTime)
+		for i, deviceID := range deviceIDs {
+			placeholders[i] = fmt.Sprintf("$%d", i+3)
+			args = append(args, deviceID)
+		}
+
 		query = fmt.Sprintf(`
 			SELECT device_id, latitude, longitude, timestamp
 			FROM %s
-			WHERE timestamp >= $1 AND timestamp <= $2 AND device_id = $3
+			WHERE timestamp >= $1 AND timestamp <= $2 AND device_id IN (%s)
 			ORDER BY timestamp DESC
 			LIMIT 1000
-		`, tableName)
-		args = []interface{}{startTime, endTime, deviceID}
+		`, tableName, strings.Join(placeholders, ","))
 	} else {
 		query = fmt.Sprintf(`
 			SELECT device_id, latitude, longitude, timestamp
