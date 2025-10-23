@@ -593,6 +593,10 @@ func (api *APIServer) locationHistoryHandler(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	if locations == nil {
+		locations = []LocationPacket{}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(locations)
 }
@@ -683,7 +687,9 @@ func (api *APIServer) locationRangeHandler(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-
+	if locations == nil {
+		locations = []LocationPacket{}
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(locations)
 }
@@ -780,6 +786,9 @@ func (api *APIServer) locationNearbyHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	if locations == nil {
+		locations = []LocationPacket{}
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(locations)
 }
@@ -828,7 +837,9 @@ func (api *APIServer) activeDevicesHandler(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-
+	if devices == nil {
+		devices = []DeviceInfo{}
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(devices)
 }
@@ -891,6 +902,9 @@ func (api *APIServer) deviceLocationHistoryHandler(w http.ResponseWriter, r *htt
 		return
 	}
 
+	if locations == nil {
+		locations = []LocationPacket{}
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(locations)
 }
