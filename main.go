@@ -704,6 +704,7 @@ func (api *APIServer) locationNearbyHandler(w http.ResponseWriter, r *http.Reque
 	latStr := r.URL.Query().Get("lat")
 	lngStr := r.URL.Query().Get("lng")
 	radiusStr := r.URL.Query().Get("radius")
+	deviceIDs := r.URL.Query()["device"] // Get array of device IDs
 
 	if latStr == "" || lngStr == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -748,26 +749,57 @@ func (api *APIServer) locationNearbyHandler(w http.ResponseWriter, r *http.Reque
 		tableName = api.tablePrefix + "_locations"
 	}
 
-	// Using Haversine formula approximation for nearby search
-	// This calculates distance in kilometers
-	query := fmt.Sprintf(`
-		SELECT device_id, latitude, longitude, timestamp,
-		       (6371 * acos(
-		           cos(radians($1)) * cos(radians(latitude)) *
-		           cos(radians(longitude) - radians($2)) +
-		           sin(radians($1)) * sin(radians(latitude))
-		       )) AS distance
-		FROM %s
-		WHERE (6371 * acos(
-		    cos(radians($1)) * cos(radians(latitude)) *
-		    cos(radians(longitude) - radians($2)) +
-		    sin(radians($1)) * sin(radians(latitude))
-		)) <= $3
-		ORDER BY timestamp DESC
-		LIMIT 1000
-	`, tableName)
+	var query string
+	var args []interface{}
 
-	rows, err := api.db.Query(query, lat, lng, radius)
+	if len(deviceIDs) > 0 {
+		// Build query with device filter
+		placeholders := make([]string, len(deviceIDs))
+		args = append(args, lat, lng, radius)
+		for i, deviceID := range deviceIDs {
+			placeholders[i] = fmt.Sprintf("$%d", i+4)
+			args = append(args, deviceID)
+		}
+
+		query = fmt.Sprintf(`
+			SELECT device_id, latitude, longitude, timestamp,
+			       (6371 * acos(
+			           cos(radians($1)) * cos(radians(latitude)) *
+			           cos(radians(longitude) - radians($2)) +
+			           sin(radians($1)) * sin(radians(latitude))
+			       )) AS distance
+			FROM %s
+			WHERE (6371 * acos(
+			    cos(radians($1)) * cos(radians(latitude)) *
+			    cos(radians(longitude) - radians($2)) +
+			    sin(radians($1)) * sin(radians(latitude))
+			)) <= $3
+			AND device_id IN (%s)
+			ORDER BY timestamp DESC
+			LIMIT 1000
+		`, tableName, strings.Join(placeholders, ","))
+	} else {
+		// No device filter
+		query = fmt.Sprintf(`
+			SELECT device_id, latitude, longitude, timestamp,
+			       (6371 * acos(
+			           cos(radians($1)) * cos(radians(latitude)) *
+			           cos(radians(longitude) - radians($2)) +
+			           sin(radians($1)) * sin(radians(latitude))
+			       )) AS distance
+			FROM %s
+			WHERE (6371 * acos(
+			    cos(radians($1)) * cos(radians(latitude)) *
+			    cos(radians(longitude) - radians($2)) +
+			    sin(radians($1)) * sin(radians(latitude))
+			)) <= $3
+			ORDER BY timestamp DESC
+			LIMIT 1000
+		`, tableName)
+		args = []interface{}{lat, lng, radius}
+	}
+
+	rows, err := api.db.Query(query, args...)
 	if err != nil {
 		log.Printf("Database query error: %v", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
@@ -792,9 +824,6 @@ func (api *APIServer) locationNearbyHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if locations == nil {
-		locations = []LocationPacket{}
-	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(locations)
 }

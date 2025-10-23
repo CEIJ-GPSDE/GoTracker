@@ -2295,9 +2295,11 @@
         if (isStart) {
           el.classList.add('start-point');
           el.style.backgroundColor = deviceColor;
+          el.style.borderColor = '#10b981'; // Green border for start
         } else if (isEnd) {
           el.classList.add('end-point');
           el.style.backgroundColor = deviceColor;
+          el.style.borderColor = '#ef4444'; // Red border for end
         } else {
           // Regular trace point - use device color with gradient halo
           el.style.backgroundColor = deviceColor;
@@ -2320,14 +2322,19 @@
             haloColor = `rgb(${r}, ${g}, ${b})`;
           }
 
-          // Set halo color via ::before pseudo-element style
-          el.style.setProperty('--halo-color', haloColor);
           el.style.borderColor = haloColor;
         }
 
-        const marker = new maplibregl.Marker({element: el})
-          .setLngLat([location.longitude, location.latitude])
-          .setPopup(new maplibregl.Popup().setHTML(popupContent))
+        // CRITICAL FIX: Use correct coordinate order [longitude, latitude]
+        const marker = new maplibregl.Marker({
+          element: el,
+          anchor: 'center' // Ensure marker is centered on coordinates
+        })
+          .setLngLat([location.longitude, location.latitude]) // longitude first, then latitude
+          .setPopup(new maplibregl.Popup({
+            offset: 15,
+            closeButton: false
+          }).setHTML(popupContent))
           .addTo(this.map);
 
         this.traceMarkers.push(marker);
@@ -2419,9 +2426,10 @@
 
           this.toggleTracking(false);
 
-          // Clear all live markers and route when entering history mode
+          // CRITICAL FIX: Clear everything when entering history mode
           this.clearAllMarkers();
           this.clearTraceMarkers();
+          this.clearAllRoutes(); // Clear all routes
           this.routeCoords = [];
           this.updateRouteLine();
 
@@ -2433,7 +2441,7 @@
             // Restore time filter
             this.timeFilter = {...this.persistedTimeFilter};
             this.activeFilterType = 'time';
-            this.locationFilter = null; // Clear location filter when restoring time
+            this.locationFilter = null;
             this.restoreTimePickerValues();
             this.updateTimeFilterIndicator();
             this.loadHistoricalData();
@@ -2442,7 +2450,7 @@
             // Restore location filter
             this.locationFilter = {...this.persistedLocationFilter};
             this.activeFilterType = 'location';
-            this.timeFilter = null; // Clear time filter when restoring location
+            this.timeFilter = null;
             this.updateTimeFilterIndicator();
             this.loadHistoricalByLocation(
               this.locationFilter.lat,
@@ -2472,10 +2480,10 @@
           // Store current filters before leaving history mode
           if (this.timeFilter && this.activeFilterType === 'time') {
             this.persistedTimeFilter = {...this.timeFilter};
-            this.persistedLocationFilter = null; // Clear persisted location filter
+            this.persistedLocationFilter = null;
           } else if (this.locationFilter && this.activeFilterType === 'location') {
             this.persistedLocationFilter = {...this.locationFilter};
-            this.persistedTimeFilter = null; // Clear persisted time filter
+            this.persistedTimeFilter = null;
           }
 
           // Show history mode button, hide config and live mode buttons
@@ -2484,9 +2492,10 @@
           liveModeBtn.style.display = 'none';
           trackBtn.style.display = 'flex';
 
-          // Clear historical data display but keep filter data
+          // CRITICAL FIX: Clear everything when leaving history mode
           this.clearAllMarkers();
           this.clearTraceMarkers();
+          this.clearAllRoutes(); // Clear all routes
           this.filteredLocations = [];
           this.updateTimeFilterIndicator();
 
@@ -3285,7 +3294,7 @@
         this.persistedTimeFilter = null;
         this.persistedLocationFilter = null;
         this.activeFilterType = null;
-        this.locationFilter = null; // Also clear location filter
+        this.locationFilter = null;
         this.filteredLocations = [];
         this.updateTimeFilterIndicator();
         document.querySelectorAll('.quick-range-btn').forEach(btn => btn.classList.remove('active'));
@@ -3294,6 +3303,7 @@
           // In history mode, clear everything when filter is cleared
           this.clearAllMarkers();
           this.clearTraceMarkers();
+          this.clearAllRoutes(); // Clear routes too
           this.routeCoords = [];
           this.updateRouteLine();
           this.displayFilteredLocations();
@@ -3469,7 +3479,17 @@
         console.log('loadHistoricalByLocation called with:', {latitude, longitude, radiusKm});
 
         try {
-          const url = `${this.config.apiBaseUrl}/api/locations/nearby?lat=${latitude}&lng=${longitude}&radius=${radiusKm}`;
+          // Build URL with device filter
+          let url = `${this.config.apiBaseUrl}/api/locations/nearby?lat=${latitude}&lng=${longitude}&radius=${radiusKm}`;
+
+          // Add device filter if specific devices are selected
+          const selectedDeviceIds = Array.from(this.selectedDevices);
+          if (selectedDeviceIds.length > 0 && selectedDeviceIds.length < this.devices.size) {
+            selectedDeviceIds.forEach(deviceId => {
+              url += `&device=${encodeURIComponent(deviceId)}`;
+            });
+          }
+
           console.log('Fetching from URL:', url);
 
           const response = await fetch(url);
@@ -3479,14 +3499,12 @@
             const locations = await response.json();
             console.log('Received locations:', locations?.length || 0);
 
-            // ✅ CRITICAL FIX: ALWAYS set the filter state FIRST, regardless of results
             this.locationFilter = {lat: latitude, lng: longitude, radius: radiusKm};
             this.activeFilterType = 'location';
             this.timeFilter = null;
             this.persistedTimeFilter = null;
             this.persistedLocationFilter = {lat: latitude, lng: longitude, radius: radiusKm};
 
-            // ✅ ALWAYS set filteredLocations (even if empty array)
             this.filteredLocations = locations || [];
 
             console.log('Filter state set:', {
@@ -3495,12 +3513,11 @@
               filteredLocationsCount: this.filteredLocations.length
             });
 
-            // Clear time filter inputs when applying location filter
+            // Clear time filter inputs
             document.getElementById('start-time-popup').value = '';
             document.getElementById('end-time-popup').value = '';
             document.querySelectorAll('.quick-range-btn').forEach(btn => btn.classList.remove('active'));
 
-            // ✅ ALWAYS clear markers and update display (even if no results)
             this.clearAllMarkers();
             this.clearTraceMarkers();
             this.routeCoords = [];
@@ -3509,20 +3526,17 @@
             this.updateTimeFilterIndicator();
             this.hideNoFilterOverlay();
 
-            // ✅ Close the history config popup
             const historyConfigPopup = document.getElementById('history-config-popup');
             if (historyConfigPopup) {
               historyConfigPopup.classList.remove('active');
             }
 
-            // ✅ Now check results and show appropriate feedback
             if (this.filteredLocations.length > 0) {
               console.log('Has results, fitting map');
               this.fitMapToLocations(this.filteredLocations);
               this.updateRouteForFiltered();
             } else {
               console.log('No results, showing empty results popup');
-              // Show empty results popup after a short delay
               setTimeout(() => {
                 this.showEmptyResultsPopup(true, radiusKm);
               }, 300);
@@ -3531,7 +3545,6 @@
             const errorText = await response.text();
             console.error('Failed to load location data:', response.status, errorText);
 
-            // Even on error, close the popup
             const historyConfigPopup = document.getElementById('history-config-popup');
             if (historyConfigPopup) {
               historyConfigPopup.classList.remove('active');
@@ -3542,7 +3555,6 @@
         } catch (error) {
           console.error('Error loading location data:', error);
 
-          // Even on error, close the popup  
           const historyConfigPopup = document.getElementById('history-config-popup');
           if (historyConfigPopup) {
             historyConfigPopup.classList.remove('active');
@@ -3714,7 +3726,34 @@
         this.markers.forEach(marker => marker.remove());
         this.markers.clear();
       }
+      clearAllRoutes() {
+        // Remove all device route layers and sources
+        this.devices.forEach((info, deviceId) => {
+          const sourceId = `route-${deviceId}`;
+          const layerId = `route-${deviceId}`;
 
+          if (this.map.getLayer(layerId)) {
+            this.map.removeLayer(layerId);
+          }
+          if (this.map.getSource(sourceId)) {
+            this.map.removeSource(sourceId);
+          }
+        });
+
+        // Also clear the old gradient route system if it exists
+        if (this.map.getSource('route')) {
+          // Remove all segment layers
+          for (let i = 0; i < 100; i++) {
+            if (this.map.getLayer(`route-segment-${i}`)) {
+              this.map.removeLayer(`route-segment-${i}`);
+            }
+          }
+          if (this.map.getLayer('route-line')) {
+            this.map.removeLayer('route-line');
+          }
+          this.map.removeSource('route');
+        }
+      }
       connectWebSocket() {
         try {
           this.ws = new WebSocket(this.config.wsUrl);
@@ -4359,11 +4398,31 @@
             el.style.display = visible ? 'block' : 'none';
           }
 
-          // Update routes
+          // Update routes visibility
           this.updateRoutesVisibility();
           this.updateDeviceLegend();
           this.updateDeviceFilterList();
-          this.filterAndDisplayLocations();
+
+          // CRITICAL FIX: Re-apply filters in history mode when device selection changes
+          if (this.isHistoryMode) {
+            if (this.activeFilterType === 'time' && this.timeFilter) {
+              // Re-fetch with new device selection
+              this.loadHistoricalData();
+            } else if (this.activeFilterType === 'location' && this.locationFilter) {
+              // Re-fetch with new device selection
+              this.loadHistoricalByLocation(
+                this.locationFilter.lat,
+                this.locationFilter.lng,
+                this.locationFilter.radius
+              );
+            } else {
+              // Just update display if no filter active
+              this.filterAndDisplayLocations();
+            }
+          } else {
+            // Live mode - just update display
+            this.filterAndDisplayLocations();
+          }
         }
       }
 
