@@ -979,23 +979,23 @@
       cursor: pointer;
       opacity: 0;
       transition: opacity 0.2s;
-      position: relative;
+      /* critical fix: remove position: relative */
     }
-
 
     .trace-marker::before {
       content: '';
       position: absolute;
-      top: -4px;
-      left: -4px;
-      right: -4px;
-      bottom: -4px;
+      /* critical fix: position from center instead of edges */
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: calc(100% + 8px);
+      height: calc(100% + 8px);
       border-radius: 50%;
-      border: 2px solid var(--halo-color, currentColor);
+      border: 2px solid var(--halo-color, currentcolor);
       opacity: 0.6;
       pointer-events: none;
     }
-
 
     .trace-marker:hover {
       opacity: 1;
@@ -1018,6 +1018,8 @@
     .trace-marker.start-point::before {
       border-color: #10b981;
       opacity: 0.8;
+      width: calc(100% + 10px);
+      height: calc(100% + 10px);
     }
 
     .trace-marker.end-point {
@@ -1033,6 +1035,8 @@
     .trace-marker.end-point::before {
       border-color: #ef4444;
       opacity: 0.8;
+      width: calc(100% + 10px);
+      height: calc(100% + 10px);
     }
 
     .direction-arrow {
