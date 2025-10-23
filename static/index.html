@@ -1821,13 +1821,20 @@
         document.querySelector('[data-tab="locations"]').textContent = this.t('locations');
 
         // Update controls tab
-        document.querySelector('label[for="device-filter"]').textContent = this.t('filterByDevice');
-        document.querySelector('label[for="history-limit"]').textContent = this.t('historyLimit');
-        document.getElementById('refresh-data-btn').textContent =
-          this.isHistoryMode ? this.t('refreshDataHistorical') : this.t('refreshData');
+        const historyLimitLabel = document.querySelector('label[for="history-limit"]');
+        if (historyLimitLabel) {
+          historyLimitLabel.textContent = this.t('historyLimit');
+        }
 
-        document.getElementById('trace-dots-label').textContent = this.t('showTraceDots');
+        const refreshBtn = document.getElementById('refresh-data-btn');
+        if (refreshBtn) {
+          refreshBtn.textContent = this.isHistoryMode ? this.t('refreshDataHistorical') : this.t('refreshData');
+        }
 
+        const traceDotsLabel = document.getElementById('trace-dots-label');
+        if (traceDotsLabel) {
+          traceDotsLabel.textContent = this.t('showTraceDots');
+        }
         // Update history config popup
         document.querySelector('#history-config-popup .popup-header h2').textContent = this.t('historicalViewConfig');
         document.querySelector('label[for="start-time-popup"]').textContent = this.t('from');
@@ -1903,7 +1910,6 @@
         );
         this.updateTimeFilterIndicator();
         this.displayLocations();
-        this.updateDevicesList();
       }
 
       async initializeApp() {
@@ -2550,6 +2556,7 @@
           this.toggleTracking(true);
           this.updateLocationSelection();
         });
+
         // History Mode button
         document.getElementById('history-mode-btn').addEventListener('click', () => {
           this.toggleHistoryMode();
@@ -2570,18 +2577,12 @@
           this.applyTraceDotsVisibility();
         });
 
-        // Device filter
-        document.getElementById('device-filter').addEventListener('change', (e) => {
-          this.selectedDevice = e.target.value;
-          this.filterAndDisplayLocations();
-          this.updateRouteForDevice();
-        });
-
         // History limit
         document.getElementById('history-limit').addEventListener('change', (e) => {
           this.historyLimit = parseInt(e.target.value);
           this.refreshData();
         });
+
         document.getElementById('language-selector').addEventListener('change', (e) => {
           this.setLanguage(e.target.value);
         });
@@ -3356,43 +3357,30 @@
       }
 
       updateRouteForDevice() {
-        if (this.selectedDevice) {
-          this.routeCoords = this.locations
-            .filter(loc => loc.device_id === this.selectedDevice)
-            .map(loc => [loc.longitude, loc.latitude]);
-        } else {
-          this.routeCoords = this.locations.map(loc => [loc.longitude, loc.latitude]);
-        }
-        this.updateRouteLine();
-
-        // Get filtered locations
-        const locs = this.selectedDevice
-          ? this.locations.filter(loc => loc.device_id === this.selectedDevice)
-          : this.locations;
-
-        // Clear existing markers and arrows
+        // Clear existing trace markers
         this.clearTraceMarkers();
 
-        // Create trace markers
+        // Get all visible device locations
+        const visibleLocations = this.locations.filter(loc =>
+          this.selectedDevices.has(loc.device_id)
+        );
+
+        // Create trace markers for each visible device
         if (this.isHistoryMode) {
-          locs.forEach((loc, index) => {
-            const isStart = index === locs.length - 1; // oldest (last in array)
-            const isEnd = index === 0; // newest (first in array)
+          visibleLocations.forEach((loc, index) => {
+            const isStart = index === visibleLocations.length - 1;
+            const isEnd = index === 0;
             this.createTraceMarker(loc, isStart, isEnd);
           });
         } else {
-          // In live mode, create trace markers with start/end indicators
-          locs.forEach((loc, index) => {
-            const isStart = index === locs.length - 1; // oldest (last in array) - START
-            const isEnd = index === 0; // newest (first in array) - END (handled by pulse marker)
-            // Mark start point but not end (end is handled by the pulse marker)
+          visibleLocations.forEach((loc, index) => {
+            const isStart = index === visibleLocations.length - 1;
             this.createTraceMarker(loc, isStart, false);
           });
         }
 
-
         this.applyTraceDotsVisibility();
-        this.updateRouteLegend(); // Add this line
+        this.updateRouteLegend();
       }
 
       updateRouteForFiltered() {
@@ -3802,7 +3790,6 @@
               this.locations = this.initialDbLocation ? [this.initialDbLocation] : [];
             }
 
-            this.updateDevicesList();
             this.displayLocations();
             this.updateStatistics();
 
@@ -3926,7 +3913,6 @@
           this.updateMapMarker(location, !this.isHistoryMode);
           this.updateDeviceRoute(location.device_id);
 
-          // Only auto-center if tracking is enabled
           if (this.isTrackingLatest && !this.userInteracted) {
             // If only one device is visible, center on it
             if (this.selectedDevices.size === 1) {
@@ -4088,10 +4074,9 @@
       }
 
       getFilteredLocations() {
-        if (this.selectedDevice) {
-          return this.locations.filter(loc => loc.device_id === this.selectedDevice);
-        }
-        return this.locations;
+        return this.locations.filter(loc =>
+          this.selectedDevices.has(loc.device_id)
+        );
       }
 
       updateLocationSelection() {
@@ -4104,24 +4089,11 @@
         });
       }
 
-      updateDevicesList() {
-        const select = document.getElementById('device-filter');
-        const currentValue = select.value;
-
-        select.innerHTML = '<option value="">All Devices</option>';
-
-        Array.from(this.devices).sort().forEach(deviceId => {
-          const option = document.createElement('option');
-          option.value = deviceId;
-          option.textContent = deviceId;
-          select.appendChild(option);
-        });
-
-        select.value = currentValue;
-      }
-
       filterAndDisplayLocations() {
-        let filteredLocations = this.getFilteredLocations();
+        // Filter by visible devices
+        const filteredLocations = this.locations.filter(loc =>
+          this.selectedDevices.has(loc.device_id)
+        );
         this.displayLocations(filteredLocations);
       }
 
