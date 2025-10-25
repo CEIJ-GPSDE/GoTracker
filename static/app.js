@@ -37,7 +37,7 @@ class LocationTracker {
     this.lastActiveConfigTab = 'time-filter';
     this.translations = {
       en: {
-        title: "🌍 Real-time Location Tracker",
+        //title: "🌍 Real-time Location Tracker",
         subtitle: "Monitoring device locations with live updates and historical view",
         connecting: "Connecting...",
         connected: "Connected",
@@ -141,7 +141,7 @@ class LocationTracker {
         }
       },
       es: {
-        title: "🌍 Rastreador de Ubicación en Tiempo Real",
+        //title: "🌍 Rastreador de Ubicación en Tiempo Real",
         subtitle: "Monitoreando ubicaciones de dispositivos con actualizaciones en vivo y vista histórica",
         connecting: "Conectando...",
         connected: "Conectado",
@@ -247,8 +247,11 @@ class LocationTracker {
     };
     this.currentLanguage = this.detectLanguage();
 
-    // Read base path from global config (injected in HTML)
-    const basePath = window.APP_BASE_PATH || '';
+    // Read configuration from global config (injected in HTML)
+    const appConfig = window.APP_CONFIG || {};
+    const basePath = appConfig.basePath || '';
+    const instanceName = appConfig.instanceName || '';
+    const branchName = appConfig.branchName || '';
 
     this.config = {
       apiBaseUrl: window.location.origin + basePath,
@@ -265,7 +268,7 @@ class LocationTracker {
     const browserLang = navigator.language || navigator.userLanguage;
     return browserLang.startsWith('es') ? 'es' : 'en';
   }
-
+  
   t(key) {
     const keys = key.split('.');
     let value = this.translations[this.currentLanguage];
@@ -285,7 +288,7 @@ class LocationTracker {
 
   updateUILanguage() {
     // Update header
-    document.querySelector('.header h1').textContent = this.t('title');
+    //document.querySelector('.header h1').textContent = this.t('title');
     document.querySelector('.header p').textContent = this.t('subtitle');
 
     // Update buttons

@@ -11,9 +11,15 @@
 </head>
 
 <body>
+  <!-- Configuration injected at build time -->
   <script>
-    window.APP_BASE_PATH = '${BASE_PATH}';
+    window.APP_CONFIG = {
+      basePath: '${BASE_PATH}',
+      instanceName: '${INSTANCE_NAME}',
+      branchName: '${BRANCH_NAME}'
+    };
   </script>
+
   <div class="container">
     <div class="header">
       <h1>🌍 Real-time Location Tracker</h1>
@@ -61,7 +67,7 @@
           </button>
           <button id="live-mode-btn" class="history-btn"
             style="display: none; background: linear-gradient(135deg, #dc2626, #b91c1c);">
-            <span>📍</span>
+            <span>🔴</span>
             <span>Live Mode</span>
           </button>
           <button id="menu-toggle-btn" class="menu-toggle-btn">
@@ -211,7 +217,7 @@
         <div class="tab-content" id="no-filter-selected-tab" style="display: none;">
           <div class="card">
             <div class="card-body" style="text-align: center; padding: 60px 30px;">
-              <h3 style="color: white; margin-bottom: 15px;" id="no-filter-selected-title">🔍 No filter selected</h3>
+              <h3 style="color: white; margin-bottom: 15px;" id="no-filter-selected-title">📍 No filter selected</h3>
               <p style="color: #9ca3af; margin-bottom: 10px;" id="please-select-filter">Please select a time range or
                 location to view historical data.</p>
               <p style="color: #9ca3af; font-size: 14px;" id="select-filter-tab">Choose a tab above to configure your
@@ -278,6 +284,7 @@
       </div>
     </div>
   </div>
+
   <script src="app.js"></script>
 </body>
 
