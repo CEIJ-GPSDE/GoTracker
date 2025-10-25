@@ -247,9 +247,12 @@ class LocationTracker {
     };
     this.currentLanguage = this.detectLanguage();
 
+    // Read base path from global config (injected in HTML)
+    const basePath = window.APP_BASE_PATH || '';
+
     this.config = {
-      apiBaseUrl: window.location.origin,
-      wsUrl: `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`,
+      apiBaseUrl: window.location.origin + basePath,
+      wsUrl: `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}${basePath}/ws`,
       mapStyle: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
       defaultCenter: [-74.0060, 40.7128],
       defaultZoom: 10
