@@ -244,16 +244,6 @@ body {
   font-size: 1rem;
 }
 
-#empty-results-popup {
-  z-index: 10600 !important;
-  /* Higher than config popup which is 10000 */
-}
-
-#empty-results-popup.show {
-  display: block !important;
-  animation: pulseScale 0.5s ease-out;
-}
-
 @keyframes pulseScale {
   0% {
     transform: translate(-50%, -50%) scale(0.9);
