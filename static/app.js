@@ -248,8 +248,8 @@ class LocationTracker {
     this.currentLanguage = this.detectLanguage();
 
     this.config = {
-      apiBaseUrl: window.location.origin + ('${BASE_PATH}' || ''),
-      wsUrl: `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}${'${BASE_PATH}' || ''}/ws`,
+      apiBaseUrl: window.location.origin,
+      wsUrl: `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`,
       mapStyle: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
       defaultCenter: [-74.0060, 40.7128],
       defaultZoom: 10
