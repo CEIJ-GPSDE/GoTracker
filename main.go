@@ -212,41 +212,43 @@ func (h *WebSocketHub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	h.register <- conn
 
-	// Handle client messages (mainly for ping/pong)
+	// Handle client messages
 	go func() {
 		defer func() {
 			h.unregister <- conn
 		}()
 
-		conn.SetReadDeadline(time.Now().Add(90 * time.Second))
-		conn.SetPongHandler(func(string) error {
-			conn.SetReadDeadline(time.Now().Add(90 * time.Second))
-			return nil
-		})
-
 		for {
-			_, _, err := conn.ReadMessage()
+			messageType, message, err := conn.ReadMessage()
 			if err != nil {
 				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 					log.Printf("WebSocket unexpected close error: %v", err)
 				}
 				break
 			}
+
+			// Handle ping-pong messages
+			if messageType == websocket.TextMessage {
+				messageStr := string(message)
+				if messageStr == "ping" {
+					// Respond with pong
+					err = conn.WriteMessage(websocket.TextMessage, []byte("pong"))
+					if err != nil {
+						log.Printf("WebSocket pong write error: %v", err)
+						break
+					}
+					continue
+				}
+			}
 		}
 	}()
 
-	// Send periodic pings
+	// Send initial ping to establish connection
 	go func() {
-		ticker := time.NewTicker(30 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-				if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-					return
-				}
-			}
+		time.Sleep(2 * time.Second) // Wait a bit before first ping
+		err := conn.WriteMessage(websocket.TextMessage, []byte("ping"))
+		if err != nil {
+			log.Printf("Initial ping failed: %v", err)
 		}
 	}()
 }
@@ -259,7 +261,6 @@ func (h *WebSocketHub) Broadcast(data interface{}) {
 	}
 }
 
-// UDP Sniffer - simplified without leader election
 type UDPSniffer struct {
 	db          *Database
 	wsHub       *WebSocketHub

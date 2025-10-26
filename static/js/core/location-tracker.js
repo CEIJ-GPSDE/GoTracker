@@ -77,6 +77,10 @@ export class LocationTracker {
       this.uiManager.setupOverlayEventListeners();
       await this.deviceManager.loadDevices();
       await this.loadInitialData();
+      
+      // Setup visibility handler before connecting WebSocket
+      this.setupVisibilityHandler();
+      
       this.wsManager.connect();
       this.startStatsPolling();
       this.uiManager.initializeTimePickers();
@@ -588,6 +592,31 @@ export class LocationTracker {
 
     fetchAndUpdate();
     setInterval(fetchAndUpdate, 5000);
+  }
+  
+  setupVisibilityHandler() {
+    // Handle page visibility changes
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && !this.wsManager.isConnected()) {
+        console.log('Page became visible, reconnecting WebSocket...');
+        this.wsManager.resetIntentionalClose();
+        this.wsManager.connect();
+      }
+    });
+
+    // Handle page focus
+    window.addEventListener('focus', () => {
+      if (!this.wsManager.isConnected()) {
+        console.log('Window focused, reconnecting WebSocket...');
+        this.wsManager.resetIntentionalClose();
+        this.wsManager.connect();
+      }
+    });
+
+    // Handle beforeunload to clean up properly
+    window.addEventListener('beforeunload', () => {
+      this.wsManager.disconnect();
+    });
   }
 
   // UI methods that need implementation
