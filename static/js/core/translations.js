@@ -1,0 +1,202 @@
+// Translation system - condensed version with only essential translations
+export const TRANSLATIONS = {
+  en: {
+    subtitle: "Monitoring device locations with live updates and historical view",
+    connecting: "Connecting...",
+    connected: "Connected",
+    disconnected: "Disconnected",
+    connectionError: "Connection Error",
+    reconnecting: "Reconnecting in {0}s... ({1}/{2})",
+    connectionFailed: "Connection failed - refresh page",
+    trackLatest: "Track Latest",
+    trackingOff: "Tracking Off",
+    historyMode: "History Mode",
+    historySettings: "History Settings",
+    liveMode: "Live Mode",
+    menu: "Menu",
+    liveModeBadge: "🔴 LIVE MODE",
+    historyModeBadge: "📅 HISTORY MODE",
+    legendStart: "Start (oldest)",
+    legendEnd: "End (newest)",
+    filterLabel: "Filter:",
+    to: "to",
+    noTimeFilterApplied: "No time filter applied",
+    configureInHistorySettings: "Configure in History Settings",
+    controlsAndInfo: "Controls & Information",
+    controls: "⚙️ Controls",
+    locations: "📍 Locations",
+    filterByDevice: "Filter by Device:",
+    allDevices: "All Devices",
+    historyLimit: "History Limit:",
+    refreshData: "Refresh Data",
+    refreshDataHistorical: "Refresh Data (Historical Mode)",
+    showTraceDots: "Show trace dots",
+    loadingLocations: "Loading locations...",
+    historicalViewConfig: "📅 Historical View Configuration",
+    from: "From:",
+    to: "To:",
+    applyTimeFilter: "Apply Time Filter",
+    clearFilter: "Clear Filter",
+    noResultsTitle: "No Results Found",
+    noResultsMessage: "No location data matches your filter criteria. Try adjusting the parameters.",
+    noLocationResultsMessage: "No location data found within {radius} km of the selected coordinates.",
+    adjustFilters: "Adjust Filters",
+    noLocationsFound: "No locations found",
+    deviceId: "Device ID",
+    coordinates: "Coordinates",
+    time: "Time",
+    start: "START",
+    end: "END",
+    selected: "SELECTED",
+    clearSelection: "Clear Selection",
+    noTimeFilter: "No time filter applied",
+    timeFilterTabLabel: "Time Filter",
+    locationFilterTabLabel: "Location Filter",
+    latitude: "Latitude",
+    longitude: "Longitude",
+    radiusKm: "Radius (km)",
+    applyLocationFilter: "Apply Location Filter",
+    validLocationRequired: "Valid latitude and longitude are required",
+    invalidCoordinates: "Invalid coordinates (lat: -90 to 90, lng: -180 to 180)",
+    invalidRadius: "Radius must be greater than 0",
+    noFilterTitle: "⚠️ No Time Filter Applied",
+    noFilterMessage: "Please configure a time filter in History Settings to view historical data.",
+    openHistorySettings: "Open History Settings",
+    dismiss: "Dismiss",
+    timeFilterActive: "⏱️ Time Filter:",
+    locationFilterActive: "📍 Location Filter:",
+    radiusLabel: "Radius:",
+    km: "km",
+    noFilterSelected: "No filter selected",
+    pleaseSelectFilter: "Please select a time range or location to view historical data.",
+    selectFilterTab: "Choose a tab above to configure your filter.",
+    selectOnMap: "Select on Map",
+    selectLocationOnMap: "Click on the map to select a location",
+    clickMapToSelect: "Click anywhere on the map to set the location for filtering",
+    cancelSelection: "Cancel",
+    locationSelected: "Location selected! Coordinates updated.",
+    devices: "Devices",
+    noDevicesFound: "No devices found",
+    locationsCount: "{0} locations",
+    filterDevices: "Filter Devices"
+  },
+  es: {
+    // Spanish translations - include the essential ones from your original file
+    subtitle: "Monitoreando ubicaciones de dispositivos con actualizaciones en vivo y vista histórica",
+    connecting: "Conectando...",
+    connected: "Conectado",
+    disconnected: "Desconectado",
+    connectionError: "Error de Conexión",
+    reconnecting: "Reconectando en {0}s... ({1}/{2})",
+    connectionFailed: "Conexión fallida - actualice la página",
+    trackLatest: "Seguir Último",
+    trackingOff: "Seguimiento Desactivado",
+    historyMode: "Modo Histórico",
+    historySettings: "Configuración Histórica",
+    liveMode: "Modo en Vivo",
+    menu: "Menú",
+    liveModeBadge: "🔴 MODO EN VIVO",
+    historyModeBadge: "📅 MODO HISTÓRICO",
+    legendStart: "Inicio (más antiguo)",
+    legendEnd: "Fin (más reciente)",
+    filterLabel: "Filtro:",
+    to: "hasta",
+    noTimeFilterApplied: "No se aplicó filtro de tiempo",
+    configureInHistorySettings: "Configurar en Ajustes de Historial",
+    controlsAndInfo: "Controles e Información",
+    controls: "⚙️ Controles",
+    locations: "📍 Ubicaciones",
+    filterByDevice: "Filtrar por Dispositivo:",
+    allDevices: "Todos los Dispositivos",
+    historyLimit: "Límite de Historial:",
+    refreshData: "Actualizar Datos",
+    refreshDataHistorical: "Actualizar Datos (Modo Histórico)",
+    showTraceDots: "Mostrar puntos de ruta",
+    loadingLocations: "Cargando ubicaciones...",
+    historicalViewConfig: "📅 Configuración de Vista Histórica",
+    from: "Desde:",
+    to: "Hasta:",
+    applyTimeFilter: "Aplicar Filtro de Tiempo",
+    clearFilter: "Limpiar Filtro",
+    noResultsTitle: "No se Encontraron Resultados",
+    noResultsMessage: "No se encontraron datos de ubicación que coincidan con sus criterios de filtro. Intente ajustar los parámetros.",
+    noLocationResultsMessage: "No se encontraron datos de ubicación dentro de {radius} km de las coordenadas seleccionadas.",
+    adjustFilters: "Ajustar Filtros",
+    noLocationsFound: "No se encontraron ubicaciones",
+    deviceId: "ID de Dispositivo",
+    coordinates: "Coordenadas",
+    time: "Hora",
+    start: "INICIO",
+    end: "FIN",
+    selected: "SELECCIONADO",
+    clearSelection: "Limpiar Selección",
+    noTimeFilter: "No se aplicó filtro de tiempo",
+    timeFilterTabLabel: "Filtro de Tiempo",
+    locationFilterTabLabel: "Filtro de Ubicación",
+    latitude: "Latitud",
+    longitude: "Longitud",
+    radiusKm: "Radio (km)",
+    applyLocationFilter: "Aplicar Filtro de Ubicación",
+    validLocationRequired: "Se requiere latitud y longitud válidas",
+    invalidCoordinates: "Coordenadas inválidas (lat: -90 a 90, lng: -180 a 180)",
+    invalidRadius: "El radio debe ser mayor que 0",
+    noFilterTitle: "⚠️ No se Aplicó Filtro de Tiempo",
+    noFilterMessage: "Por favor configure un filtro de tiempo en Ajustes de Historial para ver datos históricos.",
+    openHistorySettings: "Abrir Ajustes de Historial",
+    dismiss: "Cerrar",
+    timeFilterActive: "⏱️ Filtro de Tiempo:",
+    locationFilterActive: "📍 Filtro de Ubicación:",
+    radiusLabel: "Radio:",
+    km: "km",
+    noFilterSelected: "Ningún filtro seleccionado",
+    pleaseSelectFilter: "Por favor seleccione un rango de tiempo o ubicación para ver datos históricos.",
+    selectFilterTab: "Elija una pestaña arriba para configurar su filtro.",
+    selectOnMap: "Seleccionar en Mapa",
+    selectLocationOnMap: "Haga clic en el mapa para seleccionar una ubicación",
+    clickMapToSelect: "Haga clic en cualquier lugar del mapa para establecer la ubicación del filtro",
+    cancelSelection: "Cancelar",
+    locationSelected: "¡Ubicación seleccionada! Coordenadas actualizadas.",
+    devices: "Dispositivos",
+    noDevicesFound: "No se encontraron dispositivos",
+    locationsCount: "{0} ubicaciones",
+    filterDevices: "Filtrar Dispositivos"
+  }
+};
+
+export class TranslationManager {
+  constructor() {
+    this.currentLanguage = this.detectLanguage();
+  }
+
+  detectLanguage() {
+    const browserLang = navigator.language || navigator.userLanguage;
+    return browserLang.startsWith('es') ? 'es' : 'en';
+  }
+
+  t(key) {
+    const keys = key.split('.');
+    let value = TRANSLATIONS[this.currentLanguage];
+    for (const k of keys) {
+      value = value?.[k];
+      if (value === undefined) {
+        console.warn(`Translation key not found: ${key}`);
+        return key;
+      }
+    }
+    return value;
+  }
+
+  setLanguage(lang) {
+    if (TRANSLATIONS[lang]) {
+      this.currentLanguage = lang;
+      return true;
+    }
+    return false;
+  }
+
+  format(message, ...args) {
+    return message.replace(/{(\d+)}/g, (match, number) => {
+      return typeof args[number] !== 'undefined' ? args[number] : match;
+    });
+  }
+}
