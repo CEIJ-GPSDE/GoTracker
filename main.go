@@ -2,6 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/hmac"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -22,32 +26,49 @@ import (
 	_ "github.com/lib/pq"
 )
 
+// ===== CLAVES DE CIFRADO (MISMAS QUE EN ESP32) =====
+var (
+	AES_KEY = []byte{
+		0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6,
+		0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c,
+	}
+
+	HMAC_KEY = []byte{
+		0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+		0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
+		0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
+		0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20,
+	}
+)
+
 // Configuration from environment variables
 type Config struct {
-	DBHost     string
-	DBName     string
-	DBUser     string
-	DBPassword string
-	DBSSLMode  string
-	Port       string
-	UDPPort    string
-	LogFile    string
-	CertFile   string
-	KeyFile    string
+	DBHost      string
+	DBName      string
+	DBUser      string
+	DBPassword  string
+	DBSSLMode   string
+	Port        string
+	UDPPort     string
+	LogFile     string
+	CertFile    string
+	KeyFile     string
+	TablePrefix string
 }
 
 func loadConfig() *Config {
 	return &Config{
-		DBHost:     getEnv("DB_HOST", "localhost"),
-		DBName:     getEnv("DB_NAME", "locationtracker"),
-		DBUser:     getEnv("DB_USER", "postgres"),
-		DBPassword: getEnv("DB_PASSWORD", "password"),
-		DBSSLMode:  getEnv("DB_SSLMODE", "disable"),
-		Port:       getEnv("PORT", "80"),
-		UDPPort:    getEnv("UDP_PORT", "5051"),
-		LogFile:    getEnv("LOG_FILE", ""),
-		CertFile:   getEnv("CERT_FILE", "certs/server.crt"),
-		KeyFile:    getEnv("KEY_FILE", "certs/server.key"),
+		DBHost:      getEnv("DB_HOST", "localhost"),
+		DBName:      getEnv("DB_NAME", "locationtracker"),
+		DBUser:      getEnv("DB_USER", "postgres"),
+		DBPassword:  getEnv("DB_PASSWORD", "password"),
+		DBSSLMode:   getEnv("DB_SSLMODE", "disable"),
+		Port:        getEnv("PORT", "80"),
+		UDPPort:     getEnv("UDP_PORT", "5051"),
+		LogFile:     getEnv("LOG_FILE", ""),
+		CertFile:    getEnv("CERT_FILE", "certs/server.crt"),
+		KeyFile:     getEnv("KEY_FILE", "certs/server.key"),
+		TablePrefix: getEnv("TABLE_PREFIX", ""),
 	}
 }
 
@@ -80,28 +101,33 @@ func NewDatabase(config *Config) (*Database, error) {
 	}
 
 	// Set connection pool settings
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
+	db.SetMaxOpenConns(50)
+	db.SetMaxIdleConns(10)
 	db.SetConnMaxLifetime(5 * time.Minute)
-
+	db.SetConnMaxIdleTime(2 * time.Minute)
 	return &Database{db}, nil
 }
 
-func (db *Database) InitializeSchema() error {
-	schema := `
-	CREATE TABLE IF NOT EXISTS locations (
-		id SERIAL PRIMARY KEY,
-		device_id VARCHAR(255) NOT NULL,
-		latitude DECIMAL(10, 8) NOT NULL,
-		longitude DECIMAL(11, 8) NOT NULL,
-		timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
-		created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-	);
+func (db *Database) InitializeSchema(prefix string) error {
+	tableName := "locations"
+	if prefix != "" {
+		tableName = prefix + "_locations"
+	}
 
-	CREATE INDEX IF NOT EXISTS idx_locations_timestamp ON locations(timestamp DESC);
-	CREATE INDEX IF NOT EXISTS idx_locations_device_timestamp ON locations(device_id, timestamp DESC);
-	CREATE INDEX IF NOT EXISTS idx_locations_timestamp_range ON locations(timestamp);
-	`
+	schema := fmt.Sprintf(`
+    CREATE TABLE IF NOT EXISTS %s (
+        id SERIAL PRIMARY KEY,
+        device_id VARCHAR(255) NOT NULL,
+        latitude DECIMAL(10, 8) NOT NULL,
+        longitude DECIMAL(11, 8) NOT NULL,
+        timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_%s_timestamp ON %s(timestamp DESC);
+    CREATE INDEX IF NOT EXISTS idx_%s_device_timestamp ON %s(device_id, timestamp DESC);
+    CREATE INDEX IF NOT EXISTS idx_%s_timestamp_range ON %s(timestamp);
+    `, tableName, tableName, tableName, tableName, tableName, tableName, tableName)
 
 	_, err := db.Exec(schema)
 	return err
@@ -211,9 +237,9 @@ func (h *WebSocketHub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 			h.unregister <- conn
 		}()
 
-		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		conn.SetReadDeadline(time.Now().Add(90 * time.Second))
 		conn.SetPongHandler(func(string) error {
-			conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+			conn.SetReadDeadline(time.Now().Add(90 * time.Second))
 			return nil
 		})
 
@@ -252,23 +278,25 @@ func (h *WebSocketHub) Broadcast(data interface{}) {
 	}
 }
 
-// UDP Sniffer - simplified without leader election
+// UDP Sniffer with encryption support
 type UDPSniffer struct {
-	db    *Database
-	wsHub *WebSocketHub
-	port  string
+	db          *Database
+	wsHub       *WebSocketHub
+	port        string
+	tablePrefix string
 }
 
-func NewUDPSniffer(db *Database, wsHub *WebSocketHub, port string) *UDPSniffer {
+func NewUDPSniffer(db *Database, wsHub *WebSocketHub, port string, tablePrefix string) *UDPSniffer {
 	return &UDPSniffer{
-		db:    db,
-		wsHub: wsHub,
-		port:  port,
+		db:          db,
+		wsHub:       wsHub,
+		port:        port,
+		tablePrefix: tablePrefix,
 	}
 }
 
 func (us *UDPSniffer) Run(ctx context.Context) {
-	log.Println("Starting UDP sniffer service")
+	log.Println("Starting UDP sniffer service with AES-128-CBC encryption")
 
 	addr, err := net.ResolveUDPAddr("udp", ":"+us.port)
 	if err != nil {
@@ -283,7 +311,7 @@ func (us *UDPSniffer) Run(ctx context.Context) {
 	}
 	defer conn.Close()
 
-	log.Printf("Started UDP listening on port %s", us.port)
+	log.Printf("Started UDP listening on port %s (encrypted mode)", us.port)
 
 	for {
 		select {
@@ -291,9 +319,8 @@ func (us *UDPSniffer) Run(ctx context.Context) {
 			return
 		default:
 			conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-			buffer := make([]byte, 1024)
+			buffer := make([]byte, 2048)
 			n, addr, err := conn.ReadFromUDP(buffer)
-
 			if err != nil {
 				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 					continue // Timeout is expected
@@ -302,22 +329,100 @@ func (us *UDPSniffer) Run(ctx context.Context) {
 				continue
 			}
 
-			// ✅ Always log raw packet content
-			raw := string(buffer[:n])
-			log.Printf("Received raw UDP packet from %s: %s", addr, raw)
+			log.Printf("Received encrypted packet from %s: %d bytes", addr, n)
 
-			packet := us.parsePacket(buffer[:n])
+			// Intentar descifrar el paquete
+			plaintext, err := us.decryptPacket(buffer[:n])
+			if err != nil {
+				log.Printf("❌ Failed to decrypt packet from %s: %v", addr, err)
+				continue
+			}
+
+			log.Printf("✓ Decrypted message: %s", plaintext)
+
+			// Parsear el mensaje descifrado
+			packet := us.parsePacket([]byte(plaintext))
 			if packet != nil {
 				if err := us.storeLocation(packet); err != nil {
 					log.Printf("Error storing location: %v", err)
 				} else {
 					us.wsHub.Broadcast(packet)
-					log.Printf("Processed location packet from %s: Device=%s, Lat=%.6f, Lng=%.6f",
+					log.Printf("✓ Processed secure location from %s: Device=%s, Lat=%.6f, Lng=%.6f",
 						addr, packet.DeviceID, packet.Latitude, packet.Longitude)
 				}
 			}
 		}
 	}
+}
+
+// Nueva función para descifrar paquetes
+func (us *UDPSniffer) decryptPacket(data []byte) (string, error) {
+	// Estructura del paquete: IV(16) + Encrypted(variable) + HMAC(32)
+
+	if len(data) < 64 { // Mínimo: 16 (IV) + 16 (1 bloque) + 32 (HMAC)
+		return "", fmt.Errorf("packet too short: %d bytes", len(data))
+	}
+
+	// Extraer componentes
+	iv := data[:16]
+	encryptedLen := len(data) - 48 // Total - IV - HMAC
+	encrypted := data[16 : 16+encryptedLen]
+	receivedHMAC := data[len(data)-32:]
+
+	// Verificar HMAC
+	expectedHMAC := calculateHMAC(encrypted, iv)
+	if !hmac.Equal(receivedHMAC, expectedHMAC) {
+		return "", fmt.Errorf("HMAC verification failed - unauthorized packet")
+	}
+
+	log.Printf("  ✓ HMAC verified successfully")
+
+	// Descifrar con AES-128-CBC
+	block, err := aes.NewCipher(AES_KEY)
+	if err != nil {
+		return "", fmt.Errorf("failed to create cipher: %w", err)
+	}
+
+	mode := cipher.NewCBCDecrypter(block, iv)
+	plaintext := make([]byte, len(encrypted))
+	mode.CryptBlocks(plaintext, encrypted)
+
+	// Remover padding PKCS7
+	plaintext, err = removePKCS7Padding(plaintext)
+	if err != nil {
+		return "", fmt.Errorf("failed to remove padding: %w", err)
+	}
+
+	return string(plaintext), nil
+}
+
+// Calcular HMAC-SHA256
+func calculateHMAC(data, iv []byte) []byte {
+	h := hmac.New(sha256.New, HMAC_KEY)
+	h.Write(iv)
+	h.Write(data)
+	return h.Sum(nil)
+}
+
+// Remover padding PKCS7
+func removePKCS7Padding(data []byte) ([]byte, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("empty data")
+	}
+
+	paddingLen := int(data[len(data)-1])
+	if paddingLen > len(data) || paddingLen == 0 {
+		return nil, fmt.Errorf("invalid padding length: %d", paddingLen)
+	}
+
+	// Verificar que el padding sea válido
+	for i := 0; i < paddingLen; i++ {
+		if data[len(data)-1-i] != byte(paddingLen) {
+			return nil, fmt.Errorf("invalid PKCS7 padding")
+		}
+	}
+
+	return data[:len(data)-paddingLen], nil
 }
 
 func (us *UDPSniffer) parsePacket(data []byte) *LocationPacket {
@@ -349,30 +454,35 @@ func (us *UDPSniffer) parsePacket(data []byte) *LocationPacket {
 	}
 }
 
-// store location
-
 func (us *UDPSniffer) storeLocation(packet *LocationPacket) error {
-	query := `
-		INSERT INTO locations (device_id, latitude, longitude, timestamp)
-		VALUES ($1, $2, $3, $4)
-	`
+	tableName := "locations"
+	if us.tablePrefix != "" {
+		tableName = us.tablePrefix + "_locations"
+	}
+
+	query := fmt.Sprintf(`
+        INSERT INTO %s (device_id, latitude, longitude, timestamp)
+        VALUES ($1, $2, $3, $4)
+    `, tableName)
 	_, err := us.db.Exec(query, packet.DeviceID, packet.Latitude, packet.Longitude, packet.Timestamp)
 	return err
 }
 
 // API Server - enhanced with historical endpoints
 type APIServer struct {
-	db     *Database
-	wsHub  *WebSocketHub
-	server *http.Server
-	port   string
+	db          *Database
+	wsHub       *WebSocketHub
+	server      *http.Server
+	port        string
+	tablePrefix string
 }
 
-func NewAPIServer(db *Database, wsHub *WebSocketHub, port string) *APIServer {
+func NewAPIServer(db *Database, wsHub *WebSocketHub, port string, tablePrefix string) *APIServer {
 	return &APIServer{
-		db:    db,
-		wsHub: wsHub,
-		port:  port,
+		db:          db,
+		wsHub:       wsHub,
+		port:        port,
+		tablePrefix: tablePrefix,
 		server: &http.Server{
 			Addr:         ":" + port,
 			ReadTimeout:  15 * time.Second,
@@ -385,13 +495,15 @@ func (api *APIServer) Run(ctx context.Context) {
 	r := mux.NewRouter()
 
 	// API routes
+	r.HandleFunc("/api/devices", api.activeDevicesHandler).Methods("GET")
 	r.HandleFunc("/api/health", api.healthHandler).Methods("GET")
 	r.HandleFunc("/api/health/db", api.dbHealthHandler).Methods("GET")
-	r.HandleFunc("/api/stats", api.statsHandler).Methods("GET")
 	r.HandleFunc("/api/locations/latest", api.latestLocationHandler).Methods("GET")
 	r.HandleFunc("/api/locations/history", api.locationHistoryHandler).Methods("GET")
-	r.HandleFunc("/api/locations/range", api.locationRangeHandler).Methods("GET") // New endpoint
+	r.HandleFunc("/api/locations/range", api.locationRangeHandler).Methods("GET")
+	r.HandleFunc("/api/locations/nearby", api.locationNearbyHandler).Methods("GET")
 	r.HandleFunc("/api/locations/device/{deviceId}", api.deviceLocationHistoryHandler).Methods("GET")
+	r.HandleFunc("/api/stats", api.statsHandler).Methods("GET")
 	r.HandleFunc("/ws", api.wsHub.HandleWebSocket)
 
 	// Static files
@@ -462,21 +574,26 @@ func (api *APIServer) dbHealthHandler(w http.ResponseWriter, r *http.Request) {
 func (api *APIServer) statsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	tableName := "locations"
+	if api.tablePrefix != "" {
+		tableName = api.tablePrefix + "_locations"
+	}
+
 	var totalLocations int
 	var activeDevices int
 	var lastUpdate sql.NullTime
 
-	err := api.db.QueryRow("SELECT COUNT(*) FROM locations").Scan(&totalLocations)
+	err := api.db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", tableName)).Scan(&totalLocations)
 	if err != nil {
 		log.Printf("Error counting locations: %v", err)
 	}
 
-	err = api.db.QueryRow("SELECT COUNT(DISTINCT device_id) FROM locations").Scan(&activeDevices)
+	err = api.db.QueryRow(fmt.Sprintf("SELECT COUNT(DISTINCT device_id) FROM %s", tableName)).Scan(&activeDevices)
 	if err != nil {
 		log.Printf("Error counting active devices: %v", err)
 	}
 
-	err = api.db.QueryRow("SELECT MAX(timestamp) FROM locations").Scan(&lastUpdate)
+	err = api.db.QueryRow(fmt.Sprintf("SELECT MAX(timestamp) FROM %s", tableName)).Scan(&lastUpdate)
 	if err != nil {
 		log.Printf("Error getting last update: %v", err)
 	}
@@ -497,12 +614,17 @@ func (api *APIServer) statsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *APIServer) latestLocationHandler(w http.ResponseWriter, r *http.Request) {
-	query := `
+	tableName := "locations"
+	if api.tablePrefix != "" {
+		tableName = api.tablePrefix + "_locations"
+	}
+
+	query := fmt.Sprintf(`
 		SELECT device_id, latitude, longitude, timestamp
-		FROM locations
+		FROM %s
 		ORDER BY timestamp DESC
 		LIMIT 1
-	`
+	`, tableName)
 
 	var location LocationPacket
 	err := api.db.QueryRow(query).Scan(&location.DeviceID, &location.Latitude, &location.Longitude, &location.Timestamp)
@@ -532,12 +654,17 @@ func (api *APIServer) locationHistoryHandler(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	query := `
+	tableName := "locations"
+	if api.tablePrefix != "" {
+		tableName = api.tablePrefix + "_locations"
+	}
+
+	query := fmt.Sprintf(`
 		SELECT device_id, latitude, longitude, timestamp
-		FROM locations
+		FROM %s
 		ORDER BY timestamp DESC
 		LIMIT $1
-	`
+	`, tableName)
 
 	rows, err := api.db.Query(query, limitInt)
 	if err != nil {
@@ -563,15 +690,18 @@ func (api *APIServer) locationHistoryHandler(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	if locations == nil {
+		locations = []LocationPacket{}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(locations)
 }
 
-// New handler for historical time range queries
 func (api *APIServer) locationRangeHandler(w http.ResponseWriter, r *http.Request) {
 	startTimeStr := r.URL.Query().Get("start")
 	endTimeStr := r.URL.Query().Get("end")
-	deviceID := r.URL.Query().Get("device")
+	deviceIDs := r.URL.Query()["device"]
 
 	if startTimeStr == "" || endTimeStr == "" {
 		http.Error(w, "start and end parameters are required", http.StatusBadRequest)
@@ -595,33 +725,43 @@ func (api *APIServer) locationRangeHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Limit the time range to prevent huge queries
-	maxDuration := 30 * 24 * time.Hour // 30 days
+	maxDuration := 365 * 24 * time.Hour
 	if endTime.Sub(startTime) > maxDuration {
-		http.Error(w, "Time range too large, maximum 30 days", http.StatusBadRequest)
+		http.Error(w, "Time range too large, maximum 365 days", http.StatusBadRequest)
 		return
+	}
+
+	tableName := "locations"
+	if api.tablePrefix != "" {
+		tableName = api.tablePrefix + "_locations"
 	}
 
 	var query string
 	var args []interface{}
 
-	if deviceID != "" {
-		query = `
+	if len(deviceIDs) > 0 {
+		placeholders := make([]string, len(deviceIDs))
+		args = append(args, startTime, endTime)
+		for i, deviceID := range deviceIDs {
+			placeholders[i] = fmt.Sprintf("$%d", i+3)
+			args = append(args, deviceID)
+		}
+
+		query = fmt.Sprintf(`
 			SELECT device_id, latitude, longitude, timestamp
-			FROM locations
-			WHERE timestamp >= $1 AND timestamp <= $2 AND device_id = $3
+			FROM %s
+			WHERE timestamp >= $1 AND timestamp <= $2 AND device_id IN (%s)
 			ORDER BY timestamp DESC
 			LIMIT 1000
-		`
-		args = []interface{}{startTime, endTime, deviceID}
+		`, tableName, strings.Join(placeholders, ","))
 	} else {
-		query = `
+		query = fmt.Sprintf(`
 			SELECT device_id, latitude, longitude, timestamp
-			FROM locations
+			FROM %s
 			WHERE timestamp >= $1 AND timestamp <= $2
 			ORDER BY timestamp DESC
 			LIMIT 1000
-		`
+		`, tableName)
 		args = []interface{}{startTime, endTime}
 	}
 
@@ -648,9 +788,188 @@ func (api *APIServer) locationRangeHandler(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
+	if locations == nil {
+		locations = []LocationPacket{}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(locations)
+}
+
+func (api *APIServer) locationNearbyHandler(w http.ResponseWriter, r *http.Request) {
+	latStr := r.URL.Query().Get("lat")
+	lngStr := r.URL.Query().Get("lng")
+	radiusStr := r.URL.Query().Get("radius")
+	deviceIDs := r.URL.Query()["device"]
+
+	if latStr == "" || lngStr == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "lat and lng parameters are required",
+		})
+		return
+	}
+
+	lat, err := strconv.ParseFloat(latStr, 64)
+	if err != nil || lat < -90 || lat > 90 {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Invalid latitude",
+		})
+		return
+	}
+
+	lng, err := strconv.ParseFloat(lngStr, 64)
+	if err != nil || lng < -180 || lng > 180 {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Invalid longitude",
+		})
+		return
+	}
+
+	radius := 0.5
+	if radiusStr != "" {
+		radius, err = strconv.ParseFloat(radiusStr, 64)
+		if err != nil || radius <= 0 || radius > 50 {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{
+				"error": "Invalid radius (must be between 0 and 50 km)",
+			})
+			return
+		}
+	}
+
+	tableName := "locations"
+	if api.tablePrefix != "" {
+		tableName = api.tablePrefix + "_locations"
+	}
+
+	var query string
+	var args []interface{}
+
+	if len(deviceIDs) > 0 {
+		placeholders := make([]string, len(deviceIDs))
+		args = append(args, lat, lng, radius)
+		for i, deviceID := range deviceIDs {
+			placeholders[i] = fmt.Sprintf("$%d", i+4)
+			args = append(args, deviceID)
+		}
+
+		query = fmt.Sprintf(`
+			SELECT device_id, latitude, longitude, timestamp,
+			       (6371 * acos(
+			           cos(radians($1)) * cos(radians(latitude)) *
+			           cos(radians(longitude) - radians($2)) +
+			           sin(radians($1)) * sin(radians(latitude))
+			       )) AS distance
+			FROM %s
+			WHERE (6371 * acos(
+			    cos(radians($1)) * cos(radians(latitude)) *
+			    cos(radians(longitude) - radians($2)) +
+			    sin(radians($1)) * sin(radians(latitude))
+			)) <= $3
+			AND device_id IN (%s)
+			ORDER BY timestamp DESC
+			LIMIT 1000
+		`, tableName, strings.Join(placeholders, ","))
+	} else {
+		query = fmt.Sprintf(`
+			SELECT device_id, latitude, longitude, timestamp,
+			       (6371 * acos(
+			           cos(radians($1)) * cos(radians(latitude)) *
+			           cos(radians(longitude) - radians($2)) +
+			           sin(radians($1)) * sin(radians(latitude))
+			       )) AS distance
+			FROM %s
+			WHERE (6371 * acos(
+			    cos(radians($1)) * cos(radians(latitude)) *
+			    cos(radians(longitude) - radians($2)) +
+			    sin(radians($1)) * sin(radians(latitude))
+			)) <= $3
+			ORDER BY timestamp DESC
+			LIMIT 1000
+		`, tableName)
+		args = []interface{}{lat, lng, radius}
+	}
+
+	rows, err := api.db.Query(query, args...)
+	if err != nil {
+		log.Printf("Database query error: %v", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var locations []LocationPacket
+	for rows.Next() {
+		var location LocationPacket
+		var distance float64
+		if err := rows.Scan(&location.DeviceID, &location.Latitude, &location.Longitude, &location.Timestamp, &distance); err != nil {
+			log.Printf("Row scan error: %v", err)
+			continue
+		}
+		locations = append(locations, location)
+	}
+
+	if err = rows.Err(); err != nil {
+		log.Printf("Rows iteration error: %v", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(locations)
+}
+
+func (api *APIServer) activeDevicesHandler(w http.ResponseWriter, r *http.Request) {
+	tableName := "locations"
+	if api.tablePrefix != "" {
+		tableName = api.tablePrefix + "_locations"
+	}
+
+	query := fmt.Sprintf(`
+        SELECT DISTINCT device_id, 
+               MAX(timestamp) as last_seen,
+               COUNT(*) as location_count
+        FROM %s
+        GROUP BY device_id
+        ORDER BY last_seen DESC
+    `, tableName)
+
+	rows, err := api.db.Query(query)
+	if err != nil {
+		log.Printf("Database query error: %v", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	type DeviceInfo struct {
+		DeviceID      string    `json:"device_id"`
+		LastSeen      time.Time `json:"last_seen"`
+		LocationCount int       `json:"location_count"`
+	}
+
+	var devices []DeviceInfo
+	for rows.Next() {
+		var device DeviceInfo
+		if err := rows.Scan(&device.DeviceID, &device.LastSeen, &device.LocationCount); err != nil {
+			log.Printf("Row scan error: %v", err)
+			continue
+		}
+		devices = append(devices, device)
+	}
+
+	if err = rows.Err(); err != nil {
+		log.Printf("Rows iteration error: %v", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if devices == nil {
+		devices = []DeviceInfo{}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(devices)
 }
 
 func (api *APIServer) deviceLocationHistoryHandler(w http.ResponseWriter, r *http.Request) {
@@ -667,20 +986,24 @@ func (api *APIServer) deviceLocationHistoryHandler(w http.ResponseWriter, r *htt
 		limit = "50"
 	}
 
-	// Validate limit
 	limitInt, err := strconv.Atoi(limit)
 	if err != nil || limitInt <= 0 || limitInt > 1000 {
 		http.Error(w, "Invalid limit parameter", http.StatusBadRequest)
 		return
 	}
 
-	query := `
+	tableName := "locations"
+	if api.tablePrefix != "" {
+		tableName = api.tablePrefix + "_locations"
+	}
+
+	query := fmt.Sprintf(`
 		SELECT device_id, latitude, longitude, timestamp
-		FROM locations
+		FROM %s
 		WHERE device_id = $1
 		ORDER BY timestamp DESC
 		LIMIT $2
-	`
+	`, tableName)
 
 	rows, err := api.db.Query(query, deviceId, limitInt)
 	if err != nil {
@@ -706,6 +1029,9 @@ func (api *APIServer) deviceLocationHistoryHandler(w http.ResponseWriter, r *htt
 		return
 	}
 
+	if locations == nil {
+		locations = []LocationPacket{}
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(locations)
 }
@@ -723,7 +1049,7 @@ func NewApp() (*App, error) {
 	config := loadConfig()
 
 	if config.LogFile != "" {
-		f, err := os.OpenFile(config.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		f, err := os.OpenFile(config.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 		if err != nil {
 			log.Printf("Failed to open log file %s: %v", config.LogFile, err)
 		} else {
@@ -737,13 +1063,13 @@ func NewApp() (*App, error) {
 		return nil, fmt.Errorf("failed to initialize database: %w", err)
 	}
 
-	if err := db.InitializeSchema(); err != nil {
+	if err := db.InitializeSchema(config.TablePrefix); err != nil {
 		return nil, fmt.Errorf("failed to initialize database schema: %w", err)
 	}
 
 	wsHub := NewWebSocketHub()
-	udpSniffer := NewUDPSniffer(db, wsHub, config.UDPPort)
-	apiServer := NewAPIServer(db, wsHub, config.Port)
+	udpSniffer := NewUDPSniffer(db, wsHub, config.UDPPort, config.TablePrefix)
+	apiServer := NewAPIServer(db, wsHub, config.Port, config.TablePrefix)
 
 	return &App{
 		config:     config,
@@ -757,6 +1083,10 @@ func NewApp() (*App, error) {
 func (app *App) Run() error {
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
+
+	log.Println("===========================================")
+	log.Println("  GPS Tracker Server with AES Encryption")
+	log.Println("===========================================")
 
 	// Start WebSocket hub
 	wg.Add(1)
