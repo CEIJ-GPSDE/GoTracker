@@ -26,21 +26,25 @@ import (
 )
 
 // ========== CONFIGURACIÓN DE ENCRIPTACIÓN ==========
-// La misma clave AES-128 que en el ESP32 (16 bytes en hexadecimal)
-const AES_KEY_HEX = "2b7e151628aed2a6abf7158809cf4f3c"
-
+// La clave AES-128 se lee desde variable de entorno
 var aesKey []byte
 
 func initEncryption() error {
+	// Leer la clave desde variable de entorno
+	aesKeyHex := os.Getenv("AES_KEY")
+	if aesKeyHex == "" {
+		return fmt.Errorf("AES_KEY requerida pero no encontrada")
+	}
+
 	var err error
-	aesKey, err = hex.DecodeString(AES_KEY_HEX)
+	aesKey, err = hex.DecodeString(aesKeyHex)
 	if err != nil {
 		return fmt.Errorf("error decodificando clave AES: %w", err)
 	}
 	if len(aesKey) != 16 {
 		return fmt.Errorf("la clave AES debe ser de 16 bytes, obtenido: %d", len(aesKey))
 	}
-	log.Printf("✓ Clave AES-128-GCM inicializada correctamente")
+	log.Printf("✅ Clave AES-128-GCM inicializada correctamente")
 	return nil
 }
 
