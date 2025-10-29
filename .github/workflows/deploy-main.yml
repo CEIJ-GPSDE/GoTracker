@@ -430,7 +430,7 @@ jobs:
               -e UDP_PORT=5051 \
               -e DOMAIN="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}" \
               -e AUTO_TLS=false \
-              -e AES_KEY="${{ secrets.AES_ENCRYPTION_KEY }}" \  
+              -e AES_KEY="${{ secrets.AES_ENCRYPTION_KEY }}" \
               location-tracker:main
 
             echo "Waiting for container to start..."
