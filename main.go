@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -21,6 +24,67 @@ import (
 	"github.com/gorilla/websocket"
 	_ "github.com/lib/pq"
 )
+
+// ========== CONFIGURACIÓN DE ENCRIPTACIÓN ==========
+// La misma clave AES-128 que en el ESP32 (16 bytes en hexadecimal)
+const AES_KEY_HEX = "2b7e151628aed2a6abf7158809cf4f3c"
+
+var aesKey []byte
+
+func initEncryption() error {
+	var err error
+	aesKey, err = hex.DecodeString(AES_KEY_HEX)
+	if err != nil {
+		return fmt.Errorf("error decodificando clave AES: %w", err)
+	}
+	if len(aesKey) != 16 {
+		return fmt.Errorf("la clave AES debe ser de 16 bytes, obtenido: %d", len(aesKey))
+	}
+	log.Printf("✓ Clave AES-128-GCM inicializada correctamente")
+	return nil
+}
+
+// Descifra un paquete AES-GCM
+// Formato esperado: [IV(12 bytes)] + [Ciphertext(N bytes)] + [Tag(16 bytes)]
+func decryptPacket(encryptedData []byte) ([]byte, error) {
+	// Validar tamaño mínimo: IV(12) + Tag(16) = 28 bytes
+	if len(encryptedData) < 28 {
+		return nil, fmt.Errorf("paquete demasiado pequeño: %d bytes (mínimo 28)", len(encryptedData))
+	}
+
+	// Extraer componentes
+	iv := encryptedData[:12]
+	tag := encryptedData[len(encryptedData)-16:]
+	ciphertext := encryptedData[12 : len(encryptedData)-16]
+
+	log.Printf("Descifrando: IV=%d bytes, Ciphertext=%d bytes, Tag=%d bytes",
+		len(iv), len(ciphertext), len(tag))
+
+	// Crear cipher AES
+	block, err := aes.NewCipher(aesKey)
+	if err != nil {
+		return nil, fmt.Errorf("error creando cipher AES: %w", err)
+	}
+
+	// Crear GCM
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("error creando GCM: %w", err)
+	}
+
+	// Combinar ciphertext + tag para Open
+	combined := append(ciphertext, tag...)
+
+	// Descifrar
+	plaintext, err := aesgcm.Open(nil, iv, combined, nil)
+	if err != nil {
+		return nil, fmt.Errorf("error descifrando (tag inválido o datos corruptos): %w", err)
+	}
+
+	return plaintext, nil
+}
+
+// ========== RESTO DEL CÓDIGO ORIGINAL ==========
 
 // Configuration from environment variables
 type Config struct {
@@ -45,7 +109,7 @@ func loadConfig() *Config {
 		DBPassword:  getEnv("DB_PASSWORD", "password"),
 		DBSSLMode:   getEnv("DB_SSLMODE", "disable"),
 		Port:        getEnv("PORT", "80"),
-		UDPPort:     getEnv("UDP_PORT", "5051"),
+		UDPPort:     getEnv("UDP_PORT", "5052"), // ✅ Cambiado a 5052 para coincidir con ESP32
 		LogFile:     getEnv("LOG_FILE", ""),
 		CertFile:    getEnv("CERT_FILE", "certs/server.crt"),
 		KeyFile:     getEnv("KEY_FILE", "certs/server.key"),
@@ -69,7 +133,7 @@ func NewDatabase(config *Config) (*Database, error) {
 	connStr := fmt.Sprintf(
 		"host=%s user=%s password=%s dbname=%s sslmode=%s",
 		config.DBHost, config.DBUser, config.DBPassword,
-		config.DBName, getEnv("DB_SSLMODE", "require"),
+		config.DBName, config.DBSSLMode,
 	)
 
 	db, err := sql.Open("postgres", connStr)
@@ -259,7 +323,7 @@ func (h *WebSocketHub) Broadcast(data interface{}) {
 	}
 }
 
-// UDP Sniffer - simplified without leader election
+// UDP Sniffer - MODIFICADO PARA DESCIFRADO
 type UDPSniffer struct {
 	db          *Database
 	wsHub       *WebSocketHub
@@ -277,7 +341,7 @@ func NewUDPSniffer(db *Database, wsHub *WebSocketHub, port string, tablePrefix s
 }
 
 func (us *UDPSniffer) Run(ctx context.Context) {
-	log.Println("Starting UDP sniffer service")
+	log.Println("Starting UDP sniffer service with AES-GCM decryption")
 
 	addr, err := net.ResolveUDPAddr("udp", ":"+us.port)
 	if err != nil {
@@ -292,7 +356,7 @@ func (us *UDPSniffer) Run(ctx context.Context) {
 	}
 	defer conn.Close()
 
-	log.Printf("Started UDP listening on port %s", us.port)
+	log.Printf("✓ UDP listening on port %s (AES-GCM encrypted)", us.port)
 
 	for {
 		select {
@@ -310,18 +374,28 @@ func (us *UDPSniffer) Run(ctx context.Context) {
 				continue
 			}
 
-			// ✅ Always log raw packet content
-			raw := string(buffer[:n])
-			log.Printf("Received raw UDP packet from %s: %s", addr, raw)
+			// ✅ Log del paquete encriptado recibido
+			log.Printf("📦 Received encrypted packet from %s (%d bytes)", addr, n)
+			log.Printf("   Hex: %s", hex.EncodeToString(buffer[:n]))
 
-			packet := us.parsePacket(buffer[:n])
+			// ✅ Descifrar el paquete
+			plaintext, err := decryptPacket(buffer[:n])
+			if err != nil {
+				log.Printf("❌ Decryption failed: %v", err)
+				continue
+			}
+
+			log.Printf("✓ Decrypted: %s", string(plaintext))
+
+			// ✅ Parsear el mensaje descifrado
+			packet := us.parsePacket(plaintext)
 			if packet != nil {
 				if err := us.storeLocation(packet); err != nil {
 					log.Printf("Error storing location: %v", err)
 				} else {
 					us.wsHub.Broadcast(packet)
-					log.Printf("Processed location packet from %s: Device=%s, Lat=%.6f, Lng=%.6f",
-						addr, packet.DeviceID, packet.Latitude, packet.Longitude)
+					log.Printf("✓ Stored location: Device=%s, Lat=%.6f, Lng=%.6f",
+						packet.DeviceID, packet.Latitude, packet.Longitude)
 				}
 			}
 		}
@@ -332,7 +406,7 @@ func (us *UDPSniffer) parsePacket(data []byte) *LocationPacket {
 	parts := strings.TrimSpace(string(data))
 	fields := strings.Split(parts, ",")
 	if len(fields) != 3 {
-		log.Printf("Invalid UDP packet format: %s", parts)
+		log.Printf("Invalid packet format: %s", parts)
 		return nil
 	}
 
@@ -340,7 +414,7 @@ func (us *UDPSniffer) parsePacket(data []byte) *LocationPacket {
 	lat, err1 := strconv.ParseFloat(fields[1], 64)
 	lng, err2 := strconv.ParseFloat(fields[2], 64)
 	if err1 != nil || err2 != nil {
-		log.Printf("Invalid coordinates in UDP packet: %s", parts)
+		log.Printf("Invalid coordinates: %s", parts)
 		return nil
 	}
 
@@ -371,7 +445,7 @@ func (us *UDPSniffer) storeLocation(packet *LocationPacket) error {
 	return err
 }
 
-// API Server - enhanced with historical endpoints
+// API Server - SIN CAMBIOS
 type APIServer struct {
 	db          *Database
 	wsHub       *WebSocketHub
@@ -385,7 +459,7 @@ func NewAPIServer(db *Database, wsHub *WebSocketHub, port string, tablePrefix st
 		db:          db,
 		wsHub:       wsHub,
 		port:        port,
-		tablePrefix: tablePrefix, // ADD THIS LINE
+		tablePrefix: tablePrefix,
 		server: &http.Server{
 			Addr:         ":" + port,
 			ReadTimeout:  15 * time.Second,
@@ -403,7 +477,7 @@ func (api *APIServer) Run(ctx context.Context) {
 	r.HandleFunc("/api/health/db", api.dbHealthHandler).Methods("GET")
 	r.HandleFunc("/api/locations/latest", api.latestLocationHandler).Methods("GET")
 	r.HandleFunc("/api/locations/history", api.locationHistoryHandler).Methods("GET")
-	r.HandleFunc("/api/locations/range", api.locationRangeHandler).Methods("GET") // New endpoint
+	r.HandleFunc("/api/locations/range", api.locationRangeHandler).Methods("GET")
 	r.HandleFunc("/api/locations/nearby", api.locationNearbyHandler).Methods("GET")
 	r.HandleFunc("/api/locations/device/{deviceId}", api.deviceLocationHistoryHandler).Methods("GET")
 	r.HandleFunc("/api/stats", api.statsHandler).Methods("GET")
@@ -550,7 +624,6 @@ func (api *APIServer) locationHistoryHandler(w http.ResponseWriter, r *http.Requ
 		limit = "100"
 	}
 
-	// Validate limit
 	limitInt, err := strconv.Atoi(limit)
 	if err != nil || limitInt <= 0 || limitInt > 1000 {
 		http.Error(w, "Invalid limit parameter", http.StatusBadRequest)
@@ -601,11 +674,10 @@ func (api *APIServer) locationHistoryHandler(w http.ResponseWriter, r *http.Requ
 	json.NewEncoder(w).Encode(locations)
 }
 
-// New handler for historical time range queries
 func (api *APIServer) locationRangeHandler(w http.ResponseWriter, r *http.Request) {
 	startTimeStr := r.URL.Query().Get("start")
 	endTimeStr := r.URL.Query().Get("end")
-	deviceIDs := r.URL.Query()["device"] // Get array of device IDs
+	deviceIDs := r.URL.Query()["device"]
 
 	if startTimeStr == "" || endTimeStr == "" {
 		http.Error(w, "start and end parameters are required", http.StatusBadRequest)
@@ -644,7 +716,6 @@ func (api *APIServer) locationRangeHandler(w http.ResponseWriter, r *http.Reques
 	var args []interface{}
 
 	if len(deviceIDs) > 0 {
-		// Build query with multiple device IDs
 		placeholders := make([]string, len(deviceIDs))
 		args = append(args, startTime, endTime)
 		for i, deviceID := range deviceIDs {
@@ -704,7 +775,7 @@ func (api *APIServer) locationNearbyHandler(w http.ResponseWriter, r *http.Reque
 	latStr := r.URL.Query().Get("lat")
 	lngStr := r.URL.Query().Get("lng")
 	radiusStr := r.URL.Query().Get("radius")
-	deviceIDs := r.URL.Query()["device"] // Get array of device IDs
+	deviceIDs := r.URL.Query()["device"]
 
 	if latStr == "" || lngStr == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -732,7 +803,7 @@ func (api *APIServer) locationNearbyHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	radius := 0.5 // default 500m
+	radius := 0.5
 	if radiusStr != "" {
 		radius, err = strconv.ParseFloat(radiusStr, 64)
 		if err != nil || radius <= 0 || radius > 50 {
@@ -753,7 +824,6 @@ func (api *APIServer) locationNearbyHandler(w http.ResponseWriter, r *http.Reque
 	var args []interface{}
 
 	if len(deviceIDs) > 0 {
-		// Build query with device filter
 		placeholders := make([]string, len(deviceIDs))
 		args = append(args, lat, lng, radius)
 		for i, deviceID := range deviceIDs {
@@ -779,7 +849,6 @@ func (api *APIServer) locationNearbyHandler(w http.ResponseWriter, r *http.Reque
 			LIMIT 1000
 		`, tableName, strings.Join(placeholders, ","))
 	} else {
-		// No device filter
 		query = fmt.Sprintf(`
 			SELECT device_id, latitude, longitude, timestamp,
 			       (6371 * acos(
@@ -893,7 +962,6 @@ func (api *APIServer) deviceLocationHistoryHandler(w http.ResponseWriter, r *htt
 		limit = "50"
 	}
 
-	// Validate limit
 	limitInt, err := strconv.Atoi(limit)
 	if err != nil || limitInt <= 0 || limitInt > 1000 {
 		http.Error(w, "Invalid limit parameter", http.StatusBadRequest)
@@ -954,6 +1022,11 @@ type App struct {
 }
 
 func NewApp() (*App, error) {
+	// ✅ Inicializar encriptación primero
+	if err := initEncryption(); err != nil {
+		return nil, fmt.Errorf("failed to initialize encryption: %w", err)
+	}
+
 	config := loadConfig()
 
 	if config.LogFile != "" {
