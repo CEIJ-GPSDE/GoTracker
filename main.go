@@ -2,10 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/hmac"
-	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -24,21 +20,6 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	_ "github.com/lib/pq"
-)
-
-// ===== CLAVES DE CIFRADO (MISMAS QUE EN ESP32) =====
-var (
-	AES_KEY = []byte{
-		0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6,
-		0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c,
-	}
-
-	HMAC_KEY = []byte{
-		0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-		0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
-		0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
-		0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20,
-	}
 )
 
 // Configuration from environment variables
@@ -278,7 +259,7 @@ func (h *WebSocketHub) Broadcast(data interface{}) {
 	}
 }
 
-// UDP Sniffer with encryption support
+// UDP Sniffer - simplified without leader election
 type UDPSniffer struct {
 	db          *Database
 	wsHub       *WebSocketHub
@@ -296,7 +277,7 @@ func NewUDPSniffer(db *Database, wsHub *WebSocketHub, port string, tablePrefix s
 }
 
 func (us *UDPSniffer) Run(ctx context.Context) {
-	log.Println("Starting UDP sniffer service with AES-128-CBC encryption")
+	log.Println("Starting UDP sniffer service")
 
 	addr, err := net.ResolveUDPAddr("udp", ":"+us.port)
 	if err != nil {
@@ -311,7 +292,7 @@ func (us *UDPSniffer) Run(ctx context.Context) {
 	}
 	defer conn.Close()
 
-	log.Printf("Started UDP listening on port %s (encrypted mode)", us.port)
+	log.Printf("Started UDP listening on port %s", us.port)
 
 	for {
 		select {
@@ -319,7 +300,7 @@ func (us *UDPSniffer) Run(ctx context.Context) {
 			return
 		default:
 			conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-			buffer := make([]byte, 2048)
+			buffer := make([]byte, 1024)
 			n, addr, err := conn.ReadFromUDP(buffer)
 			if err != nil {
 				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
@@ -329,100 +310,22 @@ func (us *UDPSniffer) Run(ctx context.Context) {
 				continue
 			}
 
-			log.Printf("Received encrypted packet from %s: %d bytes", addr, n)
+			// ✅ Always log raw packet content
+			raw := string(buffer[:n])
+			log.Printf("Received raw UDP packet from %s: %s", addr, raw)
 
-			// Intentar descifrar el paquete
-			plaintext, err := us.decryptPacket(buffer[:n])
-			if err != nil {
-				log.Printf("❌ Failed to decrypt packet from %s: %v", addr, err)
-				continue
-			}
-
-			log.Printf("✓ Decrypted message: %s", plaintext)
-
-			// Parsear el mensaje descifrado
-			packet := us.parsePacket([]byte(plaintext))
+			packet := us.parsePacket(buffer[:n])
 			if packet != nil {
 				if err := us.storeLocation(packet); err != nil {
 					log.Printf("Error storing location: %v", err)
 				} else {
 					us.wsHub.Broadcast(packet)
-					log.Printf("✓ Processed secure location from %s: Device=%s, Lat=%.6f, Lng=%.6f",
+					log.Printf("Processed location packet from %s: Device=%s, Lat=%.6f, Lng=%.6f",
 						addr, packet.DeviceID, packet.Latitude, packet.Longitude)
 				}
 			}
 		}
 	}
-}
-
-// Nueva función para descifrar paquetes
-func (us *UDPSniffer) decryptPacket(data []byte) (string, error) {
-	// Estructura del paquete: IV(16) + Encrypted(variable) + HMAC(32)
-
-	if len(data) < 64 { // Mínimo: 16 (IV) + 16 (1 bloque) + 32 (HMAC)
-		return "", fmt.Errorf("packet too short: %d bytes", len(data))
-	}
-
-	// Extraer componentes
-	iv := data[:16]
-	encryptedLen := len(data) - 48 // Total - IV - HMAC
-	encrypted := data[16 : 16+encryptedLen]
-	receivedHMAC := data[len(data)-32:]
-
-	// Verificar HMAC
-	expectedHMAC := calculateHMAC(encrypted, iv)
-	if !hmac.Equal(receivedHMAC, expectedHMAC) {
-		return "", fmt.Errorf("HMAC verification failed - unauthorized packet")
-	}
-
-	log.Printf("  ✓ HMAC verified successfully")
-
-	// Descifrar con AES-128-CBC
-	block, err := aes.NewCipher(AES_KEY)
-	if err != nil {
-		return "", fmt.Errorf("failed to create cipher: %w", err)
-	}
-
-	mode := cipher.NewCBCDecrypter(block, iv)
-	plaintext := make([]byte, len(encrypted))
-	mode.CryptBlocks(plaintext, encrypted)
-
-	// Remover padding PKCS7
-	plaintext, err = removePKCS7Padding(plaintext)
-	if err != nil {
-		return "", fmt.Errorf("failed to remove padding: %w", err)
-	}
-
-	return string(plaintext), nil
-}
-
-// Calcular HMAC-SHA256
-func calculateHMAC(data, iv []byte) []byte {
-	h := hmac.New(sha256.New, HMAC_KEY)
-	h.Write(iv)
-	h.Write(data)
-	return h.Sum(nil)
-}
-
-// Remover padding PKCS7
-func removePKCS7Padding(data []byte) ([]byte, error) {
-	if len(data) == 0 {
-		return nil, fmt.Errorf("empty data")
-	}
-
-	paddingLen := int(data[len(data)-1])
-	if paddingLen > len(data) || paddingLen == 0 {
-		return nil, fmt.Errorf("invalid padding length: %d", paddingLen)
-	}
-
-	// Verificar que el padding sea válido
-	for i := 0; i < paddingLen; i++ {
-		if data[len(data)-1-i] != byte(paddingLen) {
-			return nil, fmt.Errorf("invalid PKCS7 padding")
-		}
-	}
-
-	return data[:len(data)-paddingLen], nil
 }
 
 func (us *UDPSniffer) parsePacket(data []byte) *LocationPacket {
@@ -482,7 +385,7 @@ func NewAPIServer(db *Database, wsHub *WebSocketHub, port string, tablePrefix st
 		db:          db,
 		wsHub:       wsHub,
 		port:        port,
-		tablePrefix: tablePrefix,
+		tablePrefix: tablePrefix, // ADD THIS LINE
 		server: &http.Server{
 			Addr:         ":" + port,
 			ReadTimeout:  15 * time.Second,
@@ -500,7 +403,7 @@ func (api *APIServer) Run(ctx context.Context) {
 	r.HandleFunc("/api/health/db", api.dbHealthHandler).Methods("GET")
 	r.HandleFunc("/api/locations/latest", api.latestLocationHandler).Methods("GET")
 	r.HandleFunc("/api/locations/history", api.locationHistoryHandler).Methods("GET")
-	r.HandleFunc("/api/locations/range", api.locationRangeHandler).Methods("GET")
+	r.HandleFunc("/api/locations/range", api.locationRangeHandler).Methods("GET") // New endpoint
 	r.HandleFunc("/api/locations/nearby", api.locationNearbyHandler).Methods("GET")
 	r.HandleFunc("/api/locations/device/{deviceId}", api.deviceLocationHistoryHandler).Methods("GET")
 	r.HandleFunc("/api/stats", api.statsHandler).Methods("GET")
@@ -698,10 +601,11 @@ func (api *APIServer) locationHistoryHandler(w http.ResponseWriter, r *http.Requ
 	json.NewEncoder(w).Encode(locations)
 }
 
+// New handler for historical time range queries
 func (api *APIServer) locationRangeHandler(w http.ResponseWriter, r *http.Request) {
 	startTimeStr := r.URL.Query().Get("start")
 	endTimeStr := r.URL.Query().Get("end")
-	deviceIDs := r.URL.Query()["device"]
+	deviceIDs := r.URL.Query()["device"] // Get array of device IDs
 
 	if startTimeStr == "" || endTimeStr == "" {
 		http.Error(w, "start and end parameters are required", http.StatusBadRequest)
@@ -740,6 +644,7 @@ func (api *APIServer) locationRangeHandler(w http.ResponseWriter, r *http.Reques
 	var args []interface{}
 
 	if len(deviceIDs) > 0 {
+		// Build query with multiple device IDs
 		placeholders := make([]string, len(deviceIDs))
 		args = append(args, startTime, endTime)
 		for i, deviceID := range deviceIDs {
@@ -799,7 +704,7 @@ func (api *APIServer) locationNearbyHandler(w http.ResponseWriter, r *http.Reque
 	latStr := r.URL.Query().Get("lat")
 	lngStr := r.URL.Query().Get("lng")
 	radiusStr := r.URL.Query().Get("radius")
-	deviceIDs := r.URL.Query()["device"]
+	deviceIDs := r.URL.Query()["device"] // Get array of device IDs
 
 	if latStr == "" || lngStr == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -827,7 +732,7 @@ func (api *APIServer) locationNearbyHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	radius := 0.5
+	radius := 0.5 // default 500m
 	if radiusStr != "" {
 		radius, err = strconv.ParseFloat(radiusStr, 64)
 		if err != nil || radius <= 0 || radius > 50 {
@@ -848,6 +753,7 @@ func (api *APIServer) locationNearbyHandler(w http.ResponseWriter, r *http.Reque
 	var args []interface{}
 
 	if len(deviceIDs) > 0 {
+		// Build query with device filter
 		placeholders := make([]string, len(deviceIDs))
 		args = append(args, lat, lng, radius)
 		for i, deviceID := range deviceIDs {
@@ -873,6 +779,7 @@ func (api *APIServer) locationNearbyHandler(w http.ResponseWriter, r *http.Reque
 			LIMIT 1000
 		`, tableName, strings.Join(placeholders, ","))
 	} else {
+		// No device filter
 		query = fmt.Sprintf(`
 			SELECT device_id, latitude, longitude, timestamp,
 			       (6371 * acos(
@@ -986,6 +893,7 @@ func (api *APIServer) deviceLocationHistoryHandler(w http.ResponseWriter, r *htt
 		limit = "50"
 	}
 
+	// Validate limit
 	limitInt, err := strconv.Atoi(limit)
 	if err != nil || limitInt <= 0 || limitInt > 1000 {
 		http.Error(w, "Invalid limit parameter", http.StatusBadRequest)
@@ -1083,10 +991,6 @@ func NewApp() (*App, error) {
 func (app *App) Run() error {
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
-
-	log.Println("===========================================")
-	log.Println("  GPS Tracker Server with AES Encryption")
-	log.Println("===========================================")
 
 	// Start WebSocket hub
 	wg.Add(1)
