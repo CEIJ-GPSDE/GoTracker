@@ -430,7 +430,7 @@ jobs:
               -e DISABLE_TLS=true \
               -e BASE_PATH="/test" \
               -e TABLE_PREFIX="${safe_branch}" \
-              -e AES_KEY="${{ secrets.AES_ENCRYPTION_KEY }}" \ 
+              -e AES_KEY="${{ secrets.AES_ENCRYPTION_KEY }}" \
               location-tracker:${safe_branch}
 
             echo "Waiting for container to start..."
