@@ -41,17 +41,11 @@
             <span>Connecting...</span>
           </div>
         </div>
-        <!-- Device Legend -->
-        <div class="device-legend" id="device-legend">
-          <h4>
-            📱 Devices
-            <span id="device-count" style="font-size: 12px; font-weight: normal; color: #6b7280;">0</span>
-          </h4>
-          <div id="legend-items"></div>
-        </div>
+        
         <div class="time-filter-indicator" id="time-filter-indicator">
           <div id="time-filter-text">-</div>
         </div>
+        
         <div class="map-controls">
           <button id="track-latest-btn" class="track-btn enabled">
             <div class="track-icon"></div>
@@ -62,18 +56,46 @@
             <span>📅</span>
             <span>History Mode</span>
           </button>
+          <!-- Change Filter button - only visible when in history mode with active filter -->
+          <button id="change-filter-btn" class="history-btn"
+            style="display: none; background: linear-gradient(135deg, #f59e0b, #d97706);">
+            <span>🔄</span>
+            <span>Change Filter</span>
+          </button>
           <!-- Live Mode button - only visible when in history mode -->
           <button id="live-mode-btn" class="history-btn"
             style="display: none; background: linear-gradient(135deg, #dc2626, #b91c1c);">
             <span>🔴</span>
             <span>Live Mode</span>
           </button>
-          <button id="menu-toggle-btn" class="menu-toggle-btn">
+        </div>
+        
+        <div id="map"></div>
+        
+        <!-- Bottom Right Controls: Device Legend + Menu Button -->
+        <div class="bottom-right-controls">
+          <!-- Device Legend -->
+          <div class="device-legend" id="device-legend">
+            <div class="device-legend-header" onclick="window.locationTracker.toggleDeviceLegend()">
+              <h4>
+                📱 <span id="devices-text">Devices</span>
+                <span id="device-count" style="font-size: 12px; font-weight: normal; color: #6b7280;">0</span>
+              </h4>
+              <button class="device-legend-toggle">▼</button>
+            </div>
+            <div id="legend-items"></div>
+            <button class="center-devices-btn" id="center-devices-btn" onclick="window.locationTracker.centerOnSelectedDevices()">
+              🎯 <span id="center-devices-text">Center on Devices</span>
+            </button>
+          </div>
+          
+          <!-- Menu Button -->
+          <button id="menu-toggle-btn-bottom" class="menu-toggle-btn-bottom">
             <span>⚙️</span>
-            <span>Menu</span>
+            <span id="menu-text">Menu</span>
           </button>
         </div>
-        <div id="map"></div>
+        
         <!-- No Filter Overlay -->
         <div class="no-filter-overlay" id="no-filter-overlay">
           <h3 id="no-filter-title">⚠️ No Time Filter Applied</h3>
@@ -97,10 +119,12 @@
             <span id="empty-results-dismiss-btn">Dismiss</span>
           </button>
         </div>
+        
         <div class="mode-indicator live-mode" id="mode-indicator">
           <div class="mode-indicator-dot"></div>
           <span>🔴 LIVE MODE</span>
         </div>
+        
         <div class="route-legend" id="route-legend" style="display: none;">
           <div style="display: flex; align-items: center; gap: 8px;">
             <div style="width: 12px; height: 12px; background: #10b981; border-radius: 50%; border: 2px solid white;">
@@ -135,12 +159,6 @@
         <div class="tab-content active" id="controls-tab">
           <div class="card">
             <div class="card-body">
-              <div class="device-filter-section">
-                <h4>📱 Filter Devices</h4>
-                <div class="device-filter-list" id="device-filter-list">
-                  <div class="loading">Loading devices...</div>
-                </div>
-              </div>
               <div class="control-group">
                 <label for="history-limit">History Limit:</label>
                 <input type="number" id="history-limit" value="50" min="10" max="500">
