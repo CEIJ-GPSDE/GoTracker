@@ -7,7 +7,7 @@ export class UIManager {
   }
 
   setupPopupMenu() {
-    const menuToggle = document.getElementById('menu-toggle-btn');
+    const menuToggleBottom = document.getElementById('menu-toggle-btn-bottom');
     const popupMenu = document.getElementById('popup-menu');
     const popupClose = document.getElementById('popup-close');
     const historyConfigPopup = document.getElementById('history-config-popup');
@@ -15,7 +15,8 @@ export class UIManager {
     const tabButtons = document.querySelectorAll('.tab-button');
     const tabContents = document.querySelectorAll('.tab-content');
 
-    menuToggle.addEventListener('click', () => {
+    // Menu toggle from bottom button
+    menuToggleBottom.addEventListener('click', () => {
       popupMenu.classList.add('active');
     });
 
@@ -367,7 +368,12 @@ export class UIManager {
 
     document.querySelector('#history-mode-btn span:last-child').textContent = this.tracker.t('historyMode');
     document.querySelector('#live-mode-btn span:last-child').textContent = this.tracker.t('liveMode');
-    document.querySelector('#menu-toggle-btn span:last-child').textContent = this.tracker.t('menu');
+    
+    // Update bottom menu button
+    const menuTextBottom = document.querySelector('#menu-toggle-btn-bottom span:last-child');
+    if (menuTextBottom) {
+      menuTextBottom.textContent = this.tracker.t('menu');
+    }
 
     const modeIndicator = document.getElementById('mode-indicator');
     if (this.tracker.isHistoryMode) {
@@ -434,15 +440,16 @@ export class UIManager {
     if (legendStart) legendStart.textContent = this.tracker.t('legendStart');
     if (legendEnd) legendEnd.textContent = this.tracker.t('legendEnd');
 
-    const deviceLegendTitle = document.querySelector('#device-legend h4');
-    if (deviceLegendTitle) {
-      const countSpan = deviceLegendTitle.querySelector('#device-count');
-      deviceLegendTitle.innerHTML = `📱 ${this.tracker.t('devices')} ${countSpan ? countSpan.outerHTML : ''}`;
+    // Update device legend text
+    const devicesText = document.getElementById('devices-text');
+    if (devicesText) {
+      devicesText.textContent = this.tracker.t('devices');
     }
 
-    const filterDevicesTitle = document.querySelector('#controls-tab .device-filter-section h4');
-    if (filterDevicesTitle) {
-      filterDevicesTitle.innerHTML = `📱 ${this.tracker.t('filterDevices')}`;
+    // Update center devices button text
+    const centerDevicesText = document.getElementById('center-devices-text');
+    if (centerDevicesText) {
+      centerDevicesText.textContent = this.tracker.t('centerOnDevices');
     }
 
     const timeFilterTabBtn = document.querySelector('#time-filter-tab-label');
@@ -472,7 +479,6 @@ export class UIManager {
     this.tracker.updateTimeFilterIndicator();
     this.tracker.displayLocations();
     this.tracker.deviceManager.updateDeviceLegend();
-    this.tracker.deviceManager.updateDeviceFilterList();
   }
 
   updateRefreshButtonState() {

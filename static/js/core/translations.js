@@ -78,7 +78,8 @@ export const TRANSLATIONS = {
     devices: "Devices",
     noDevicesFound: "No devices found",
     locationsCount: "{0} locations",
-    filterDevices: "Filter Devices"
+    filterDevices: "Filter Devices",
+    centerOnDevices: "Center on Devices"
   },
   es: {
     // Spanish translations - include the essential ones from your original file
@@ -159,7 +160,8 @@ export const TRANSLATIONS = {
     devices: "Dispositivos",
     noDevicesFound: "No se encontraron dispositivos",
     locationsCount: "{0} ubicaciones",
-    filterDevices: "Filtrar Dispositivos"
+    filterDevices: "Filtrar Dispositivos",
+    centerOnDevices: "Centrar en Dispositivos"
   }
 };
 
