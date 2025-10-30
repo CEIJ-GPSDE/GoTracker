@@ -12,7 +12,7 @@ export class HistoryManager {
     this.lastActiveConfigTab = 'time-filter';
   }
 
-  // New method: Open history config popup (replaces toggle behavior)
+  // Open history config popup
   openHistoryConfig() {
     const popup = document.getElementById('history-config-popup');
     if (popup) {
@@ -32,10 +32,21 @@ export class HistoryManager {
 
   // Activate history mode (called when filter is applied)
   activateHistoryMode() {
-    if (this.tracker.isHistoryMode) return; // Already in history mode
+    if (this.tracker.isHistoryMode) {
+      // Already in history mode, just ensure buttons are in correct state
+      const historyBtn = document.getElementById('history-mode-btn');
+      const changeFilterBtn = document.getElementById('change-filter-btn');
+      const liveModeBtn = document.getElementById('live-mode-btn');
+      
+      historyBtn.style.display = 'none';
+      changeFilterBtn.style.display = 'flex';
+      liveModeBtn.style.display = 'flex';
+      return;
+    }
 
     this.tracker.isHistoryMode = true;
     const historyBtn = document.getElementById('history-mode-btn');
+    const changeFilterBtn = document.getElementById('change-filter-btn');
     const liveModeBtn = document.getElementById('live-mode-btn');
     const trackBtn = document.getElementById('track-latest-btn');
     const modeIndicator = document.getElementById('mode-indicator');
@@ -45,6 +56,7 @@ export class HistoryManager {
     modeIndicator.innerHTML = `<div class="mode-indicator-dot"></div><span>${this.tracker.t('historyModeBadge')}</span>`;
 
     historyBtn.style.display = 'none';
+    changeFilterBtn.style.display = 'flex';
     liveModeBtn.style.display = 'flex';
     trackBtn.style.display = 'none';
 
@@ -69,6 +81,7 @@ export class HistoryManager {
 
     this.tracker.isHistoryMode = false;
     const historyBtn = document.getElementById('history-mode-btn');
+    const changeFilterBtn = document.getElementById('change-filter-btn');
     const liveModeBtn = document.getElementById('live-mode-btn');
     const trackBtn = document.getElementById('track-latest-btn');
     const modeIndicator = document.getElementById('mode-indicator');
@@ -87,6 +100,7 @@ export class HistoryManager {
     modeIndicator.innerHTML = `<div class="mode-indicator-dot"></div><span>${this.tracker.t('liveModeBadge')}</span>`;
 
     historyBtn.style.display = 'flex';
+    changeFilterBtn.style.display = 'none';
     liveModeBtn.style.display = 'none';
     trackBtn.style.display = 'flex';
 
