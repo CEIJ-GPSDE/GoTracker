@@ -7,7 +7,7 @@ export class UIManager {
   }
 
   setupPopupMenu() {
-    const menuToggle = document.getElementById('menu-toggle-btn');
+    const menuToggleBottom = document.getElementById('menu-toggle-btn-bottom');
     const popupMenu = document.getElementById('popup-menu');
     const popupClose = document.getElementById('popup-close');
     const historyConfigPopup = document.getElementById('history-config-popup');
@@ -15,7 +15,8 @@ export class UIManager {
     const tabButtons = document.querySelectorAll('.tab-button');
     const tabContents = document.querySelectorAll('.tab-content');
 
-    menuToggle.addEventListener('click', () => {
+    // Menu toggle from bottom button
+    menuToggleBottom.addEventListener('click', () => {
       popupMenu.classList.add('active');
     });
 
@@ -88,7 +89,7 @@ export class UIManager {
       noFilterOpenBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         this.tracker.hideNoFilterOverlay();
-        this.tracker.openHistoryConfigPopup();
+        this.tracker.historyManager.openHistoryConfig();
       });
     }
 
@@ -103,7 +104,7 @@ export class UIManager {
       emptyResultsAdjustBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         this.tracker.hideNoResultsOverlay()
-        this.tracker.openHistoryConfigPopup();
+        this.tracker.historyManager.openHistoryConfig();
       });
     }
 
@@ -131,6 +132,7 @@ export class UIManager {
   }
 
   setupEventListeners() {
+    // Track Latest button
     document.getElementById('track-latest-btn').addEventListener('click', () => {
       this.tracker.userInteracted = false;
       this.tracker.suppressUserInteraction = false;
@@ -139,35 +141,214 @@ export class UIManager {
       this.tracker.updateLocationSelection();
     });
 
+    // History Mode button - now opens config directly
     document.getElementById('history-mode-btn').addEventListener('click', () => {
-      this.tracker.historyManager.toggleHistoryMode();
+      this.tracker.historyManager.openHistoryConfig();
     });
 
+    // Change Filter button - opens config when in history mode
+    document.getElementById('change-filter-btn').addEventListener('click', () => {
+      this.tracker.historyManager.openHistoryConfig();
+    });
+
+    // Live Mode button - deactivates history mode
     document.getElementById('live-mode-btn').addEventListener('click', () => {
-      this.tracker.historyManager.toggleHistoryMode();
+      this.tracker.historyManager.deactivateHistoryMode();
     });
 
-    document.getElementById('history-config-btn').addEventListener('click', () => {
-      this.tracker.openHistoryConfigPopup();
-    });
-
+    // Trace dots toggle
     document.getElementById('toggle-trace-dots').addEventListener('change', (e) => {
       this.tracker.showTraceDots = e.target.checked;
       this.tracker.applyTraceDotsVisibility();
     });
 
+    // History limit
     document.getElementById('history-limit').addEventListener('change', (e) => {
       this.tracker.historyLimit = parseInt(e.target.value);
       this.tracker.refreshData();
     });
 
+    // Language selector
     document.getElementById('language-selector').addEventListener('change', (e) => {
       this.tracker.setLanguage(e.target.value);
     });
 
+    // Window focus handler
     window.addEventListener('focus', () => {
       if (this.tracker.wsManager.ws && this.tracker.wsManager.ws.readyState !== WebSocket.OPEN) {
         this.tracker.wsManager.connect();
+      }
+    });
+
+    // Setup filter application buttons
+    this.setupFilterButtons();
+  }
+
+  setupFilterButtons() {
+    // Time filter quick ranges
+    document.querySelectorAll('.quick-range-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const hours = parseInt(btn.dataset.hours);
+        this.tracker.historyManager.setQuickTimeRange(hours);
+        
+        // Update active state
+        document.querySelectorAll('.quick-range-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+
+    // Apply time filter
+    const applyTimeBtn = document.getElementById('apply-time-filter-popup');
+    if (applyTimeBtn) {
+      applyTimeBtn.addEventListener('click', () => {
+        this.tracker.historyManager.applyTimeFilterFromPopup();
+      });
+    }
+
+    // Clear time filter
+    const clearTimeBtn = document.getElementById('clear-time-filter-popup');
+    if (clearTimeBtn) {
+      clearTimeBtn.addEventListener('click', () => {
+        this.tracker.historyManager.clearTimeFilter();
+      });
+    }
+
+    // Apply location filter
+    const applyLocationBtn = document.getElementById('apply-location-filter');
+    if (applyLocationBtn) {
+      applyLocationBtn.addEventListener('click', () => {
+        this.tracker.historyManager.applyLocationFilterFromPopup();
+      });
+    }
+
+    // Clear location filter
+    const clearLocationBtn = document.getElementById('clear-location-filter');
+    if (clearLocationBtn) {
+      clearLocationBtn.addEventListener('click', () => {
+        this.tracker.historyManager.clearLocationFilter();
+      });
+    }
+
+    // Select on map button - add event listener properly
+    const selectOnMapBtn = document.getElementById('select-on-map-btn');
+    if (selectOnMapBtn) {
+      selectOnMapBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Check if we're in selection mode (button shows Cancel)
+        if (this.tracker.isSelectingLocationOnMap) {
+          // Cancel selection
+          this.endMapLocationSelection();
+          this.reopenHistoryConfigPopup();
+        } else {
+          // Start selection
+          this.startMapLocationSelection();
+        }
+      });
+    }
+  }
+
+  startMapLocationSelection() {
+    this.tracker.isSelectingLocationOnMap = true;
+    const selectBtn = document.getElementById('select-on-map-btn');
+    const historyConfigPopup = document.getElementById('history-config-popup');
+    
+    // Remember which tab was active (should be location-filter)
+    const activeTab = document.querySelector('#history-config-popup .tab-button.active');
+    if (activeTab) {
+      this.tracker.historyManager.lastActiveConfigTab = activeTab.dataset.tab;
+    }
+    
+    // Close the popup to allow map interaction
+    if (historyConfigPopup) {
+      historyConfigPopup.classList.remove('active');
+    }
+    
+    // Update button state
+    selectBtn.textContent = '✖ ' + this.tracker.t('cancelSelection');
+    selectBtn.classList.add('secondary');
+    
+    // Change cursor
+    const mapContainer = document.getElementById('map');
+    mapContainer.style.cursor = 'crosshair';
+
+    // Create click handler
+    this.tracker.mapSelectionHandler = (e) => {
+      const {lng, lat} = e.lngLat;
+      
+      // Update inputs (overwrite existing values)
+      document.getElementById('location-lat-input').value = lat.toFixed(6);
+      document.getElementById('location-lng-input').value = lng.toFixed(6);
+      
+      // End selection mode
+      this.endMapLocationSelection();
+      
+      // Reopen the popup on the same tab
+      this.reopenHistoryConfigPopup();
+      
+      // Show feedback
+      console.log(this.tracker.t('locationSelected'), `Lat: ${lat.toFixed(6)}, Lng: ${lng.toFixed(6)}`);
+    };
+
+    // Add click listener to map
+    this.tracker.mapManager.map.once('click', this.tracker.mapSelectionHandler);
+
+    // Update button to cancel selection
+    selectBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.endMapLocationSelection();
+      this.reopenHistoryConfigPopup();
+    };
+  }
+
+  endMapLocationSelection() {
+    this.tracker.isSelectingLocationOnMap = false;
+    const selectBtn = document.getElementById('select-on-map-btn');
+    const mapContainer = document.getElementById('map');
+    
+    // Reset button text
+    selectBtn.textContent = '🗺 ' + this.tracker.t('selectOnMap');
+    selectBtn.classList.remove('secondary');
+    
+    // Reset cursor
+    mapContainer.style.cursor = '';
+    
+    // Remove map listener if it exists
+    if (this.tracker.mapSelectionHandler) {
+      this.tracker.mapManager.map.off('click', this.tracker.mapSelectionHandler);
+      this.tracker.mapSelectionHandler = null;
+    }
+
+    // Restore normal button behavior - this is critical for reusability
+    selectBtn.onclick = null; // Clear the cancel handler first
+  }
+
+  reopenHistoryConfigPopup() {
+    const historyConfigPopup = document.getElementById('history-config-popup');
+    const lastTab = this.tracker.historyManager.lastActiveConfigTab || 'location-filter';
+    
+    // Reopen popup
+    if (historyConfigPopup) {
+      historyConfigPopup.classList.add('active');
+    }
+    
+    // Restore the correct tab
+    const tabButtons = document.querySelectorAll('#history-config-popup .tab-button');
+    const tabContents = document.querySelectorAll('#history-config-popup .tab-content');
+    
+    tabButtons.forEach(btn => {
+      btn.classList.remove('active');
+      if (btn.dataset.tab === lastTab) {
+        btn.classList.add('active');
+      }
+    });
+    
+    tabContents.forEach(content => {
+      content.classList.remove('active');
+      if (content.id === `${lastTab}-tab`) {
+        content.classList.add('active');
       }
     });
   }
@@ -191,9 +372,14 @@ export class UIManager {
     }
 
     document.querySelector('#history-mode-btn span:last-child').textContent = this.tracker.t('historyMode');
-    document.querySelector('#history-config-btn span:last-child').textContent = this.tracker.t('historySettings');
+    document.querySelector('#change-filter-btn span:last-child').textContent = this.tracker.t('changeFilter');
     document.querySelector('#live-mode-btn span:last-child').textContent = this.tracker.t('liveMode');
-    document.querySelector('#menu-toggle-btn span:last-child').textContent = this.tracker.t('menu');
+    
+    // Update bottom menu button
+    const menuTextBottom = document.querySelector('#menu-toggle-btn-bottom span:last-child');
+    if (menuTextBottom) {
+      menuTextBottom.textContent = this.tracker.t('menu');
+    }
 
     const modeIndicator = document.getElementById('mode-indicator');
     if (this.tracker.isHistoryMode) {
@@ -260,15 +446,16 @@ export class UIManager {
     if (legendStart) legendStart.textContent = this.tracker.t('legendStart');
     if (legendEnd) legendEnd.textContent = this.tracker.t('legendEnd');
 
-    const deviceLegendTitle = document.querySelector('#device-legend h4');
-    if (deviceLegendTitle) {
-      const countSpan = deviceLegendTitle.querySelector('#device-count');
-      deviceLegendTitle.innerHTML = `📱 ${this.tracker.t('devices')} ${countSpan ? countSpan.outerHTML : ''}`;
+    // Update device legend text
+    const devicesText = document.getElementById('devices-text');
+    if (devicesText) {
+      devicesText.textContent = this.tracker.t('devices');
     }
 
-    const filterDevicesTitle = document.querySelector('#controls-tab .device-filter-section h4');
-    if (filterDevicesTitle) {
-      filterDevicesTitle.innerHTML = `📱 ${this.tracker.t('filterDevices')}`;
+    // Update center devices button text
+    const centerDevicesText = document.getElementById('center-devices-text');
+    if (centerDevicesText) {
+      centerDevicesText.textContent = this.tracker.t('centerOnDevices');
     }
 
     const timeFilterTabBtn = document.querySelector('#time-filter-tab-label');
@@ -289,7 +476,7 @@ export class UIManager {
     if (clearLocationBtn) clearLocationBtn.textContent = this.tracker.t('clearFilter');
 
     const selectOnMapText = document.getElementById('select-on-map-text');
-    if (selectOnMapText) selectOnMapText.textContent = '📍 ' + this.tracker.t('selectOnMap');
+    if (selectOnMapText) selectOnMapText.textContent = '🗺 ' + this.tracker.t('selectOnMap');
 
     this.tracker.updateConnectionStatus(
       this.tracker.wsManager.isConnected() ? this.tracker.t('connected') : this.tracker.t('connecting'),
@@ -298,7 +485,6 @@ export class UIManager {
     this.tracker.updateTimeFilterIndicator();
     this.tracker.displayLocations();
     this.tracker.deviceManager.updateDeviceLegend();
-    this.tracker.deviceManager.updateDeviceFilterList();
   }
 
   updateRefreshButtonState() {

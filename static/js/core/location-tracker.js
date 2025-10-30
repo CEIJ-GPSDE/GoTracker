@@ -34,6 +34,7 @@ export class LocationTracker {
     this.suppressUserInteraction = false;
     this.isSelectingLocationOnMap = false;
     this.mapSelectionHandler = null;
+    this.deviceLegendCollapsed = false;
     
     // Selection state
     this.selectedLocationIndex = -1;
@@ -125,6 +126,52 @@ export class LocationTracker {
     }
   }
 
+  // NEW: Toggle device legend collapse/expand
+  toggleDeviceLegend() {
+    const legend = document.getElementById('device-legend');
+    this.deviceLegendCollapsed = !this.deviceLegendCollapsed;
+    
+    if (this.deviceLegendCollapsed) {
+      legend.classList.add('collapsed');
+    } else {
+      legend.classList.remove('collapsed');
+    }
+  }
+
+  // NEW: Center on currently selected/visible devices
+  centerOnSelectedDevices() {
+    // Get visible devices with location data
+    const visibleDevices = Array.from(this.selectedDevices).filter(deviceId => {
+      const deviceInfo = this.devices.get(deviceId);
+      return deviceInfo && deviceInfo.visible;
+    });
+
+    if (visibleDevices.length === 0) {
+      console.log('No visible devices to center on');
+      return;
+    }
+
+    // Get locations to consider based on mode
+    let locationsToConsider;
+    if (this.isHistoryMode) {
+      locationsToConsider = this.filteredLocations.filter(loc => 
+        visibleDevices.includes(loc.device_id)
+      );
+    } else {
+      locationsToConsider = this.locations.filter(loc => 
+        visibleDevices.includes(loc.device_id)
+      );
+    }
+
+    if (locationsToConsider.length === 0) {
+      console.log('No locations found for visible devices');
+      return;
+    }
+
+    // Fit map to these locations
+    this.mapManager.fitMapToLocations(locationsToConsider);
+  }
+
   async loadInitialData() {
     try {
       const limit = this.isHistoryMode ? this.historyLimit : 1;
@@ -195,7 +242,6 @@ export class LocationTracker {
     }
 
     this.deviceManager.updateDeviceLegend();
-    this.deviceManager.updateDeviceFilterList();
     this.filterAndDisplayLocations();
     this.updateStatistics();
 
@@ -617,13 +663,6 @@ export class LocationTracker {
     window.addEventListener('beforeunload', () => {
       this.wsManager.disconnect();
     });
-  }
-
-  // UI methods that need implementation
-  openHistoryConfigPopup() {
-    // This will be implemented in the next phase
-    console.log('openHistoryConfigPopup - to be implemented');
-    document.getElementById('history-config-popup').classList.add('active');
   }
 
   // Proxy methods for UI manager

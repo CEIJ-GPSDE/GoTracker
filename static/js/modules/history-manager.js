@@ -12,98 +12,112 @@ export class HistoryManager {
     this.lastActiveConfigTab = 'time-filter';
   }
 
-  toggleHistoryMode() {
-    this.tracker.isHistoryMode = !this.tracker.isHistoryMode;
+  // Open history config popup
+  openHistoryConfig() {
+    const popup = document.getElementById('history-config-popup');
+    if (popup) {
+      popup.classList.add('active');
+      
+      // Restore persisted filters if they exist
+      if (this.persistedTimeFilter) {
+        document.getElementById('start-time-popup').value = formatDateTimeLocal(this.persistedTimeFilter.start);
+        document.getElementById('end-time-popup').value = formatDateTimeLocal(this.persistedTimeFilter.end);
+      } else if (this.persistedLocationFilter) {
+        document.getElementById('location-lat-input').value = this.persistedLocationFilter.lat;
+        document.getElementById('location-lng-input').value = this.persistedLocationFilter.lng;
+        document.getElementById('location-radius-input').value = this.persistedLocationFilter.radius;
+      }
+    }
+  }
+
+  // Activate history mode (called when filter is applied)
+  activateHistoryMode() {
+    if (this.tracker.isHistoryMode) {
+      // Already in history mode, just ensure buttons are in correct state
+      const historyBtn = document.getElementById('history-mode-btn');
+      const changeFilterBtn = document.getElementById('change-filter-btn');
+      const liveModeBtn = document.getElementById('live-mode-btn');
+      
+      historyBtn.style.display = 'none';
+      changeFilterBtn.style.display = 'flex';
+      liveModeBtn.style.display = 'flex';
+      return;
+    }
+
+    this.tracker.isHistoryMode = true;
     const historyBtn = document.getElementById('history-mode-btn');
-    const historyConfigBtn = document.getElementById('history-config-btn');
+    const changeFilterBtn = document.getElementById('change-filter-btn');
     const liveModeBtn = document.getElementById('live-mode-btn');
     const trackBtn = document.getElementById('track-latest-btn');
     const modeIndicator = document.getElementById('mode-indicator');
 
+    // Update UI
+    modeIndicator.className = 'mode-indicator history-mode';
+    modeIndicator.innerHTML = `<div class="mode-indicator-dot"></div><span>${this.tracker.t('historyModeBadge')}</span>`;
+
+    historyBtn.style.display = 'none';
+    changeFilterBtn.style.display = 'flex';
+    liveModeBtn.style.display = 'flex';
+    trackBtn.style.display = 'none';
+
+    this.tracker.toggleTracking(false);
     this.tracker.mapManager.clearSelectedLocationMarker();
     this.tracker.selectedLocationIndex = -1;
 
-    if (this.tracker.isHistoryMode) {
-      modeIndicator.className = 'mode-indicator history-mode';
-      modeIndicator.innerHTML = `<div class="mode-indicator-dot"></div><span>${this.tracker.t('historyModeBadge')}</span>`;
+    // Clear live mode visualizations
+    this.tracker.mapManager.clearAllMarkers();
+    this.tracker.mapManager.clearTraceMarkers();
+    this.tracker.mapManager.clearAllRoutes();
+    this.tracker.routeCoords = [];
+    this.tracker.mapManager.updateRouteLine();
 
-      historyBtn.style.display = 'none';
-      historyConfigBtn.style.display = 'flex';
-      liveModeBtn.style.display = 'flex';
-      trackBtn.style.display = 'none';
+    this.tracker.updateRefreshButtonState();
+    this.tracker.updateUILanguage();
+  }
 
-      this.tracker.toggleTracking(false);
+  // Deactivate history mode (return to live mode)
+  deactivateHistoryMode() {
+    if (!this.tracker.isHistoryMode) return; // Already in live mode
 
-      this.tracker.mapManager.clearAllMarkers();
-      this.tracker.mapManager.clearTraceMarkers();
-      this.tracker.mapManager.clearAllRoutes();
-      this.tracker.routeCoords = [];
-      this.tracker.mapManager.updateRouteLine();
+    this.tracker.isHistoryMode = false;
+    const historyBtn = document.getElementById('history-mode-btn');
+    const changeFilterBtn = document.getElementById('change-filter-btn');
+    const liveModeBtn = document.getElementById('live-mode-btn');
+    const trackBtn = document.getElementById('track-latest-btn');
+    const modeIndicator = document.getElementById('mode-indicator');
 
-      const hasPersistedTimeFilter = this.persistedTimeFilter !== null;
-      const hasPersistedLocationFilter = this.persistedLocationFilter !== null;
+    // Persist current filters
+    if (this.timeFilter && this.activeFilterType === 'time') {
+      this.persistedTimeFilter = {...this.timeFilter};
+      this.persistedLocationFilter = null;
+    } else if (this.locationFilter && this.activeFilterType === 'location') {
+      this.persistedLocationFilter = {...this.locationFilter};
+      this.persistedTimeFilter = null;
+    }
 
-      if (hasPersistedTimeFilter) {
-        this.timeFilter = {...this.persistedTimeFilter};
-        this.activeFilterType = 'time';
-        this.locationFilter = null;
-        this.restoreTimePickerValues();
-        this.tracker.updateTimeFilterIndicator();
-        this.loadHistoricalData();
-        this.tracker.hideNoFilterOverlay();
-      } else if (hasPersistedLocationFilter) {
-        this.locationFilter = {...this.persistedLocationFilter};
-        this.activeFilterType = 'location';
-        this.timeFilter = null;
-        this.tracker.updateTimeFilterIndicator();
-        this.loadHistoricalByLocation(
-          this.locationFilter.lat,
-          this.locationFilter.lng,
-          this.locationFilter.radius
-        );
-        this.tracker.hideNoFilterOverlay();
-      } else {
-        this.tracker.filteredLocations = [];
-        this.activeFilterType = null;
-        this.locationFilter = null;
-        this.timeFilter = null;
-        this.tracker.displayFilteredLocations();
-        this.tracker.updateTimeFilterIndicator();
+    // Update UI
+    modeIndicator.className = 'mode-indicator live-mode';
+    modeIndicator.innerHTML = `<div class="mode-indicator-dot"></div><span>${this.tracker.t('liveModeBadge')}</span>`;
 
-        setTimeout(() => {
-          this.tracker.showNoFilterOverlay();
-        }, 100);
-      }
+    historyBtn.style.display = 'flex';
+    changeFilterBtn.style.display = 'none';
+    liveModeBtn.style.display = 'none';
+    trackBtn.style.display = 'flex';
 
-    } else {
-      modeIndicator.className = 'mode-indicator live-mode';
-      modeIndicator.innerHTML = `<div class="mode-indicator-dot"></div><span>${this.tracker.t('liveModeBadge')}</span>`;
+    // Clear history mode visualizations
+    this.tracker.mapManager.clearAllMarkers();
+    this.tracker.mapManager.clearTraceMarkers();
+    this.tracker.mapManager.clearAllRoutes();
+    this.tracker.filteredLocations = [];
+    this.tracker.updateTimeFilterIndicator();
 
-      if (this.timeFilter && this.activeFilterType === 'time') {
-        this.persistedTimeFilter = {...this.timeFilter};
-        this.persistedLocationFilter = null;
-      } else if (this.locationFilter && this.activeFilterType === 'location') {
-        this.persistedLocationFilter = {...this.locationFilter};
-        this.persistedTimeFilter = null;
-      }
+    // Load live data
+    this.tracker.loadInitialData();
 
-      historyBtn.style.display = 'flex';
-      historyConfigBtn.style.display = 'none';
-      liveModeBtn.style.display = 'none';
-      trackBtn.style.display = 'flex';
-
-      this.tracker.mapManager.clearAllMarkers();
-      this.tracker.mapManager.clearTraceMarkers();
-      this.tracker.mapManager.clearAllRoutes();
-      this.tracker.filteredLocations = [];
-      this.tracker.updateTimeFilterIndicator();
-
-      this.tracker.loadInitialData();
-
-      while (this.tracker.liveUpdateQueue.length > 0) {
-        const queuedLocation = this.tracker.liveUpdateQueue.shift();
-        this.tracker.applyLocationUpdate(queuedLocation);
-      }
+    // Process queued live updates
+    while (this.tracker.liveUpdateQueue.length > 0) {
+      const queuedLocation = this.tracker.liveUpdateQueue.shift();
+      this.tracker.applyLocationUpdate(queuedLocation);
     }
 
     this.tracker.updateRefreshButtonState();
@@ -288,15 +302,24 @@ export class HistoryManager {
 
     console.log('Applying time filter:', {start: startTime, end: endTime});
 
+    // Clear location filter inputs
     document.getElementById('location-lat-input').value = '';
     document.getElementById('location-lng-input').value = '';
     document.getElementById('location-radius-input').value = '0.5';
 
-    this.timeFilter = {start: startTime, end: endTime};
-    this.activeFilterType = 'time';
+    // Clear existing location filter state
     this.locationFilter = null;
     this.persistedLocationFilter = null;
+
+    // Set filter
+    this.timeFilter = {start: startTime, end: endTime};
+    this.activeFilterType = 'time';
     console.log('timeFilter set to:', this.timeFilter);
+
+    // Activate history mode if not already active
+    if (!this.tracker.isHistoryMode) {
+      this.activateHistoryMode();
+    }
 
     this.tracker.updateTimeFilterIndicator();
     this.loadHistoricalData();
@@ -305,31 +328,79 @@ export class HistoryManager {
     document.getElementById('history-config-popup').classList.remove('active');
   }
 
+  applyLocationFilterFromPopup() {
+    const latInput = document.getElementById('location-lat-input');
+    const lngInput = document.getElementById('location-lng-input');
+    const radiusInput = document.getElementById('location-radius-input');
+    const errorElement = document.getElementById('location-validation-error');
+    const applyBtn = document.getElementById('apply-location-filter');
+
+    const lat = parseFloat(latInput.value);
+    const lng = parseFloat(lngInput.value);
+    const radius = parseFloat(radiusInput.value);
+
+    const result = Validator.validateLocationFilter(lat, lng, radius);
+    
+    if (!result.isValid) {
+      this.tracker.showValidationError(result.error, applyBtn, errorElement);
+      return;
+    }
+
+    this.tracker.clearValidationError(applyBtn, errorElement);
+
+    // Clear time filter inputs
+    document.getElementById('start-time-popup').value = '';
+    document.getElementById('end-time-popup').value = '';
+    document.querySelectorAll('.quick-range-btn').forEach(btn => btn.classList.remove('active'));
+
+    // Clear existing time filter state
+    this.timeFilter = null;
+    this.persistedTimeFilter = null;
+
+    // Activate history mode if not already active
+    if (!this.tracker.isHistoryMode) {
+      this.activateHistoryMode();
+    }
+
+    // Load data (this will overwrite existing location filter)
+    this.loadHistoricalByLocation(lat, lng, radius);
+  }
+
   clearTimeFilter() {
     this.timeFilter = null;
     this.persistedTimeFilter = null;
-    this.persistedLocationFilter = null;
-    this.activeFilterType = null;
-    this.locationFilter = null;
-    this.tracker.filteredLocations = [];
-    this.tracker.updateTimeFilterIndicator();
+    
+    // Clear inputs
+    document.getElementById('start-time-popup').value = '';
+    document.getElementById('end-time-popup').value = '';
     document.querySelectorAll('.quick-range-btn').forEach(btn => btn.classList.remove('active'));
 
-    if (this.tracker.isHistoryMode) {
-      this.tracker.mapManager.clearAllMarkers();
-      this.tracker.mapManager.clearTraceMarkers();
-      this.tracker.mapManager.clearAllRoutes();
-      this.tracker.routeCoords = [];
-      this.tracker.mapManager.updateRouteLine();
-      this.tracker.displayFilteredLocations();
-
-      setTimeout(() => {
-        this.tracker.showNoFilterOverlay();
-      }, 100);
-    } else {
-      this.tracker.loadInitialData();
+    // If this was the active filter, deactivate history mode
+    if (this.activeFilterType === 'time') {
+      this.activeFilterType = null;
+      this.deactivateHistoryMode();
     }
 
-    document.getElementById('history-config-popup').classensList.remove('active');
+    this.tracker.updateTimeFilterIndicator();
+    document.getElementById('history-config-popup').classList.remove('active');
+  }
+
+  clearLocationFilter() {
+    this.locationFilter = null;
+    this.persistedLocationFilter = null;
+    
+    // Clear inputs
+    document.getElementById('location-lat-input').value = '';
+    document.getElementById('location-lng-input').value = '';
+    document.getElementById('location-radius-input').value = '0.5';
+
+    // If this was the active filter, deactivate history mode
+    if (this.activeFilterType === 'location') {
+      this.activeFilterType = null;
+      this.deactivateHistoryMode();
+    }
+
+    this.tracker.updateTimeFilterIndicator();
+    document.getElementById('history-config-popup').classList.remove('active');
   }
 }

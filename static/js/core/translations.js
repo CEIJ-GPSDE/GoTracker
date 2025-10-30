@@ -12,6 +12,7 @@ export const TRANSLATIONS = {
     trackingOff: "Tracking Off",
     historyMode: "History Mode",
     historySettings: "History Settings",
+    changeFilter: "Change Filter",
     liveMode: "Live Mode",
     menu: "Menu",
     liveModeBadge: "🔴 LIVE MODE",
@@ -78,7 +79,8 @@ export const TRANSLATIONS = {
     devices: "Devices",
     noDevicesFound: "No devices found",
     locationsCount: "{0} locations",
-    filterDevices: "Filter Devices"
+    filterDevices: "Filter Devices",
+    centerOnDevices: "Center on Devices"
   },
   es: {
     // Spanish translations - include the essential ones from your original file
@@ -93,6 +95,7 @@ export const TRANSLATIONS = {
     trackingOff: "Seguimiento Desactivado",
     historyMode: "Modo Histórico",
     historySettings: "Configuración Histórica",
+    changeFilter: "Cambiar Filtro",
     liveMode: "Modo en Vivo",
     menu: "Menú",
     liveModeBadge: "🔴 MODO EN VIVO",
@@ -159,7 +162,8 @@ export const TRANSLATIONS = {
     devices: "Dispositivos",
     noDevicesFound: "No se encontraron dispositivos",
     locationsCount: "{0} ubicaciones",
-    filterDevices: "Filtrar Dispositivos"
+    filterDevices: "Filtrar Dispositivos",
+    centerOnDevices: "Centrar en Dispositivos"
   }
 };
 

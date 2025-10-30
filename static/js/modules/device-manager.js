@@ -129,39 +129,90 @@ export class DeviceManager {
   toggleDeviceVisibility(deviceId, visible) {
     const deviceInfo = this.devices.get(deviceId);
     if (deviceInfo) {
+      const wasVisible = deviceInfo.visible;
       deviceInfo.visible = visible;
 
       if (visible) {
         this.selectedDevices.add(deviceId);
       } else {
         this.selectedDevices.delete(deviceId);
+        
+        // 🆕 CLEAR TRACE MARKERS for this device
+        this.clearDeviceTraceMarkers(deviceId);
+        
+        // 🆕 CLEAR ROUTE LINE for this device
+        this.clearDeviceRoute(deviceId);
       }
 
+      // Hide/show the main marker for this device
       const marker = this.tracker.mapManager.markers.get(deviceId);
       if (marker) {
         const el = marker.getElement();
         el.style.display = visible ? 'block' : 'none';
       }
 
-      this.updateRoutesVisibility();
       this.updateDeviceLegend();
       this.updateDeviceFilterList();
 
-      if (this.tracker.isHistoryMode) {
-        if (this.tracker.historyManager.activeFilterType === 'time' && this.tracker.historyManager.timeFilter) {
-          this.tracker.historyManager.loadHistoricalData();
-        } else if (this.tracker.historyManager.activeFilterType === 'location' && this.tracker.historyManager.locationFilter) {
-          this.tracker.historyManager.loadHistoricalByLocation(
-            this.tracker.historyManager.locationFilter.lat,
-            this.tracker.historyManager.locationFilter.lng,
-            this.tracker.historyManager.locationFilter.radius
-          );
+      // 🆕 REGENERATE visualizations when selecting back
+      if (visible && !wasVisible) {
+        // Device was just selected back - need to recreate its visualizations
+        console.log(`Device ${deviceId} selected back, recreating visualizations...`);
+        
+        if (this.tracker.isHistoryMode) {
+          // In history mode, clear all traces and routes, then recreate for all selected devices
+          console.log('History mode: clearing and recreating all traces');
+          this.tracker.mapManager.clearTraceMarkers();
+          this.tracker.mapManager.clearAllRoutes();
+          
+          // Force recreation by calling updateRouteForFiltered
+          this.tracker.updateRouteForFiltered();
         } else {
-          this.tracker.filterAndDisplayLocations();
+          // In live mode, clear all traces and recreate
+          console.log('Live mode: clearing and recreating all traces');
+          this.tracker.mapManager.clearTraceMarkers();
+          this.tracker.updateRouteForDevice();
         }
-      } else {
-        this.tracker.filterAndDisplayLocations();
       }
+    }
+  }
+
+  // 🆕 NEW METHOD: Clear trace markers for a specific device
+  clearDeviceTraceMarkers(deviceId) {
+    // Filter out and remove trace markers that belong to this device
+    const locationsToCheck = this.tracker.isHistoryMode 
+      ? this.tracker.filteredLocations 
+      : this.tracker.locations;
+
+    this.tracker.mapManager.traceMarkers = this.tracker.mapManager.traceMarkers.filter(marker => {
+      const lngLat = marker.getLngLat();
+      
+      // Check if this marker belongs to the device being hidden
+      const belongsToDevice = locationsToCheck.some(loc => 
+        loc.device_id === deviceId && 
+        Math.abs(loc.longitude - lngLat.lng) < 0.000001 && 
+        Math.abs(loc.latitude - lngLat.lat) < 0.000001
+      );
+      
+      if (belongsToDevice) {
+        marker.remove(); // Remove from map
+        return false; // Remove from array
+      }
+      
+      return true; // Keep in array
+    });
+  }
+
+  // 🆕 NEW METHOD: Clear route line for a specific device
+  clearDeviceRoute(deviceId) {
+    const sourceId = `route-${deviceId}`;
+    const layerId = `route-${deviceId}`;
+
+    if (this.tracker.mapManager.map.getLayer(layerId)) {
+      this.tracker.mapManager.map.removeLayer(layerId);
+    }
+    if (this.tracker.mapManager.map.getSource(sourceId)) {
+      this.tracker.mapManager.map.removeSource(sourceId);
     }
   }
 
