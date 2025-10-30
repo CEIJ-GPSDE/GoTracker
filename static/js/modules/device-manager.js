@@ -150,24 +150,35 @@ export class DeviceManager {
         el.style.display = visible ? 'block' : 'none';
       }
 
-      this.updateRoutesVisibility();
       this.updateDeviceLegend();
       this.updateDeviceFilterList();
 
+      // 🆕 REGENERATE all visible devices' visualizations
       if (this.tracker.isHistoryMode) {
-        if (this.tracker.historyManager.activeFilterType === 'time' && this.tracker.historyManager.timeFilter) {
-          this.tracker.historyManager.loadHistoricalData();
-        } else if (this.tracker.historyManager.activeFilterType === 'location' && this.tracker.historyManager.locationFilter) {
-          this.tracker.historyManager.loadHistoricalByLocation(
-            this.tracker.historyManager.locationFilter.lat,
-            this.tracker.historyManager.locationFilter.lng,
-            this.tracker.historyManager.locationFilter.radius
-          );
-        } else {
-          this.tracker.filterAndDisplayLocations();
+        if (visible) {
+          // When re-selecting in history mode, force a full reload to recreate visualizations
+          if (this.tracker.historyManager.activeFilterType === 'time' && this.tracker.historyManager.timeFilter) {
+            this.tracker.historyManager.loadHistoricalData();
+          } else if (this.tracker.historyManager.activeFilterType === 'location' && this.tracker.historyManager.locationFilter) {
+            this.tracker.historyManager.loadHistoricalByLocation(
+              this.tracker.historyManager.locationFilter.lat,
+              this.tracker.historyManager.locationFilter.lng,
+              this.tracker.historyManager.locationFilter.radius
+            );
+          } else {
+            // Force recreation of filtered view
+            this.tracker.mapManager.clearTraceMarkers();
+            this.tracker.updateRouteForFiltered();
+          }
         }
+        // When deselecting, no need to reload - we already cleared above
       } else {
-        this.tracker.filterAndDisplayLocations();
+        // In live mode, regenerate traces and routes for all selected devices
+        if (visible) {
+          // Force recreation of all traces
+          this.tracker.mapManager.clearTraceMarkers();
+          this.tracker.updateRouteForDevice();
+        }
       }
     }
   }
@@ -175,15 +186,15 @@ export class DeviceManager {
   // 🆕 NEW METHOD: Clear trace markers for a specific device
   clearDeviceTraceMarkers(deviceId) {
     // Filter out and remove trace markers that belong to this device
+    const locationsToCheck = this.tracker.isHistoryMode 
+      ? this.tracker.filteredLocations 
+      : this.tracker.locations;
+
     this.tracker.mapManager.traceMarkers = this.tracker.mapManager.traceMarkers.filter(marker => {
       const lngLat = marker.getLngLat();
       
       // Check if this marker belongs to the device being hidden
-      const belongsToDevice = this.tracker.locations.some(loc => 
-        loc.device_id === deviceId && 
-        Math.abs(loc.longitude - lngLat.lng) < 0.000001 && 
-        Math.abs(loc.latitude - lngLat.lat) < 0.000001
-      ) || this.tracker.filteredLocations.some(loc => 
+      const belongsToDevice = locationsToCheck.some(loc => 
         loc.device_id === deviceId && 
         Math.abs(loc.longitude - lngLat.lng) < 0.000001 && 
         Math.abs(loc.latitude - lngLat.lat) < 0.000001
