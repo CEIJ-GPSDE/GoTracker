@@ -135,8 +135,15 @@ export class DeviceManager {
         this.selectedDevices.add(deviceId);
       } else {
         this.selectedDevices.delete(deviceId);
+        
+        // 🆕 CLEAR TRACE MARKERS for this device
+        this.clearDeviceTraceMarkers(deviceId);
+        
+        // 🆕 CLEAR ROUTE LINE for this device
+        this.clearDeviceRoute(deviceId);
       }
 
+      // Hide/show the main marker for this device
       const marker = this.tracker.mapManager.markers.get(deviceId);
       if (marker) {
         const el = marker.getElement();
@@ -162,6 +169,45 @@ export class DeviceManager {
       } else {
         this.tracker.filterAndDisplayLocations();
       }
+    }
+  }
+
+  // 🆕 NEW METHOD: Clear trace markers for a specific device
+  clearDeviceTraceMarkers(deviceId) {
+    // Filter out and remove trace markers that belong to this device
+    this.tracker.mapManager.traceMarkers = this.tracker.mapManager.traceMarkers.filter(marker => {
+      const lngLat = marker.getLngLat();
+      
+      // Check if this marker belongs to the device being hidden
+      const belongsToDevice = this.tracker.locations.some(loc => 
+        loc.device_id === deviceId && 
+        Math.abs(loc.longitude - lngLat.lng) < 0.000001 && 
+        Math.abs(loc.latitude - lngLat.lat) < 0.000001
+      ) || this.tracker.filteredLocations.some(loc => 
+        loc.device_id === deviceId && 
+        Math.abs(loc.longitude - lngLat.lng) < 0.000001 && 
+        Math.abs(loc.latitude - lngLat.lat) < 0.000001
+      );
+      
+      if (belongsToDevice) {
+        marker.remove(); // Remove from map
+        return false; // Remove from array
+      }
+      
+      return true; // Keep in array
+    });
+  }
+
+  // 🆕 NEW METHOD: Clear route line for a specific device
+  clearDeviceRoute(deviceId) {
+    const sourceId = `route-${deviceId}`;
+    const layerId = `route-${deviceId}`;
+
+    if (this.tracker.mapManager.map.getLayer(layerId)) {
+      this.tracker.mapManager.map.removeLayer(layerId);
+    }
+    if (this.tracker.mapManager.map.getSource(sourceId)) {
+      this.tracker.mapManager.map.removeSource(sourceId);
     }
   }
 
