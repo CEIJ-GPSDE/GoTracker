@@ -619,13 +619,6 @@ export class LocationTracker {
     });
   }
 
-  // UI methods that need implementation
-  openHistoryConfigPopup() {
-    // This will be implemented in the next phase
-    console.log('openHistoryConfigPopup - to be implemented');
-    document.getElementById('history-config-popup').classList.add('active');
-  }
-
   // Proxy methods for UI manager
   updateUILanguage() { this.uiManager.updateUILanguage(); }
   updateRefreshButtonState() { this.uiManager.updateRefreshButtonState(); }

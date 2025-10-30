@@ -57,14 +57,12 @@
             <div class="track-icon"></div>
             <span>Track Latest</span>
           </button>
+          <!-- Single History Mode button - opens filter config directly -->
           <button id="history-mode-btn" class="history-btn">
             <span>📅</span>
             <span>History Mode</span>
           </button>
-          <button id="history-config-btn" class="history-btn" style="display: none;">
-            <span>📅</span>
-            <span>History Settings</span>
-          </button>
+          <!-- Live Mode button - only visible when in history mode -->
           <button id="live-mode-btn" class="history-btn"
             style="display: none; background: linear-gradient(135deg, #dc2626, #b91c1c);">
             <span>🔴</span>
@@ -213,19 +211,6 @@
               id="location-filter-tab-label">Location Filter</span></button>
         </div>
 
-        <!-- No Filter Selected Tab (Default) -->
-        <div class="tab-content" id="no-filter-selected-tab" style="display: none;">
-          <div class="card">
-            <div class="card-body" style="text-align: center; padding: 60px 30px;">
-              <h3 style="color: white; margin-bottom: 15px;" id="no-filter-selected-title">📍 No filter selected</h3>
-              <p style="color: #9ca3af; margin-bottom: 10px;" id="please-select-filter">Please select a time range or
-                location to view historical data.</p>
-              <p style="color: #9ca3af; font-size: 14px;" id="select-filter-tab">Choose a tab above to configure your
-                filter.</p>
-            </div>
-          </div>
-        </div>
-
         <!-- Time Filter Tab -->
         <div class="tab-content active" id="time-filter-tab">
           <div class="card">
@@ -269,7 +254,7 @@
                 <input type="number" id="location-lng-input" step="0.000001" placeholder="e.g., -74.0060">
               </div>
               <button class="btn secondary" id="select-on-map-btn" style="margin-bottom: 15px;">
-                <span id="select-on-map-text">📍 Select on Map</span>
+                <span id="select-on-map-text">🗺 Select on Map</span>
               </button>
               <div class="control-group">
                 <label for="location-radius-input" id="location-radius-label">Radius (km):</label>
