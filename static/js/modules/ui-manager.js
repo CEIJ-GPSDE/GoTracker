@@ -235,6 +235,18 @@ export class UIManager {
   startMapLocationSelection() {
     this.tracker.isSelectingLocationOnMap = true;
     const selectBtn = document.getElementById('select-on-map-btn');
+    const historyConfigPopup = document.getElementById('history-config-popup');
+    
+    // Remember which tab was active (should be location-filter)
+    const activeTab = document.querySelector('.tab-button.active');
+    if (activeTab) {
+      this.tracker.historyManager.lastActiveConfigTab = activeTab.dataset.tab;
+    }
+    
+    // Close the popup to allow map interaction
+    if (historyConfigPopup) {
+      historyConfigPopup.classList.remove('active');
+    }
     
     // Update button state
     selectBtn.textContent = '✖ ' + this.tracker.t('cancelSelection');
@@ -255,6 +267,9 @@ export class UIManager {
       // End selection mode
       this.endMapLocationSelection();
       
+      // Reopen the popup on the same tab
+      this.reopenHistoryConfigPopup();
+      
       // Show feedback
       console.log(this.tracker.t('locationSelected'));
     };
@@ -265,6 +280,7 @@ export class UIManager {
     // Update button to cancel selection
     selectBtn.onclick = () => {
       this.endMapLocationSelection();
+      this.reopenHistoryConfigPopup();
     };
   }
 
@@ -290,6 +306,34 @@ export class UIManager {
     selectBtn.onclick = () => {
       this.startMapLocationSelection();
     };
+  }
+
+  reopenHistoryConfigPopup() {
+    const historyConfigPopup = document.getElementById('history-config-popup');
+    const lastTab = this.tracker.historyManager.lastActiveConfigTab || 'location-filter';
+    
+    // Reopen popup
+    if (historyConfigPopup) {
+      historyConfigPopup.classList.add('active');
+    }
+    
+    // Restore the correct tab
+    const tabButtons = document.querySelectorAll('#history-config-popup .tab-button');
+    const tabContents = document.querySelectorAll('#history-config-popup .tab-content');
+    
+    tabButtons.forEach(btn => {
+      btn.classList.remove('active');
+      if (btn.dataset.tab === lastTab) {
+        btn.classList.add('active');
+      }
+    });
+    
+    tabContents.forEach(content => {
+      content.classList.remove('active');
+      if (content.id === `${lastTab}-tab`) {
+        content.classList.add('active');
+      }
+    });
   }
 
   initializeTimePickers() {
