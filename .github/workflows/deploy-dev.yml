@@ -3,7 +3,7 @@ name: Deploy Development Branch
 on:
   push:
     branches:
-      - 'dev/**'
+      - "dev/**"
   workflow_dispatch:
     inputs:
       branch:
@@ -26,7 +26,6 @@ on:
         description: "Deploy to EC2_4"
         type: boolean
         default: false
-
 
 jobs:
   deploy-development:
@@ -134,11 +133,11 @@ jobs:
             safe_branch=$(echo "$branch" | tr '/' '_' | tr '[:upper:]' '[:lower:]')
             container_name="location-tracker-${safe_branch}"
             nginx_location="/test"
-            
+
             echo "=== Cleaning up development branch deployment: $branch ==="
             echo "Container name: $container_name"
             echo "Nginx location: $nginx_location"
-            
+
             # Stop and remove dev container
             echo "Stopping and removing Docker container..."
             if docker ps -a --format '{{.Names}}' | grep -q "^${container_name}$"; then
@@ -149,7 +148,7 @@ jobs:
             else
               echo "Container $container_name not found (already cleaned up)"
             fi
-            
+
             # Remove dev image
             echo "Removing Docker image..."
             if docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "^location-tracker:${safe_branch}$"; then
@@ -159,16 +158,16 @@ jobs:
             else
               echo "Image location-tracker:${safe_branch} not found (already cleaned up)"
             fi
-            
+
             # Clean up any leftover tar files
             echo "Cleaning up temporary files..."
             rm -f /tmp/location-tracker-${safe_branch}.tar || echo "No tar file to clean up"
-            
+
             # Remove the modular nginx configuration file
             echo "Removing nginx configuration file..."
             sudo rm -f /etc/nginx/conf.d/location-tracker/dev-${safe_branch}.conf
             echo "Development branch nginx configuration removed"
-            
+
             # Reload nginx to apply changes
             if sudo nginx -t; then
               sudo systemctl reload nginx
@@ -177,7 +176,7 @@ jobs:
               echo "WARNING: Nginx configuration test failed after cleanup"
               sudo nginx -t
             fi
-            
+
             # Check if port 8081 is still in use
             echo "Checking if port 8081 is still in use..."
             if sudo lsof -i :8081 2>/dev/null; then
@@ -188,7 +187,7 @@ jobs:
             else
               echo "✅ Port 8081 is now free"
             fi
-            
+
             # Check if port 5052 is still in use  
             echo "Checking if port 5052 is still in use..."
             if sudo lsof -i :5052 2>/dev/null; then
@@ -199,7 +198,7 @@ jobs:
             else
               echo "✅ Port 5052 is now free"
             fi
-            
+
             echo "Development cleanup completed"
 
       - uses: actions/checkout@v4
@@ -222,28 +221,21 @@ jobs:
         run: |
           instance_name="${{ secrets[format('{0}_PAGE_NAME', matrix.instance)] }}"
           branch="${{ steps.should_deploy.outputs.branch }}"
-          
+
           # Default to matrix.instance if secret is not set
           if [ -z "$instance_name" ]; then
             instance_name="${{ matrix.instance }}"
           fi
-          
+
           echo "Using instance name: $instance_name"
           echo "Branch: $branch"
 
           ls
-          
           # Modify the HTML title to include instance name and branch
           sed -i "s|<title>Real-time Location Tracker</title>|<title>$instance_name ($branch)</title>|g" ./static/index.html
-          
+
           # Update both English and Spanish headers
           sed -i "s|<h1>🌍 Real-time Location Tracker</h1>|<h1>🌍 $instance_name (DEV)</h1>|g" ./static/index.html
-          sed -i "s|<h1>🌍 Rastreador de Ubicación en Tiempo Real</h1>|<h1>🌍 $instance_name (DEV)</h1>|g" ./static/index.html
-          
-          # Update the translation object to include instance name
-          sed -i "s|title: \"🌍 Real-time Location Tracker\"|title: \"🌍 $instance_name (DEV)\"|g" ./static/index.html
-          sed -i "s|title: \"🌍 Rastreador de Ubicación en Tiempo Real\"|title: \"🌍 $instance_name (DEV)\"|g" ./static/index.html
-          
           echo "HTML modifications completed"
 
       - name: Build Docker image
@@ -272,27 +264,27 @@ jobs:
             safe_branch="${{ steps.prepare.outputs.safe_branch }}"
             container_name="location-tracker-${safe_branch}"
             echo "Cleaning up existing dev deployment: $container_name"
-            
+
             # Stop and remove existing dev container
             if docker ps -a --format '{{.Names}}' | grep -q "^${container_name}$"; then
               echo "Stopping existing container: $container_name"
               docker stop $container_name || echo "Container was not running"
               docker rm $container_name || echo "Failed to remove container"
             fi
-            
+
             # Remove existing dev image
             if docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "^location-tracker:${safe_branch}$"; then
               echo "Removing old image: location-tracker:${safe_branch}"
               docker rmi location-tracker:${safe_branch} || echo "Failed to remove image"
             fi
-            
+
             # Check for and free port 8081 (dev port)
             if sudo lsof -i :8081 2>/dev/null; then
               echo "Found processes using port 8081, attempting to terminate..."
               sudo lsof -i :8081 | awk 'NR>1 {print $2}' | xargs -r sudo kill -9 || echo "Failed to terminate some processes"
               sleep 2
             fi
-            
+
             mkdir -p /home/ec2-user/certs
             echo "Dev cleanup completed"
 
@@ -337,17 +329,17 @@ jobs:
             branch="${{ steps.should_deploy.outputs.branch }}"
             safe_branch="${{ steps.prepare.outputs.safe_branch }}"
             nginx_location="/test"
-            
+
             echo "Creating modular configuration for development branch: $branch"
             echo "Safe branch name: $safe_branch"
             echo "Nginx location: $nginx_location"
-            
+
             # Ensure the modular configuration directory exists
             sudo mkdir -p /etc/nginx/conf.d/location-tracker
-            
+
             # Remove ALL existing dev configurations (only one dev branch can run at /dev)
             sudo rm -f /etc/nginx/conf.d/location-tracker/dev-*.conf
-            
+
             # Create development branch configuration file
             cat > /tmp/dev-${safe_branch}.conf << EOF
             # Configuration for development branch: $branch
@@ -374,10 +366,10 @@ jobs:
                 proxy_set_header X-Forwarded-Proto \$scheme;
             }
             EOF
-            
+
             # Move the configuration to the nginx directory
             sudo mv /tmp/dev-${safe_branch}.conf /etc/nginx/conf.d/location-tracker/dev-${safe_branch}.conf
-            
+
             # Test configuration
             echo "Testing nginx configuration..."
             if sudo nginx -t; then
@@ -398,7 +390,7 @@ jobs:
               sudo nginx -t
               exit 1
             fi
-            
+
       - name: Load and start Docker container
         if: steps.should_deploy.outputs.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
@@ -411,7 +403,7 @@ jobs:
             safe_branch="${{ steps.prepare.outputs.safe_branch }}"
             container_name="location-tracker-${safe_branch}"
             echo "Loading and starting Docker container: $container_name"
-            
+
             if [ -f "/tmp/location-tracker-${safe_branch}.tar" ]; then
               echo "Loading Docker image from tar file..."
               docker load < /tmp/location-tracker-${safe_branch}.tar
@@ -419,7 +411,7 @@ jobs:
               echo "ERROR: Docker image tar file not found"
               exit 1
             fi
-            
+
             echo "Starting Docker container..."
             docker run -d \
               --name $container_name \
@@ -438,11 +430,12 @@ jobs:
               -e DISABLE_TLS=true \
               -e BASE_PATH="/test" \
               -e TABLE_PREFIX="${safe_branch}" \
+              -e AES_KEY="${{ secrets.AES_ENCRYPTION_KEY }}" \
               location-tracker:${safe_branch}
-            
+
             echo "Waiting for container to start..."
             sleep 30
-            
+
             if docker ps --format '{{.Names}}' | grep -q "^${container_name}$"; then
               echo "Container started successfully: $container_name"
             else
@@ -450,7 +443,7 @@ jobs:
               docker logs $container_name
               exit 1
             fi
-            
+
             rm -f /tmp/location-tracker-${safe_branch}.tar
 
       - name: Health check and verification
@@ -465,17 +458,17 @@ jobs:
             safe_branch="${{ steps.prepare.outputs.safe_branch }}"
             container_name="location-tracker-${safe_branch}"
             instance_name="${{ secrets[format('{0}_INSTANCE_NAME', matrix.instance)] }}"
-            
+
             # Default to matrix.instance if secret is not set
             if [ -z "$instance_name" ]; then
               instance_name="${{ matrix.instance }}"
             fi
-            
+
             echo "=== Final Health Check ==="
             echo "Instance: $instance_name"
             echo "Development branch: $branch"
             echo "Container: $container_name"
-            
+
             max_attempts=5
             attempt=1
             while [ $attempt -le $max_attempts ]; do
@@ -500,7 +493,7 @@ jobs:
               fi
               attempt=$((attempt + 1))
             done
-            
+
             echo "ERROR: All health checks failed"
             docker logs --tail 50 $container_name
             exit 1

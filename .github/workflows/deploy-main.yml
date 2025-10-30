@@ -85,28 +85,24 @@ jobs:
         run: |
           instance_name="${{ secrets[format('{0}_PAGE_NAME', matrix.instance)] }}"
           branch="${{ github.event.inputs.branch }}"
-          
+
           # Default to matrix.instance if secret is not set
           if [ -z "$instance_name" ]; then
             instance_name="${{ matrix.instance }}"
           fi
-          
+
           echo "Using instance name: $instance_name"
           echo "Branch: $branch"
 
           ls
-          
+
           # Modify the HTML title to include instance name
           sed -i "s|<title>Real-time Location Tracker</title>|<title>$instance_name</title>|g" ./static/index.html
-          
+
           # Update both English and Spanish headers
           sed -i "s|<h1>🌍 Real-time Location Tracker</h1>|<h1>🌍 $instance_name</h1>|g" ./static/index.html
-          sed -i "s|<h1>🌍 Rastreador de Ubicación en Tiempo Real</h1>|<h1>🌍 $instance_name</h1>|g" ./static/index.html
-          
-          # Update the translation object to include instance name
-          sed -i "s|title: \"🌍 Real-time Location Tracker\"|title: \"🌍 $instance_name\"|g" ./static/index.html
-          sed -i "s|title: \"🌍 Rastreador de Ubicación en Tiempo Real\"|title: \"🌍 $instance_name\"|g" ./static/index.html
 
+          echo "HTML modifications completed"
       - name: Build Docker image
         if: steps.should_deploy.outputs.deploy == 'true'
         run: |
@@ -129,20 +125,20 @@ jobs:
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
             echo "Cleaning up existing main deployment..."
-            
+
             # Stop and remove location-tracker-main container only
             if docker ps -a --format '{{.Names}}' | grep -q "^location-tracker-main$"; then
               echo "Stopping existing container: location-tracker-main"
               docker stop location-tracker-main || echo "Container was not running"
               docker rm -f location-tracker-main || echo "Failed to remove container"
             fi
-            
+
             # Remove location-tracker:main image
             if docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "^location-tracker:main$"; then
               echo "Removing old image: location-tracker:main"
               docker rmi -f location-tracker:main || echo "Failed to remove image"
             fi
-            
+
             # Check for and free port 8080
             echo "Checking for processes using port 8080..."
             if sudo lsof -i :8080 2>/dev/null; then
@@ -150,7 +146,7 @@ jobs:
               sudo lsof -i :8080 | awk 'NR>1 {print $2}' | xargs -r sudo kill -9 || echo "Failed to terminate some processes"
               sleep 2
             fi
-            
+
             mkdir -p /home/ec2-user/certs
             mkdir -p /home/ec2-user/logs
             echo "Main cleanup completed"
@@ -202,13 +198,13 @@ jobs:
           script: |
             domain="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}"
             echo "Creating modular Nginx configuration for domain: $domain"
-            
+
             # Create directories for modular configuration
             sudo mkdir -p /etc/nginx/conf.d/location-tracker
-            
+
             # Remove old unified config if it exists
             sudo rm -f /etc/nginx/conf.d/location-tracker-*.conf
-            
+
             # Create base server configuration
             cat > /tmp/nginx-base.conf << 'NGINX_EOF'
             # Base server configuration for main application
@@ -246,19 +242,19 @@ jobs:
                     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
                     proxy_set_header X-Forwarded-Proto $scheme;
                 }
-            
+
                 # Include development and feature branch configurations
                 include /etc/nginx/conf.d/location-tracker/dev-*.conf;
                 include /etc/nginx/conf.d/location-tracker/feature-*.conf;
             }
             NGINX_EOF
-            
+
             # Add HTTPS server block if certificates exist
             if [ -f /etc/ssl/certs/location-tracker.crt ] && [ -f /etc/ssl/private/location-tracker.key ]; then
               echo "SSL certificates found, adding HTTPS configuration..."
               
               cat >> /tmp/nginx-base.conf << 'NGINX_HTTPS_EOF'
-            
+
             # HTTPS server block
             server {
                 listen 443 ssl;
@@ -312,18 +308,18 @@ jobs:
             else
               echo "No SSL certificates found, HTTP only configuration"
             fi
-            
+
             # Replace domain placeholder
             sed -i "s/DOMAIN_PLACEHOLDER/$domain/g" /tmp/nginx-base.conf
-            
+
             # Preserve existing feature configurations by recreating them from running containers
             running_feature_containers=""
             if docker ps --format "table {{.Names}}" | grep -q "location-tracker-"; then
               running_feature_containers=$(docker ps --format "{{.Names}}" | grep "location-tracker-" | grep -v "location-tracker-main" || echo "")
             fi
-            
+
             echo "Preserving configurations for running containers: $running_feature_containers"
-            
+
             # Recreate feature configurations for running containers
             if [ ! -z "$running_feature_containers" ]; then
               for container_name in $running_feature_containers; do
@@ -377,10 +373,10 @@ jobs:
                 fi
               done
             fi
-            
+
             # Move the base configuration to the final location
             sudo mv /tmp/nginx-base.conf /etc/nginx/conf.d/location-tracker-base.conf
-            
+
             # Test configuration
             echo "Testing nginx configuration..."
             if sudo nginx -t; then
@@ -399,7 +395,6 @@ jobs:
               exit 1
             fi
 
-
       - name: Load and start Docker container
         if: steps.should_deploy.outputs.deploy == 'true'
         uses: appleboy/ssh-action@v1.2.0
@@ -409,7 +404,7 @@ jobs:
           key: ${{ secrets[format('{0}_SSH_KEY', matrix.instance)] }}
           script: |
             echo "Loading and starting Docker container: location-tracker-main"
-            
+
             if [ -f "/tmp/location-tracker-main.tar" ]; then
               echo "Loading Docker image from tar file..."
               docker load < /tmp/location-tracker-main.tar
@@ -417,7 +412,7 @@ jobs:
               echo "ERROR: Docker image tar file not found"
               exit 1
             fi
-            
+
             echo "Starting Docker container..."
             docker run -d \
               --name location-tracker-main \
@@ -435,11 +430,12 @@ jobs:
               -e UDP_PORT=5051 \
               -e DOMAIN="${{ secrets[format('{0}_DOMAIN', matrix.instance)] }}" \
               -e AUTO_TLS=false \
+              -e AES_KEY="${{ secrets.AES_ENCRYPTION_KEY }}" \
               location-tracker:main
-            
+
             echo "Waiting for container to start..."
             sleep 30
-            
+
             if docker ps --format '{{.Names}}' | grep -q "^location-tracker-main$"; then
               echo "Container started successfully: location-tracker-main"
             else
@@ -447,7 +443,7 @@ jobs:
               docker logs location-tracker-main
               exit 1
             fi
-            
+
             rm -f /tmp/location-tracker-main.tar
 
       - name: Health check
@@ -480,7 +476,7 @@ jobs:
               fi
               attempt=$((attempt + 1))
             done
-            
+
             echo "ERROR: All health checks failed"
             docker logs --tail 50 location-tracker-main
             exit 1

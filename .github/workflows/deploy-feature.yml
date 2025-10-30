@@ -64,28 +64,23 @@ jobs:
         run: |
           instance_name="${{ secrets[format('{0}_PAGE_NAME', matrix.instance)] }}"
           branch="${{ github.event.inputs.branch }}"
-          
+
           # Default to matrix.instance if secret is not set
           if [ -z "$instance_name" ]; then
             instance_name="${{ matrix.instance }}"
           fi
-          
+
           echo "Using instance name: $instance_name"
           echo "Branch: $branch"
 
           ls
-          
+
           # Modify the HTML title to include instance name and branch
           sed -i "s|<title>Real-time Location Tracker</title>|<title>$instance_name ($branch)</title>|g" ./static/index.html
 
           # Update both English and Spanish headers
           sed -i "s|<h1>🌍 Real-time Location Tracker</h1>|<h1>🌍 $instance_name ($branch)</h1>|g" ./static/index.html
-          sed -i "s|<h1>🌍 Rastreador de Ubicación en Tiempo Real</h1>|<h1>🌍 $instance_name ($branch)</h1>|g" ./static/index.html
 
-          # Update the translation object to include instance name
-          sed -i "s|title: \"🌍 Real-time Location Tracker\"|title: \"🌍 $instance_name ($branch)\"|g" ./static/index.html
-          sed -i "s|title: \"🌍 Rastreador de Ubicación en Tiempo Real\"|title: \"🌍 $instance_name ($branch)\"|g" ./static/index.html
-          
           echo "HTML modifications completed"
 
       - name: Build Docker image
@@ -114,27 +109,27 @@ jobs:
             safe_branch="${{ steps.prepare.outputs.safe_branch }}"
             container_name="location-tracker-${safe_branch}"
             echo "Cleaning up existing feature deployment: $container_name"
-            
+
             # Stop and remove existing feature container
             if docker ps -a --format '{{.Names}}' | grep -q "^${container_name}$"; then
               echo "Stopping existing container: $container_name"
               docker stop $container_name || echo "Container was not running"
               docker rm $container_name || echo "Failed to remove container"
             fi
-            
+
             # Remove existing feature image
             if docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "^location-tracker:${safe_branch}$"; then
               echo "Removing old image: location-tracker:${safe_branch}"
               docker rmi location-tracker:${safe_branch} || echo "Failed to remove image"
             fi
-            
+
             # Check for and free port 8082 (feature port)
             if sudo lsof -i :8082 2>/dev/null; then
               echo "Found processes using port 8082, attempting to terminate..."
               sudo lsof -i :8082 | awk 'NR>1 {print $2}' | xargs -r sudo kill -9 || echo "Failed to terminate some processes"
               sleep 2
             fi
-            
+
             mkdir -p /home/ec2-user/certs
             echo "Feature cleanup completed"
 
@@ -179,17 +174,17 @@ jobs:
             branch="${{ github.event.inputs.branch }}"
             safe_branch="${{ steps.prepare.outputs.safe_branch }}"
             nginx_location="/test/$branch"
-            
+
             echo "Creating modular configuration for feature branch: $branch"
             echo "Safe branch name: $safe_branch"
             echo "Nginx location: $nginx_location"
-            
+
             # Ensure the modular configuration directory exists
             sudo mkdir -p /etc/nginx/conf.d/location-tracker
-            
+
             # Remove any existing feature configuration for this branch
             sudo rm -f /etc/nginx/conf.d/location-tracker/feature-${safe_branch}.conf
-            
+
             # Create feature branch configuration file
             cat > /tmp/feature-${safe_branch}.conf << EOF
             # Configuration for feature branch: $branch
@@ -216,10 +211,10 @@ jobs:
                 proxy_set_header X-Forwarded-Proto \$scheme;
             }
             EOF
-            
+
             # Move the configuration to the nginx directory
             sudo mv /tmp/feature-${safe_branch}.conf /etc/nginx/conf.d/location-tracker/feature-${safe_branch}.conf
-            
+
             # Test configuration
             echo "Testing nginx configuration..."
             if sudo nginx -t; then
@@ -253,7 +248,7 @@ jobs:
             safe_branch="${{ steps.prepare.outputs.safe_branch }}"
             container_name="location-tracker-${safe_branch}"
             echo "Loading and starting Docker container: $container_name"
-            
+
             if [ -f "/tmp/location-tracker-${safe_branch}.tar" ]; then
               echo "Loading Docker image from tar file..."
               docker load < /tmp/location-tracker-${safe_branch}.tar
@@ -261,7 +256,7 @@ jobs:
               echo "ERROR: Docker image tar file not found"
               exit 1
             fi
-            
+
             echo "Starting Docker container..."
             docker run -d \
               --name $container_name \
@@ -280,11 +275,12 @@ jobs:
               -e DISABLE_TLS=true \
               -e BASE_PATH="/test/$branch" \
               -e TABLE_PREFIX="${safe_branch}" \
+              -e AES_KEY="${{ secrets.AES_ENCRYPTION_KEY }}" \
               location-tracker:${safe_branch}
-            
+
             echo "Waiting for container to start..."
             sleep 30
-            
+
             if docker ps --format '{{.Names}}' | grep -q "^${container_name}$"; then
               echo "Container started successfully: $container_name"
             else
@@ -292,7 +288,7 @@ jobs:
               docker logs $container_name
               exit 1
             fi
-            
+
             rm -f /tmp/location-tracker-${safe_branch}.tar
 
       - name: Health check and verification
@@ -307,17 +303,17 @@ jobs:
             safe_branch="${{ steps.prepare.outputs.safe_branch }}"
             container_name="location-tracker-${safe_branch}"
             instance_name="${{ secrets[format('{0}_INSTANCE_NAME', matrix.instance)] }}"
-            
+
             # Default to matrix.instance if secret is not set
             if [ -z "$instance_name" ]; then
               instance_name="${{ matrix.instance }}"
             fi
-            
+
             echo "=== Final Health Check ==="
             echo "Instance: $instance_name"
             echo "Feature branch: $branch"
             echo "Container: $container_name"
-            
+
             max_attempts=5
             attempt=1
             while [ $attempt -le $max_attempts ]; do
@@ -342,7 +338,7 @@ jobs:
               fi
               attempt=$((attempt + 1))
             done
-            
+
             echo "ERROR: All health checks failed"
             docker logs --tail 50 $container_name
             exit 1
