@@ -88,7 +88,7 @@ export class UIManager {
       noFilterOpenBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         this.tracker.hideNoFilterOverlay();
-        this.tracker.openHistoryConfigPopup();
+        this.tracker.historyManager.openHistoryConfig();
       });
     }
 
@@ -103,7 +103,7 @@ export class UIManager {
       emptyResultsAdjustBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         this.tracker.hideNoResultsOverlay()
-        this.tracker.openHistoryConfigPopup();
+        this.tracker.historyManager.openHistoryConfig();
       });
     }
 
@@ -131,6 +131,7 @@ export class UIManager {
   }
 
   setupEventListeners() {
+    // Track Latest button
     document.getElementById('track-latest-btn').addEventListener('click', () => {
       this.tracker.userInteracted = false;
       this.tracker.suppressUserInteraction = false;
@@ -139,37 +140,156 @@ export class UIManager {
       this.tracker.updateLocationSelection();
     });
 
+    // History Mode button - now opens config directly
     document.getElementById('history-mode-btn').addEventListener('click', () => {
-      this.tracker.historyManager.toggleHistoryMode();
+      this.tracker.historyManager.openHistoryConfig();
     });
 
+    // Live Mode button - deactivates history mode
     document.getElementById('live-mode-btn').addEventListener('click', () => {
-      this.tracker.historyManager.toggleHistoryMode();
+      this.tracker.historyManager.deactivateHistoryMode();
     });
 
-    document.getElementById('history-config-btn').addEventListener('click', () => {
-      this.tracker.openHistoryConfigPopup();
-    });
-
+    // Trace dots toggle
     document.getElementById('toggle-trace-dots').addEventListener('change', (e) => {
       this.tracker.showTraceDots = e.target.checked;
       this.tracker.applyTraceDotsVisibility();
     });
 
+    // History limit
     document.getElementById('history-limit').addEventListener('change', (e) => {
       this.tracker.historyLimit = parseInt(e.target.value);
       this.tracker.refreshData();
     });
 
+    // Language selector
     document.getElementById('language-selector').addEventListener('change', (e) => {
       this.tracker.setLanguage(e.target.value);
     });
 
+    // Window focus handler
     window.addEventListener('focus', () => {
       if (this.tracker.wsManager.ws && this.tracker.wsManager.ws.readyState !== WebSocket.OPEN) {
         this.tracker.wsManager.connect();
       }
     });
+
+    // Setup filter application buttons
+    this.setupFilterButtons();
+  }
+
+  setupFilterButtons() {
+    // Time filter quick ranges
+    document.querySelectorAll('.quick-range-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const hours = parseInt(btn.dataset.hours);
+        this.tracker.historyManager.setQuickTimeRange(hours);
+        
+        // Update active state
+        document.querySelectorAll('.quick-range-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+
+    // Apply time filter
+    const applyTimeBtn = document.getElementById('apply-time-filter-popup');
+    if (applyTimeBtn) {
+      applyTimeBtn.addEventListener('click', () => {
+        this.tracker.historyManager.applyTimeFilterFromPopup();
+      });
+    }
+
+    // Clear time filter
+    const clearTimeBtn = document.getElementById('clear-time-filter-popup');
+    if (clearTimeBtn) {
+      clearTimeBtn.addEventListener('click', () => {
+        this.tracker.historyManager.clearTimeFilter();
+      });
+    }
+
+    // Apply location filter
+    const applyLocationBtn = document.getElementById('apply-location-filter');
+    if (applyLocationBtn) {
+      applyLocationBtn.addEventListener('click', () => {
+        this.tracker.historyManager.applyLocationFilterFromPopup();
+      });
+    }
+
+    // Clear location filter
+    const clearLocationBtn = document.getElementById('clear-location-filter');
+    if (clearLocationBtn) {
+      clearLocationBtn.addEventListener('click', () => {
+        this.tracker.historyManager.clearLocationFilter();
+      });
+    }
+
+    // Select on map button
+    const selectOnMapBtn = document.getElementById('select-on-map-btn');
+    if (selectOnMapBtn) {
+      selectOnMapBtn.addEventListener('click', () => {
+        this.startMapLocationSelection();
+      });
+    }
+  }
+
+  startMapLocationSelection() {
+    this.tracker.isSelectingLocationOnMap = true;
+    const selectBtn = document.getElementById('select-on-map-btn');
+    
+    // Update button state
+    selectBtn.textContent = '✖ ' + this.tracker.t('cancelSelection');
+    selectBtn.classList.add('secondary');
+    
+    // Change cursor
+    const mapContainer = document.getElementById('map');
+    mapContainer.style.cursor = 'crosshair';
+
+    // Create click handler
+    this.tracker.mapSelectionHandler = (e) => {
+      const {lng, lat} = e.lngLat;
+      
+      // Update inputs
+      document.getElementById('location-lat-input').value = lat.toFixed(6);
+      document.getElementById('location-lng-input').value = lng.toFixed(6);
+      
+      // End selection mode
+      this.endMapLocationSelection();
+      
+      // Show feedback
+      console.log(this.tracker.t('locationSelected'));
+    };
+
+    // Add click listener to map
+    this.tracker.mapManager.map.once('click', this.tracker.mapSelectionHandler);
+
+    // Update button to cancel selection
+    selectBtn.onclick = () => {
+      this.endMapLocationSelection();
+    };
+  }
+
+  endMapLocationSelection() {
+    this.tracker.isSelectingLocationOnMap = false;
+    const selectBtn = document.getElementById('select-on-map-btn');
+    const mapContainer = document.getElementById('map');
+    
+    // Reset button
+    selectBtn.textContent = '🗺 ' + this.tracker.t('selectOnMap');
+    selectBtn.classList.remove('secondary');
+    
+    // Reset cursor
+    mapContainer.style.cursor = '';
+    
+    // Remove map listener if it exists
+    if (this.tracker.mapSelectionHandler) {
+      this.tracker.mapManager.map.off('click', this.tracker.mapSelectionHandler);
+      this.tracker.mapSelectionHandler = null;
+    }
+
+    // Restore normal button behavior
+    selectBtn.onclick = () => {
+      this.startMapLocationSelection();
+    };
   }
 
   initializeTimePickers() {
@@ -191,7 +311,6 @@ export class UIManager {
     }
 
     document.querySelector('#history-mode-btn span:last-child').textContent = this.tracker.t('historyMode');
-    document.querySelector('#history-config-btn span:last-child').textContent = this.tracker.t('historySettings');
     document.querySelector('#live-mode-btn span:last-child').textContent = this.tracker.t('liveMode');
     document.querySelector('#menu-toggle-btn span:last-child').textContent = this.tracker.t('menu');
 
@@ -289,7 +408,7 @@ export class UIManager {
     if (clearLocationBtn) clearLocationBtn.textContent = this.tracker.t('clearFilter');
 
     const selectOnMapText = document.getElementById('select-on-map-text');
-    if (selectOnMapText) selectOnMapText.textContent = '📍 ' + this.tracker.t('selectOnMap');
+    if (selectOnMapText) selectOnMapText.textContent = '🗺 ' + this.tracker.t('selectOnMap');
 
     this.tracker.updateConnectionStatus(
       this.tracker.wsManager.isConnected() ? this.tracker.t('connected') : this.tracker.t('connecting'),
