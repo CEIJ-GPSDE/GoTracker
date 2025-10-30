@@ -129,6 +129,7 @@ export class DeviceManager {
   toggleDeviceVisibility(deviceId, visible) {
     const deviceInfo = this.devices.get(deviceId);
     if (deviceInfo) {
+      const wasVisible = deviceInfo.visible;
       deviceInfo.visible = visible;
 
       if (visible) {
@@ -153,29 +154,22 @@ export class DeviceManager {
       this.updateDeviceLegend();
       this.updateDeviceFilterList();
 
-      // 🆕 REGENERATE all visible devices' visualizations
-      if (this.tracker.isHistoryMode) {
-        if (visible) {
-          // When re-selecting in history mode, force a full reload to recreate visualizations
-          if (this.tracker.historyManager.activeFilterType === 'time' && this.tracker.historyManager.timeFilter) {
-            this.tracker.historyManager.loadHistoricalData();
-          } else if (this.tracker.historyManager.activeFilterType === 'location' && this.tracker.historyManager.locationFilter) {
-            this.tracker.historyManager.loadHistoricalByLocation(
-              this.tracker.historyManager.locationFilter.lat,
-              this.tracker.historyManager.locationFilter.lng,
-              this.tracker.historyManager.locationFilter.radius
-            );
-          } else {
-            // Force recreation of filtered view
-            this.tracker.mapManager.clearTraceMarkers();
-            this.tracker.updateRouteForFiltered();
-          }
-        }
-        // When deselecting, no need to reload - we already cleared above
-      } else {
-        // In live mode, regenerate traces and routes for all selected devices
-        if (visible) {
-          // Force recreation of all traces
+      // 🆕 REGENERATE visualizations when selecting back
+      if (visible && !wasVisible) {
+        // Device was just selected back - need to recreate its visualizations
+        console.log(`Device ${deviceId} selected back, recreating visualizations...`);
+        
+        if (this.tracker.isHistoryMode) {
+          // In history mode, clear all traces and routes, then recreate for all selected devices
+          console.log('History mode: clearing and recreating all traces');
+          this.tracker.mapManager.clearTraceMarkers();
+          this.tracker.mapManager.clearAllRoutes();
+          
+          // Force recreation by calling updateRouteForFiltered
+          this.tracker.updateRouteForFiltered();
+        } else {
+          // In live mode, clear all traces and recreate
+          console.log('Live mode: clearing and recreating all traces');
           this.tracker.mapManager.clearTraceMarkers();
           this.tracker.updateRouteForDevice();
         }
