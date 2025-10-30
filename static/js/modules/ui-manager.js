@@ -223,11 +223,22 @@ export class UIManager {
       });
     }
 
-    // Select on map button
+    // Select on map button - add event listener properly
     const selectOnMapBtn = document.getElementById('select-on-map-btn');
     if (selectOnMapBtn) {
-      selectOnMapBtn.addEventListener('click', () => {
-        this.startMapLocationSelection();
+      selectOnMapBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Check if we're in selection mode (button shows Cancel)
+        if (this.tracker.isSelectingLocationOnMap) {
+          // Cancel selection
+          this.endMapLocationSelection();
+          this.reopenHistoryConfigPopup();
+        } else {
+          // Start selection
+          this.startMapLocationSelection();
+        }
       });
     }
   }
@@ -238,7 +249,7 @@ export class UIManager {
     const historyConfigPopup = document.getElementById('history-config-popup');
     
     // Remember which tab was active (should be location-filter)
-    const activeTab = document.querySelector('.tab-button.active');
+    const activeTab = document.querySelector('#history-config-popup .tab-button.active');
     if (activeTab) {
       this.tracker.historyManager.lastActiveConfigTab = activeTab.dataset.tab;
     }
@@ -260,7 +271,7 @@ export class UIManager {
     this.tracker.mapSelectionHandler = (e) => {
       const {lng, lat} = e.lngLat;
       
-      // Update inputs
+      // Update inputs (overwrite existing values)
       document.getElementById('location-lat-input').value = lat.toFixed(6);
       document.getElementById('location-lng-input').value = lng.toFixed(6);
       
@@ -271,14 +282,16 @@ export class UIManager {
       this.reopenHistoryConfigPopup();
       
       // Show feedback
-      console.log(this.tracker.t('locationSelected'));
+      console.log(this.tracker.t('locationSelected'), `Lat: ${lat.toFixed(6)}, Lng: ${lng.toFixed(6)}`);
     };
 
     // Add click listener to map
     this.tracker.mapManager.map.once('click', this.tracker.mapSelectionHandler);
 
     // Update button to cancel selection
-    selectBtn.onclick = () => {
+    selectBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       this.endMapLocationSelection();
       this.reopenHistoryConfigPopup();
     };
@@ -289,7 +302,7 @@ export class UIManager {
     const selectBtn = document.getElementById('select-on-map-btn');
     const mapContainer = document.getElementById('map');
     
-    // Reset button
+    // Reset button text
     selectBtn.textContent = '🗺 ' + this.tracker.t('selectOnMap');
     selectBtn.classList.remove('secondary');
     
@@ -302,10 +315,8 @@ export class UIManager {
       this.tracker.mapSelectionHandler = null;
     }
 
-    // Restore normal button behavior
-    selectBtn.onclick = () => {
-      this.startMapLocationSelection();
-    };
+    // Restore normal button behavior - this is critical for reusability
+    selectBtn.onclick = null; // Clear the cancel handler first
   }
 
   reopenHistoryConfigPopup() {

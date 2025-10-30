@@ -293,15 +293,19 @@ export class HistoryManager {
     document.getElementById('location-lng-input').value = '';
     document.getElementById('location-radius-input').value = '0.5';
 
+    // Clear existing location filter state
+    this.locationFilter = null;
+    this.persistedLocationFilter = null;
+
     // Set filter
     this.timeFilter = {start: startTime, end: endTime};
     this.activeFilterType = 'time';
-    this.locationFilter = null;
-    this.persistedLocationFilter = null;
     console.log('timeFilter set to:', this.timeFilter);
 
-    // Activate history mode
-    this.activateHistoryMode();
+    // Activate history mode if not already active
+    if (!this.tracker.isHistoryMode) {
+      this.activateHistoryMode();
+    }
 
     this.tracker.updateTimeFilterIndicator();
     this.loadHistoricalData();
@@ -335,10 +339,16 @@ export class HistoryManager {
     document.getElementById('end-time-popup').value = '';
     document.querySelectorAll('.quick-range-btn').forEach(btn => btn.classList.remove('active'));
 
-    // Activate history mode
-    this.activateHistoryMode();
+    // Clear existing time filter state
+    this.timeFilter = null;
+    this.persistedTimeFilter = null;
 
-    // Load data
+    // Activate history mode if not already active
+    if (!this.tracker.isHistoryMode) {
+      this.activateHistoryMode();
+    }
+
+    // Load data (this will overwrite existing location filter)
     this.loadHistoricalByLocation(lat, lng, radius);
   }
 
