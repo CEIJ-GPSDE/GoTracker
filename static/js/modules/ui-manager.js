@@ -146,6 +146,11 @@ export class UIManager {
       this.tracker.historyManager.openHistoryConfig();
     });
 
+    // Change Filter button - opens config when in history mode
+    document.getElementById('change-filter-btn').addEventListener('click', () => {
+      this.tracker.historyManager.openHistoryConfig();
+    });
+
     // Live Mode button - deactivates history mode
     document.getElementById('live-mode-btn').addEventListener('click', () => {
       this.tracker.historyManager.deactivateHistoryMode();
@@ -367,6 +372,7 @@ export class UIManager {
     }
 
     document.querySelector('#history-mode-btn span:last-child').textContent = this.tracker.t('historyMode');
+    document.querySelector('#change-filter-btn span:last-child').textContent = this.tracker.t('changeFilter');
     document.querySelector('#live-mode-btn span:last-child').textContent = this.tracker.t('liveMode');
     
     // Update bottom menu button
