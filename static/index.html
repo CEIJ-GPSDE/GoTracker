@@ -206,60 +206,19 @@
         <button class="popup-close" id="history-config-close">×</button>
       </div>
       <div class="popup-body">
-        <div class="menu-tabs">
-          <button class="tab-button active" data-tab="time-filter" id="time-filter-tab-btn">⏱️ <span
-              id="time-filter-tab-label">Time Filter</span></button>
-          <button class="tab-button" data-tab="location-filter" id="location-filter-tab-btn">📍 <span
-              id="location-filter-tab-label">Location Filter</span></button>
-        </div>
-
-        <!-- No Filter Selected Tab (Default) -->
-        <div class="tab-content" id="no-filter-selected-tab" style="display: none;">
-          <div class="card">
-            <div class="card-body" style="text-align: center; padding: 60px 30px;">
-              <h3 style="color: white; margin-bottom: 15px;" id="no-filter-selected-title">📍 No filter selected</h3>
-              <p style="color: #9ca3af; margin-bottom: 10px;" id="please-select-filter">Please select a time range or
-                location to view historical data.</p>
-              <p style="color: #9ca3af; font-size: 14px;" id="select-filter-tab">Choose a tab above to configure your
-                filter.</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Time Filter Tab -->
-        <div class="tab-content active" id="time-filter-tab">
+        <div class="tab-content active" id="combined-filter-tab">
           <div class="card">
             <div class="card-body">
-              <div class="historical-controls active" id="historical-controls-popup">
-                <div class="quick-ranges">
-                  <button class="quick-range-btn" data-hours="1">1h</button>
-                  <button class="quick-range-btn" data-hours="6">6h</button>
-                  <button class="quick-range-btn" data-hours="24">24h</button>
-                  <button class="quick-range-btn" data-hours="168">1w</button>
-                  <button class="quick-range-btn" data-hours="8760">1y</button>
-                </div>
-                <div class="time-range-controls">
-                  <div class="control-group">
-                    <label for="start-time-popup">From:</label>
-                    <input type="datetime-local" id="start-time-popup">
-                  </div>
-                  <div class="control-group">
-                    <label for="end-time-popup">To:</label>
-                    <input type="datetime-local" id="end-time-popup">
-                  </div>
-                </div>
-                <div class="validation-error" id="validation-error"></div>
-                <button class="btn" id="apply-time-filter-popup">Apply Time Filter</button>
-                <button class="btn secondary" id="clear-time-filter-popup">Clear Filter</button>
+              <!-- Time Filters -->
+              <div class="control-group">
+                <label for="start-time-popup">From:</label>
+                <input type="datetime-local" id="start-time-popup">
               </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Location Filter Tab -->
-        <div class="tab-content" id="location-filter-tab">
-          <div class="card">
-            <div class="card-body">
+              <div class="control-group">
+                <label for="end-time-popup">To:</label>
+                <input type="datetime-local" id="end-time-popup">
+              </div>
+              <!-- Location Filters -->
               <div class="control-group">
                 <label for="location-lat-input" id="location-lat-label">Latitude:</label>
                 <input type="number" id="location-lat-input" step="0.000001" placeholder="e.g., 40.7128">
@@ -268,22 +227,20 @@
                 <label for="location-lng-input" id="location-lng-label">Longitude:</label>
                 <input type="number" id="location-lng-input" step="0.000001" placeholder="e.g., -74.0060">
               </div>
-              <button class="btn secondary" id="select-on-map-btn" style="margin-bottom: 15px;">
-                <span id="select-on-map-text">📍 Select on Map</span>
-              </button>
               <div class="control-group">
                 <label for="location-radius-input" id="location-radius-label">Radius (km):</label>
                 <input type="number" id="location-radius-input" value="0.5" min="0.1" max="50" step="0.1">
               </div>
-              <div class="validation-error" id="location-validation-error"></div>
-              <button class="btn" id="apply-location-filter">Apply Location Filter</button>
-              <button class="btn secondary" id="clear-location-filter">Clear Filter</button>
+              <div class="validation-error" id="combined-validation-error"></div>
+              <button class="btn" id="apply-combined-filter">Apply Filter</button>
+              <button class="btn secondary" id="clear-combined-filter">Clear Filter</button>
             </div>
           </div>
         </div>
       </div>
     </div>
   </div>
+
 
   <script type="module" src="js/app.js"></script>
 </body>

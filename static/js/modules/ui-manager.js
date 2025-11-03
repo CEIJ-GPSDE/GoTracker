@@ -12,8 +12,7 @@ export class UIManager {
     const popupClose = document.getElementById('popup-close');
     const historyConfigPopup = document.getElementById('history-config-popup');
     const historyConfigClose = document.getElementById('history-config-close');
-    const tabButtons = document.querySelectorAll('.tab-button');
-    const tabContents = document.querySelectorAll('.tab-content');
+    
 
     menuToggle.addEventListener('click', () => {
       popupMenu.classList.add('active');
@@ -137,6 +136,7 @@ export class UIManager {
       this.tracker.selectedLocationIndex = -1;
       this.tracker.toggleTracking(true);
       this.tracker.updateLocationSelection();
+      this.setupCombinedFilterListeners();
     });
 
     document.getElementById('history-mode-btn').addEventListener('click', () => {
@@ -169,6 +169,57 @@ export class UIManager {
       if (this.tracker.wsManager.ws && this.tracker.wsManager.ws.readyState !== WebSocket.OPEN) {
         this.tracker.wsManager.connect();
       }
+    });
+  }
+  setupCombinedFilterListeners() {
+    const applyBtn = document.getElementById('apply-combined-filter');
+    const clearBtn = document.getElementById('clear-combined-filter');
+    const validationError = document.getElementById('combined-validation-error');
+
+    applyBtn.addEventListener('click', () => {
+      // Time and location values
+      const startTime = document.getElementById('start-time-popup').value;
+      const endTime = document.getElementById('end-time-popup').value;
+      const lat = document.getElementById('location-lat-input').value;
+      const lng = document.getElementById('location-lng-input').value;
+      const radius = document.getElementById('location-radius-input').value;
+
+      // Validation
+      let error = null;
+      if ((lat && !lng) || (!lat && lng)) {
+        error = 'Both latitude and longitude must be provided for location filter.';
+      }
+      if ((lat && lng) && (!radius || radius <= 0)) {
+        error = 'Radius required and must be positive for a location filter.';
+      }
+      if ((startTime && !endTime) || (!startTime && endTime)) {
+        error = 'Both start and end time must be provided for a time filter.';
+      }
+      if (error) {
+        validationError.textContent = error;
+        validationError.classList.add('show');
+        return;
+      } else {
+        validationError.classList.remove('show');
+        validationError.textContent = '';
+      }
+
+      this.tracker.applyCombinedFilter({
+        time: startTime && endTime ? { start: startTime, end: endTime } : null,
+        location: lat && lng && radius ? { lat: parseFloat(lat), lng: parseFloat(lng), radius: parseFloat(radius) } : null
+      });
+    });
+
+    clearBtn.addEventListener('click', () => {
+      document.getElementById('start-time-popup').value = '';
+      document.getElementById('end-time-popup').value = '';
+      document.getElementById('location-lat-input').value = '';
+      document.getElementById('location-lng-input').value = '';
+      document.getElementById('location-radius-input').value = '';
+      validationError.classList.remove('show');
+      validationError.textContent = '';
+      // clear filters (method could be implemented later)
+      //this.tracker.clearCombinedFilter();
     });
   }
 

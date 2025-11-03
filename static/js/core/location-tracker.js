@@ -558,7 +558,28 @@ export class LocationTracker {
     const container = document.getElementById('location-list');
     container.innerHTML = `<div class="error">${message}</div>`;
   }
+  applyCombinedFilter({ time, location }) {
+    // save the filters in the corresponding managers
+    this.timeFilter = time;
+    this.locationFilter = location;
+    // Clean if null (supported by setter of historyManager)
+    
+    // If there's a definde filter, activate history mode
+    this.isHistoryMode = !!(time || location);
 
+    // update the filter visual indicator
+    this.updateTimeFilterIndicator();
+
+    // Reload data according to active filters
+    this.refreshData();
+  }
+
+  clearCombinedFilter() {
+    this.timeFilter = null;
+    this.locationFilter = null;
+    this.updateTimeFilterIndicator();
+    this.refreshData();
+  }
   async refreshData() {
     try {
       if (this.isHistoryMode && this.timeFilter) {
