@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Geofence API Tester</title>
+  <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+  <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f5f5;
+    }
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 20px;
+    }
+    .info-banner {
+      background: #667eea;
+      color: white;
+      padding: 10px 15px;
+      border-radius: 6px;
+      margin-bottom: 20px;
+      font-size: 14px;
+    }
+    .map-container {
+      height: 500px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+      position: relative;
+    }
+    #map {
+      height: 100%;
+      border-radius: 8px;
+    }
+    .controls {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+    .button-group {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 15px;
+    }
+    button {
+      padding: 10px 20px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 0.3s;
+    }
+    button:hover {
+      background: #5568d3;
+    }
+    button.danger {
+      background: #ef4444;
+    }
+    button.danger:hover {
+      background: #dc2626;
+    }
+    button.success {
+      background: #10b981;
+    }
+    button.success:hover {
+      background: #059669;
+    }
+    .output {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .output h2 {
+      margin-bottom: 15px;
+      color: #333;
+      font-size: 18px;
+    }
+    #result {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      padding: 15px;
+      border-radius: 6px;
+      max-height: 400px;
+      overflow-y: auto;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    .log-entry {
+      margin-bottom: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .log-entry:last-child {
+      border-bottom: none;
+    }
+    .log-success {
+      color: #10b981;
+    }
+    .log-error {
+      color: #ef4444;
+    }
+    .log-info {
+      color: #3b82f6;
+    }
+    .drawing-mode {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: rgba(255, 255, 255, 0.95);
+      padding: 15px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      z-index: 1000;
+      display: none;
+    }
+    .drawing-mode.active {
+      display: block;
+    }
+    .drawing-mode h3 {
+      margin: 0 0 10px 0;
+      font-size: 14px;
+      color: #667eea;
+    }
+    .drawing-mode p {
+      margin: 0;
+      font-size: 12px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🗺️ Geofence API Tester</h1>
+    
+    <div class="info-banner" id="path-info">
+      Loading path information...
+    </div>
+
+    <div class="map-container">
+      <div id="map"></div>
+      <div class="drawing-mode" id="drawing-mode">
+        <h3>🖊️ Drawing Mode Active</h3>
+        <p>Click on the map to add points</p>
+        <p>Double-click or press Enter to finish</p>
+      </div>
+    </div>
+
+    <div class="controls">
+      <h2>Test Operations</h2>
+      
+      <div class="button-group">
+        <button onclick="createSampleGeofence()" class="success">Create Sample Geofence</button>
+        <button onclick="loadGeofences()">Load All Geofences</button>
+        <button onclick="toggleDistanceMode()" id="distanceBtn">Calculate Distance</button>
+        <button onclick="loadRoutes()">Load Routes</button>
+        <button onclick="clearMap()">Clear Map</button>
+      </div>
+
+      <div class="button-group">
+        <button onclick="startDrawing()" class="success">Draw New Geofence</button>
+        <button onclick="toggleAddPointMode()" class="success" id="addPointBtn">Add Test Point</button>
+        <button onclick="clearTestPoints()" class="danger">Clear Test Points</button>
+      </div>
+
+      <div class="button-group">
+        <button onclick="testCheckPoint(40.7660, -73.9712)">Check Central Park Point</button>
+        <button onclick="testCheckPoint(40.7128, -74.0060)">Check Times Square Point</button>
+      </div>
+    </div>
+
+    <div class="output">
+      <h2>Output Log</h2>
+      <div id="result"></div>
+    </div>
+  </div>
+
+  <script>
+    // ============== DYNAMIC BASE PATH DETECTION ==============
+    function getBasePath() {
+      const path = window.location.pathname;
+      let basePath = path.replace(/\/[^\/]*\.(html|htm)$/i, '');
+      basePath = basePath.replace(/\/$/, '');
+      if (basePath === '' || basePath === '/') {
+        return '';
+      }
+      return basePath;
+    }
+
+    const BASE_PATH = getBasePath();
+    const API_BASE = BASE_PATH ? `${BASE_PATH}/api` : '/api';
+    const WS_BASE = BASE_PATH ? `${BASE_PATH}/ws` : '/ws';
+
+    document.getElementById('path-info').innerHTML = `
+      <strong>Environment:</strong> ${BASE_PATH || '/' } (Main Branch) | 
+      <strong>API Base:</strong> ${API_BASE} | 
+      <strong>WebSocket:</strong> ${WS_BASE}
+    `;
+
+    console.log('Base Path:', BASE_PATH);
+    console.log('API Base:', API_BASE);
+    console.log('WebSocket Base:', WS_BASE);
+
+    // ============== MAP INITIALIZATION ==============
+    const map = new maplibregl.Map({
+      container: 'map',
+      style: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
+      center: [-73.9712, 40.7660],
+      zoom: 12
+    });
+
+    map.addControl(new maplibregl.NavigationControl());
+
+    let drawingPoints = [];
+    let drawingMode = false;
+    let geofenceMarkers = [];
+    let geofencePolygons = [];
+    let testPoints = [];
+    let addPointMode = false;
+    let distanceMode = false;
+    let distancePoints = [];
+    let distanceMarkers = [];
+    let routeMarkers = [];
+
+    // ============== LOGGER ==============
+    function log(message, type = 'info') {
+      const result = document.getElementById('result');
+      const timestamp = new Date().toLocaleTimeString();
+      const className = `log-${type}`;
+      
+      const entry = document.createElement('div');
+      entry.className = 'log-entry';
+      entry.innerHTML = `<span class="${className}">[${timestamp}] ${message}</span>`;
+      
+      result.insertBefore(entry, result.firstChild);
+    }
+
+    function logJSON(data, label = '') {
+      const formatted = JSON.stringify(data, null, 2);
+      log(`${label}\n${formatted}`, 'info');
+    }
+
+    // ============== API FUNCTIONS ==============
+    async function createSampleGeofence() {
+      const geofence = {
+        name: `Test Geofence ${Date.now()}`,
+        description: 'Sample geofence created from test page',
+        coordinates: [
+          [-73.9815, 40.7681],
+          [-73.9815, 40.7644],
+          [-73.9495, 40.7644],
+          [-73.9495, 40.7681],
+          [-73.9815, 40.7681]
+        ]
+      };
+
+      try {
+        const response = await fetch(`${API_BASE}/geofences`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(geofence)
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          log(`✓ Geofence created successfully (ID: ${result.id})`, 'success');
+          logJSON(result, 'Created geofence:');
+          drawGeofenceOnMap(result);
+        } else {
+          const errorText = await response.text();
+          log(`✗ Failed to create geofence: ${response.status} - ${errorText}`, 'error');
+        }
+      } catch (error) {
+        log(`✗ Error: ${error.message}`, 'error');
+      }
+    }
+
+    async function loadGeofences() {
+      try {
+        const response = await fetch(`${API_BASE}/geofences`);
+        const geofences = await response.json();
+        
+        log(`✓ Loaded ${geofences.length} geofence(s)`, 'success');
+        logJSON(geofences, 'Geofences:');
+        
+        clearMap();
+        geofences.forEach(gf => drawGeofenceOnMap(gf));
+      } catch (error) {
+        log(`✗ Error: ${error.message}`, 'error');
+      }
+    }
+
+    function drawGeofenceOnMap(geofence) {
+      if (!geofence.coordinates || geofence.coordinates.length < 3) return;
+
+      const sourceId = `geofence-${geofence.id}`;
+      
+      if (map.getSource(sourceId)) {
+        map.removeLayer(`${sourceId}-fill`);
+        map.removeLayer(`${sourceId}-outline`);
+        map.removeSource(sourceId);
+      }
+
+      map.addSource(sourceId, {
+        type: 'geojson',
+        data: {
+          type: 'Feature',
+          geometry: {
+            type: 'Polygon',
+            coordinates: [geofence.coordinates]
+          }
+        }
+      });
+
+      map.addLayer({
+        id: `${sourceId}-fill`,
+        type: 'fill',
+        source: sourceId,
+        paint: {
+          'fill-color': geofence.active ? '#667eea' : '#9ca3af',
+          'fill-opacity': 0.3
+        }
+      });
+
+      map.addLayer({
+        id: `${sourceId}-outline`,
+        type: 'line',
+        source: sourceId,
+        paint: {
+          'line-color': geofence.active ? '#667eea' : '#9ca3af',
+          'line-width': 2
+        }
+      });
+
+      geofencePolygons.push(sourceId);
+
+      const center = geofence.coordinates[0];
+      const marker = new maplibregl.Marker({ color: geofence.active ? '#667eea' : '#9ca3af' })
+        .setLngLat(center)
+        .setPopup(new maplibregl.Popup().setHTML(`
+          <strong>${geofence.name}</strong><br>
+          ${geofence.description || ''}<br>
+          <small>ID: ${geofence.id} | ${geofence.active ? 'Active' : 'Inactive'}</small><br>
+          <button onclick="deleteGeofence(${geofence.id})" style="margin-top: 8px; padding: 4px 8px; background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer;">Delete</button>
+        `))
+        .addTo(map);
+
+      geofenceMarkers.push(marker);
+    }
+
+    async function testCheckPoint(lat, lng) {
+      try {
+        const response = await fetch(`${API_BASE}/geofence/check?lat=${lat}&lng=${lng}`);
+        const result = await response.json();
+        
+        if (result.count > 0) {
+          log(`✓ Point (${lat}, ${lng}) is inside ${result.count} geofence(s)`, 'success');
+        } else {
+          log(`Point (${lat}, ${lng}) is not inside any geofence`, 'info');
+        }
+        
+        logJSON(result, 'Check result:');
+
+        const marker = new maplibregl.Marker({ 
+          color: result.count > 0 ? '#10b981' : '#ef4444',
+          draggable: false
+        })
+          .setLngLat([lng, lat])
+          .setPopup(new maplibregl.Popup().setHTML(`
+            <strong>Test Point</strong><br>
+            ${lat.toFixed(6)}, ${lng.toFixed(6)}<br>
+            ${result.count > 0 ? '✓ Inside geofence' : '✗ Outside geofence'}<br>
+            <button onclick="removeTestPoint(this)" data-lng="${lng}" data-lat="${lat}" style="margin-top: 8px; padding: 4px 8px; background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer;">Remove</button>
+          `))
+          .addTo(map);
+
+        testPoints.push({ marker, lat, lng });
+      } catch (error) {
+        log(`✗ Error: ${error.message}`, 'error');
+      }
+    }
+
+    async function testDistance() {
+      if (distancePoints.length !== 2) {
+        log('Please select exactly 2 points on the map', 'error');
+        return;
+      }
+
+      const [point1, point2] = distancePoints;
+      const params = new URLSearchParams({
+        lat1: point1.lat,
+        lng1: point1.lng,
+        lat2: point2.lat,
+        lng2: point2.lng
+      });
+
+      try {
+        const response = await fetch(`${API_BASE}/distance?${params}`);
+        const result = await response.json();
+        
+        log(`✓ Distance: ${result.distance_kilometers.toFixed(2)} km`, 'success');
+        logJSON(result, 'Distance calculation:');
+
+        // Draw a line between the two points
+        const lineId = `distance-line-${Date.now()}`;
+        map.addSource(lineId, {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            geometry: {
+              type: 'LineString',
+              coordinates: [[point1.lng, point1.lat], [point2.lng, point2.lat]]
+            }
+          }
+        });
+
+        map.addLayer({
+          id: lineId,
+          type: 'line',
+          source: lineId,
+          paint: {
+            'line-color': '#3b82f6',
+            'line-width': 3,
+            'line-dasharray': [2, 2]
+          }
+        });
+
+      } catch (error) {
+        log(`✗ Error: ${error.message}`, 'error');
+      }
+    }
+
+    function toggleDistanceMode() {
+      distanceMode = !distanceMode;
+      const btn = document.getElementById('distanceBtn');
+      
+      if (distanceMode) {
+        // Clear previous distance points
+        distancePoints = [];
+        distanceMarkers.forEach(m => m.remove());
+        distanceMarkers = [];
+        
+        btn.textContent = 'Cancel Distance';
+        btn.style.background = '#ef4444';
+        map.getCanvas().style.cursor = 'crosshair';
+        log('Click 2 points on map to calculate distance', 'info');
+      } else {
+        btn.textContent = 'Calculate Distance';
+        btn.style.background = '#667eea';
+        map.getCanvas().style.cursor = '';
+        distancePoints = [];
+        distanceMarkers.forEach(m => m.remove());
+        distanceMarkers = [];
+        log('Distance mode cancelled', 'info');
+      }
+    }
+
+    async function loadRoutes() {
+      try {
+        const response = await fetch(`${API_BASE}/routes?limit=10`);
+        const routes = await response.json();
+        
+        log(`✓ Loaded ${routes.length} route(s)`, 'success');
+        logJSON(routes, 'Routes:');
+        
+        routes.forEach(route => {
+          if (route.coordinates && route.coordinates.length > 1) {
+            const sourceId = `route-${route.id}`;
+            
+            // Remove existing source if it exists
+            if (map.getSource(sourceId)) {
+              if (map.getLayer(sourceId)) map.removeLayer(sourceId);
+              map.removeSource(sourceId);
+            }
+            
+            map.addSource(sourceId, {
+              type: 'geojson',
+              data: {
+                type: 'Feature',
+                geometry: {
+                  type: 'LineString',
+                  coordinates: route.coordinates
+                }
+              }
+            });
+
+            map.addLayer({
+              id: sourceId,
+              type: 'line',
+              source: sourceId,
+              paint: {
+                'line-color': '#f59e0b',
+                'line-width': 3
+              }
+            });
+
+            // Add marker at route start
+            const startPoint = route.coordinates[0];
+            const marker = new maplibregl.Marker({ color: '#f59e0b' })
+              .setLngLat(startPoint)
+              .setPopup(new maplibregl.Popup().setHTML(`
+                <strong>Route: ${route.route_name || 'Unnamed'}</strong><br>
+                Device: ${route.device_id}<br>
+                Distance: ${(route.distance_meters / 1000).toFixed(2)} km<br>
+                <small>${new Date(route.start_time).toLocaleString()}</small>
+              `))
+              .addTo(map);
+
+            routeMarkers.push(marker);
+          }
+        });
+      } catch (error) {
+        log(`✗ Error: ${error.message}`, 'error');
+      }
+    }
+
+    function clearMap() {
+      // Clear geofence markers
+      geofenceMarkers.forEach(m => m.remove());
+      geofenceMarkers = [];
+      
+      // Clear geofence polygons
+      geofencePolygons.forEach(id => {
+        if (map.getLayer(`${id}-fill`)) map.removeLayer(`${id}-fill`);
+        if (map.getLayer(`${id}-outline`)) map.removeLayer(`${id}-outline`);
+        if (map.getSource(id)) map.removeSource(id);
+      });
+      geofencePolygons = [];
+      
+      // Clear drawing markers (from drawing mode)
+      const markers = document.querySelectorAll('.maplibregl-marker');
+      markers.forEach(marker => {
+        // Only remove markers that are not in our tracked arrays
+        const markerElement = marker;
+        let isTracked = false;
+        
+        // Check if it's a tracked marker
+        testPoints.forEach(tp => {
+          if (tp.marker._element === markerElement) isTracked = true;
+        });
+        routeMarkers.forEach(rm => {
+          if (rm._element === markerElement) isTracked = true;
+        });
+        distanceMarkers.forEach(dm => {
+          if (dm._element === markerElement) isTracked = true;
+        });
+        
+        if (!isTracked) {
+          marker.remove();
+        }
+      });
+      
+      // Clear route markers
+      routeMarkers.forEach(m => m.remove());
+      routeMarkers = [];
+      
+      // Clear distance markers
+      distanceMarkers.forEach(m => m.remove());
+      distanceMarkers = [];
+      distancePoints = [];
+      
+      // Clear test points
+      clearTestPoints();
+      
+      log('Map cleared', 'info');
+    }
+
+    function clearTestPoints() {
+      testPoints.forEach(tp => tp.marker.remove());
+      testPoints = [];
+      log('Test points cleared', 'info');
+    }
+
+    function removeTestPoint(buttonElement) {
+      const lng = parseFloat(buttonElement.getAttribute('data-lng'));
+      const lat = parseFloat(buttonElement.getAttribute('data-lat'));
+      
+      const index = testPoints.findIndex(tp => tp.lat === lat && tp.lng === lng);
+      if (index !== -1) {
+        testPoints[index].marker.remove();
+        testPoints.splice(index, 1);
+        log(`Test point removed: ${lat.toFixed(6)}, ${lng.toFixed(6)}`, 'info');
+      }
+    }
+
+    async function deleteGeofence(geofenceId) {
+      if (!confirm(`Are you sure you want to delete geofence ID ${geofenceId}?`)) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE}/geofences/${geofenceId}`, {
+          method: 'DELETE'
+        });
+
+        if (response.ok || response.status === 204) {
+          log(`✓ Geofence ${geofenceId} deleted successfully`, 'success');
+          clearMap();
+          await loadGeofences();
+        } else {
+          const errorText = await response.text();
+          log(`✗ Failed to delete geofence: ${response.status} - ${errorText}`, 'error');
+        }
+      } catch (error) {
+        log(`✗ Error: ${error.message}`, 'error');
+      }
+    }
+
+    function toggleAddPointMode() {
+      addPointMode = !addPointMode;
+      const btn = document.getElementById('addPointBtn');
+      
+      if (addPointMode) {
+        btn.textContent = 'Cancel Add Point';
+        btn.style.background = '#ef4444';
+        map.getCanvas().style.cursor = 'crosshair';
+        log('Click on map to add test point', 'info');
+      } else {
+        btn.textContent = 'Add Test Point';
+        btn.style.background = '#10b981';
+        map.getCanvas().style.cursor = '';
+        log('Add point mode cancelled', 'info');
+      }
+    }
+
+    // ============== DRAWING MODE ==============
+    function startDrawing() {
+      drawingMode = true;
+      drawingPoints = [];
+      document.getElementById('drawing-mode').classList.add('active');
+      map.getCanvas().style.cursor = 'crosshair';
+      log('Drawing mode activated - click on map to add points', 'info');
+    }
+
+    function stopDrawing() {
+      drawingMode = false;
+      document.getElementById('drawing-mode').classList.remove('active');
+      map.getCanvas().style.cursor = '';
+    }
+
+    map.on('click', (e) => {
+      if (distanceMode) {
+        // Distance mode - collect 2 points
+        if (distancePoints.length < 2) {
+          const point = { lat: e.lngLat.lat, lng: e.lngLat.lng };
+          distancePoints.push(point);
+          
+          const marker = new maplibregl.Marker({ color: '#3b82f6' })
+            .setLngLat([point.lng, point.lat])
+            .setPopup(new maplibregl.Popup().setHTML(`
+              <strong>Distance Point ${distancePoints.length}</strong><br>
+              ${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}
+            `))
+            .addTo(map);
+          
+          distanceMarkers.push(marker);
+          log(`Distance point ${distancePoints.length}: ${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}`, 'info');
+          
+          if (distancePoints.length === 2) {
+            testDistance();
+            toggleDistanceMode(); // Exit mode after calculating
+          }
+        }
+        return;
+      }
+
+      if (addPointMode) {
+        // Add test point mode
+        testCheckPoint(e.lngLat.lat, e.lngLat.lng);
+        toggleAddPointMode(); // Exit mode after adding one point
+        return;
+      }
+
+      if (!drawingMode) return;
+
+      // Drawing geofence mode
+      drawingPoints.push([e.lngLat.lng, e.lngLat.lat]);
+      
+      new maplibregl.Marker({ color: '#667eea' })
+        .setLngLat([e.lngLat.lng, e.lngLat.lat])
+        .addTo(map);
+
+      log(`Point added: ${e.lngLat.lat.toFixed(6)}, ${e.lngLat.lng.toFixed(6)}`, 'info');
+
+      if (drawingPoints.length >= 3) {
+        log('Press Enter or double-click to finish drawing', 'info');
+      }
+    });
+
+    map.on('dblclick', async (e) => {
+      if (!drawingMode || drawingPoints.length < 3) return;
+
+      const name = prompt('Enter geofence name:', `Geofence ${Date.now()}`);
+      if (!name) {
+        stopDrawing();
+        return;
+      }
+
+      const coords = [...drawingPoints, drawingPoints[0]];
+
+      const geofence = {
+        name: name,
+        description: 'Created by drawing on map',
+        coordinates: coords
+      };
+
+      try {
+        const response = await fetch(`${API_BASE}/geofences`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(geofence)
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          log(`✓ Geofence "${name}" created successfully`, 'success');
+          clearMap();
+          await loadGeofences();
+        } else {
+          const errorText = await response.text();
+          log(`✗ Failed to create geofence: ${response.status} - ${errorText}`, 'error');
+        }
+      } catch (error) {
+        log(`✗ Error: ${error.message}`, 'error');
+      }
+
+      stopDrawing();
+    });
+
+    // ============== INITIALIZATION ==============
+    log('Geofence API Tester initialized', 'success');
+    log(`Using API base path: ${API_BASE}`, 'info');
+    log('Click "Load All Geofences" to see existing geofences', 'info');
+  </script>
+</body>
+</html>
