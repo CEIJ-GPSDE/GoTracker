@@ -540,39 +540,40 @@ func NewAPIServer(db *Database, wsHub *WebSocketHub, port string, tablePrefix st
 }
 
 func (api *APIServer) Run(ctx context.Context) {
-	r := mux.NewRouter().StrictSlash(true)
+	r := mux.NewRouter()
 
-	// Apply CORS middleware first
-	r.Use(corsMiddleware)
+	// API subrouter - handles all /api/* routes
+	apiRouter := r.PathPrefix("/api").Subrouter()
+	apiRouter.Use(corsMiddleware)
+	
+	// Location endpoints
+	apiRouter.HandleFunc("/devices", api.activeDevicesHandler).Methods("GET")
+	apiRouter.HandleFunc("/health", api.healthHandler).Methods("GET")
+	apiRouter.HandleFunc("/health/db", api.dbHealthHandler).Methods("GET")
+	apiRouter.HandleFunc("/stats", api.statsHandler).Methods("GET")
+	apiRouter.HandleFunc("/locations/latest", api.latestLocationHandler).Methods("GET")
+	apiRouter.HandleFunc("/locations/history", api.locationHistoryHandler).Methods("GET")
+	apiRouter.HandleFunc("/locations/range", api.locationRangeHandler).Methods("GET")
+	apiRouter.HandleFunc("/locations/nearby", api.locationNearbyHandler).Methods("GET")
+	apiRouter.HandleFunc("/locations/device/{deviceId}", api.deviceLocationHistoryHandler).Methods("GET")
 
-	// WebSocket route
+	// Geofence endpoints
+	apiRouter.HandleFunc("/geofences", api.getGeofencesHandler).Methods("GET")
+	apiRouter.HandleFunc("/geofences", api.createGeofenceHandler).Methods("POST", "OPTIONS")
+	apiRouter.HandleFunc("/geofences/{id}", api.getGeofenceHandler).Methods("GET")
+	apiRouter.HandleFunc("/geofences/{id}", api.updateGeofenceHandler).Methods("PUT", "OPTIONS")
+	apiRouter.HandleFunc("/geofences/{id}", api.deleteGeofenceHandler).Methods("DELETE", "OPTIONS")
+	apiRouter.HandleFunc("/geofence/check", api.geofenceCheckHandler).Methods("GET")
+	apiRouter.HandleFunc("/distance", api.distanceHandler).Methods("GET")
+   
+	// Route endpoints
+	apiRouter.HandleFunc("/routes", api.getRoutesHandler).Methods("GET")
+	apiRouter.HandleFunc("/routes", api.createRouteHandler).Methods("POST", "OPTIONS")
+
+	// WebSocket endpoint (separate from /api)
 	r.HandleFunc("/ws", api.wsHub.HandleWebSocket)
 
-	// API routes (MUST come before static files)
-	r.HandleFunc("/api/devices", api.activeDevicesHandler).Methods("GET")
-	r.HandleFunc("/api/health", api.healthHandler).Methods("GET")
-	r.HandleFunc("/api/health/db", api.dbHealthHandler).Methods("GET")
-	r.HandleFunc("/api/locations/latest", api.latestLocationHandler).Methods("GET")
-	r.HandleFunc("/api/locations/history", api.locationHistoryHandler).Methods("GET")
-	r.HandleFunc("/api/locations/range", api.locationRangeHandler).Methods("GET")
-	r.HandleFunc("/api/locations/nearby", api.locationNearbyHandler).Methods("GET")
-	r.HandleFunc("/api/locations/device/{deviceId}", api.deviceLocationHistoryHandler).Methods("GET")
-	r.HandleFunc("/api/stats", api.statsHandler).Methods("GET")
-
-	// Geofence routes
-	r.HandleFunc("/api/geofences", api.getGeofencesHandler).Methods("GET")
-	r.HandleFunc("/api/geofences", api.createGeofenceHandler).Methods("POST")
-	r.HandleFunc("/api/geofences/{id}", api.getGeofenceHandler).Methods("GET")
-	r.HandleFunc("/api/geofences/{id}", api.updateGeofenceHandler).Methods("PUT")
-	r.HandleFunc("/api/geofences/{id}", api.deleteGeofenceHandler).Methods("DELETE")
-	r.HandleFunc("/api/geofence/check", api.geofenceCheckHandler).Methods("GET")
-	r.HandleFunc("/api/distance", api.distanceHandler).Methods("GET")
-   
-	// Route routes
-	r.HandleFunc("/api/routes", api.getRoutesHandler).Methods("GET")
-	r.HandleFunc("/api/routes", api.createRouteHandler).Methods("POST")
-
-	// Static file serving (MUST be last)
+	// Static file serving - this now only catches non-/api routes
 	r.PathPrefix("/").Handler(http.FileServer(http.Dir("./static/")))
 
 	api.server.Handler = r
