@@ -180,6 +180,11 @@
 
       <div class="button-group">
         <button onclick="startDrawing()" class="success">Draw New Geofence</button>
+        <button onclick="toggleAddPointMode()" class="success" id="addPointBtn">Add Test Point</button>
+        <button onclick="clearTestPoints()" class="danger">Clear Test Points</button>
+      </div>
+
+      <div class="button-group">
         <button onclick="testCheckPoint(40.7660, -73.9712)">Check Central Park Point</button>
         <button onclick="testCheckPoint(40.7128, -74.0060)">Check Times Square Point</button>
       </div>
@@ -193,21 +198,13 @@
 
   <script>
     // ============== DYNAMIC BASE PATH DETECTION ==============
-    // Automatically detect the base path based on current URL
     function getBasePath() {
       const path = window.location.pathname;
-      
-      // Remove trailing slash and any file names
       let basePath = path.replace(/\/[^\/]*\.(html|htm)$/i, '');
-      
-      // Remove trailing slash
       basePath = basePath.replace(/\/$/, '');
-      
-      // If we're at root, base path is empty
       if (basePath === '' || basePath === '/') {
         return '';
       }
-      
       return basePath;
     }
 
@@ -215,7 +212,6 @@
     const API_BASE = BASE_PATH ? `${BASE_PATH}/api` : '/api';
     const WS_BASE = BASE_PATH ? `${BASE_PATH}/ws` : '/ws';
 
-    // Update info banner
     document.getElementById('path-info').innerHTML = `
       <strong>Environment:</strong> ${BASE_PATH || '/' } (Main Branch) | 
       <strong>API Base:</strong> ${API_BASE} | 
@@ -240,6 +236,8 @@
     let drawingMode = false;
     let geofenceMarkers = [];
     let geofencePolygons = [];
+    let testPoints = [];
+    let addPointMode = false;
 
     // ============== LOGGER ==============
     function log(message, type = 'info') {
@@ -359,7 +357,8 @@
         .setPopup(new maplibregl.Popup().setHTML(`
           <strong>${geofence.name}</strong><br>
           ${geofence.description || ''}<br>
-          <small>ID: ${geofence.id} | ${geofence.active ? 'Active' : 'Inactive'}</small>
+          <small>ID: ${geofence.id} | ${geofence.active ? 'Active' : 'Inactive'}</small><br>
+          <button onclick="deleteGeofence(${geofence.id})" style="margin-top: 8px; padding: 4px 8px; background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer;">Delete</button>
         `))
         .addTo(map);
 
@@ -379,14 +378,20 @@
         
         logJSON(result, 'Check result:');
 
-        new maplibregl.Marker({ color: result.count > 0 ? '#10b981' : '#ef4444' })
+        const marker = new maplibregl.Marker({ 
+          color: result.count > 0 ? '#10b981' : '#ef4444',
+          draggable: false
+        })
           .setLngLat([lng, lat])
           .setPopup(new maplibregl.Popup().setHTML(`
             <strong>Test Point</strong><br>
-            ${lat}, ${lng}<br>
-            ${result.count > 0 ? '✓ Inside geofence' : '✗ Outside geofence'}
+            ${lat.toFixed(6)}, ${lng.toFixed(6)}<br>
+            ${result.count > 0 ? '✓ Inside geofence' : '✗ Outside geofence'}<br>
+            <button onclick="removeTestPoint(this)" data-lng="${lng}" data-lat="${lat}" style="margin-top: 8px; padding: 4px 8px; background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer;">Remove</button>
           `))
           .addTo(map);
+
+        testPoints.push({ marker, lat, lng });
       } catch (error) {
         log(`✗ Error: ${error.message}`, 'error');
       }
@@ -461,7 +466,67 @@
       });
       geofencePolygons = [];
       
+      clearTestPoints();
+      
       log('Map cleared', 'info');
+    }
+
+    function clearTestPoints() {
+      testPoints.forEach(tp => tp.marker.remove());
+      testPoints = [];
+      log('Test points cleared', 'info');
+    }
+
+    function removeTestPoint(buttonElement) {
+      const lng = parseFloat(buttonElement.getAttribute('data-lng'));
+      const lat = parseFloat(buttonElement.getAttribute('data-lat'));
+      
+      const index = testPoints.findIndex(tp => tp.lat === lat && tp.lng === lng);
+      if (index !== -1) {
+        testPoints[index].marker.remove();
+        testPoints.splice(index, 1);
+        log(`Test point removed: ${lat.toFixed(6)}, ${lng.toFixed(6)}`, 'info');
+      }
+    }
+
+    async function deleteGeofence(geofenceId) {
+      if (!confirm(`Are you sure you want to delete geofence ID ${geofenceId}?`)) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE}/geofences/${geofenceId}`, {
+          method: 'DELETE'
+        });
+
+        if (response.ok || response.status === 204) {
+          log(`✓ Geofence ${geofenceId} deleted successfully`, 'success');
+          clearMap();
+          await loadGeofences();
+        } else {
+          const errorText = await response.text();
+          log(`✗ Failed to delete geofence: ${response.status} - ${errorText}`, 'error');
+        }
+      } catch (error) {
+        log(`✗ Error: ${error.message}`, 'error');
+      }
+    }
+
+    function toggleAddPointMode() {
+      addPointMode = !addPointMode;
+      const btn = document.getElementById('addPointBtn');
+      
+      if (addPointMode) {
+        btn.textContent = 'Cancel Add Point';
+        btn.style.background = '#ef4444';
+        map.getCanvas().style.cursor = 'crosshair';
+        log('Click on map to add test point', 'info');
+      } else {
+        btn.textContent = 'Add Test Point';
+        btn.style.background = '#10b981';
+        map.getCanvas().style.cursor = '';
+        log('Add point mode cancelled', 'info');
+      }
     }
 
     // ============== DRAWING MODE ==============
@@ -480,8 +545,16 @@
     }
 
     map.on('click', (e) => {
+      if (addPointMode) {
+        // Add test point mode
+        testCheckPoint(e.lngLat.lat, e.lngLat.lng);
+        toggleAddPointMode(); // Exit mode after adding one point
+        return;
+      }
+
       if (!drawingMode) return;
 
+      // Drawing geofence mode
       drawingPoints.push([e.lngLat.lng, e.lngLat.lat]);
       
       new maplibregl.Marker({ color: '#667eea' })
