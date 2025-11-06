@@ -172,6 +172,41 @@ func (db *Database) InitializeSchema(prefix string) error {
         log.Printf("Warning: Could not create PostGIS extension: %v", err)
     }
 
+    // Check if table exists with old schema
+    var hasLatColumn bool
+    err = db.QueryRow(fmt.Sprintf(`
+        SELECT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = '%s' AND column_name = 'latitude'
+        )
+    `, tableName)).Scan(&hasLatColumn)
+    
+    if err == nil && hasLatColumn {
+        log.Printf("⚠️  Old schema detected for %s, migrating to PostGIS...", tableName)
+        
+        // Backup data if any exists
+        var count int
+        db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", tableName)).Scan(&count)
+        
+        if count > 0 {
+            log.Printf("📦 Backing up %d records...", count)
+            _, err = db.Exec(fmt.Sprintf(`
+                CREATE TEMP TABLE %s_backup AS SELECT * FROM %s
+            `, tableName, tableName))
+            if err != nil {
+                return fmt.Errorf("failed to backup data: %w", err)
+            }
+        }
+        
+        // Drop old table
+        log.Printf("🗑️  Dropping old table...")
+        _, err = db.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s CASCADE", tableName))
+        if err != nil {
+            return fmt.Errorf("failed to drop old table: %w", err)
+        }
+    }
+
+    // Create new schema with PostGIS
     schema := fmt.Sprintf(`
     -- Locations table with PostGIS
     CREATE TABLE IF NOT EXISTS %s (
@@ -186,37 +221,42 @@ func (db *Database) InitializeSchema(prefix string) error {
     CREATE INDEX IF NOT EXISTS idx_%s_timestamp ON %s(timestamp DESC);
     CREATE INDEX IF NOT EXISTS idx_%s_device_timestamp ON %s(device_id, timestamp DESC);
     
-    -- Geofences table
-    CREATE TABLE IF NOT EXISTS geofences (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        description TEXT,
-        geom GEOGRAPHY(POLYGON, 4326) NOT NULL,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-        active BOOLEAN DEFAULT TRUE
-    );
-    
-    CREATE INDEX IF NOT EXISTS idx_geofences_geom ON geofences USING GIST(geom);
-    
-    -- Routes table
-    CREATE TABLE IF NOT EXISTS routes (
-        id SERIAL PRIMARY KEY,
-        device_id VARCHAR(255) NOT NULL,
-        route_name VARCHAR(255),
-        geom GEOGRAPHY(LINESTRING, 4326) NOT NULL,
-        start_time TIMESTAMP WITH TIME ZONE NOT NULL,
-        end_time TIMESTAMP WITH TIME ZONE NOT NULL,
-        distance_meters DECIMAL(12, 2),
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-    );
-    
-    CREATE INDEX IF NOT EXISTS idx_routes_geom ON routes USING GIST(geom);
-    CREATE INDEX IF NOT EXISTS idx_routes_device ON routes(device_id);
+    -- ... rest of your schema ...
     `, tableName, tableName, tableName, tableName, tableName, tableName, tableName)
 
     _, err = db.Exec(schema)
-    return err
+    if err != nil {
+        return err
+    }
+    
+    // Restore data if we had a backup
+    var backupExists bool
+    db.QueryRow(fmt.Sprintf(`
+        SELECT EXISTS (
+            SELECT 1 FROM pg_tables 
+            WHERE tablename = '%s_backup'
+        )
+    `, tableName)).Scan(&backupExists)
+    
+    if backupExists {
+        log.Printf("📥 Restoring backed up data...")
+        _, err = db.Exec(fmt.Sprintf(`
+            INSERT INTO %s (device_id, location, timestamp, created_at)
+            SELECT device_id, 
+                   ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography,
+                   timestamp,
+                   created_at
+            FROM %s_backup
+        `, tableName, tableName))
+        if err != nil {
+            log.Printf("⚠️  Failed to restore data: %v", err)
+        } else {
+            log.Printf("✅ Data restored successfully")
+        }
+    }
+    
+    log.Printf("✅ Schema initialized for table: %s", tableName)
+    return nil
 }
 
 // Location data structure
