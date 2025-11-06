@@ -23,7 +23,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	_ "github.com/lib/pq"
-  "github.com/paulmach/orb"
+  _ "github.com/paulmach/orb"
   _ "github.com/paulmach/orb/encoding/wkt"
   _ "github.com/paulmach/orb/geojson"
 )
