@@ -685,7 +685,10 @@ func (api *APIServer) latestLocationHandler(w http.ResponseWriter, r *http.Reque
 	}
 
 	query := fmt.Sprintf(`
-		SELECT device_id, latitude, longitude, timestamp
+		SELECT device_id, 
+		       ST_Y(location::geometry) as latitude,
+		       ST_X(location::geometry) as longitude,
+		       timestamp
 		FROM %s
 		ORDER BY timestamp DESC
 		LIMIT 1
@@ -724,7 +727,10 @@ func (api *APIServer) locationHistoryHandler(w http.ResponseWriter, r *http.Requ
 	}
 
 	query := fmt.Sprintf(`
-		SELECT device_id, latitude, longitude, timestamp
+		SELECT device_id,
+		       ST_Y(location::geometry) as latitude,
+		       ST_X(location::geometry) as longitude,
+		       timestamp
 		FROM %s
 		ORDER BY timestamp DESC
 		LIMIT $1
@@ -804,7 +810,6 @@ func (api *APIServer) locationRangeHandler(w http.ResponseWriter, r *http.Reques
 	var args []interface{}
 
 	if len(deviceIDs) > 0 {
-		// Build query with multiple device IDs
 		placeholders := make([]string, len(deviceIDs))
 		args = append(args, startTime, endTime)
 		for i, deviceID := range deviceIDs {
@@ -813,7 +818,10 @@ func (api *APIServer) locationRangeHandler(w http.ResponseWriter, r *http.Reques
 		}
 
 		query = fmt.Sprintf(`
-			SELECT device_id, latitude, longitude, timestamp
+			SELECT device_id,
+			       ST_Y(location::geometry) as latitude,
+			       ST_X(location::geometry) as longitude,
+			       timestamp
 			FROM %s
 			WHERE timestamp >= $1 AND timestamp <= $2 AND device_id IN (%s)
 			ORDER BY timestamp DESC
@@ -821,7 +829,10 @@ func (api *APIServer) locationRangeHandler(w http.ResponseWriter, r *http.Reques
 		`, tableName, strings.Join(placeholders, ","))
 	} else {
 		query = fmt.Sprintf(`
-			SELECT device_id, latitude, longitude, timestamp
+			SELECT device_id,
+			       ST_Y(location::geometry) as latitude,
+			       ST_X(location::geometry) as longitude,
+			       timestamp
 			FROM %s
 			WHERE timestamp >= $1 AND timestamp <= $2
 			ORDER BY timestamp DESC
@@ -909,44 +920,50 @@ func (api *APIServer) locationNearbyHandler(w http.ResponseWriter, r *http.Reque
 		tableName = api.tablePrefix + "_locations"
 	}
 
+	// Use PostGIS ST_DWithin for efficient spatial query
 	var query string
 	var args []interface{}
+	radiusMeters := radius * 1000 // Convert km to meters
 
 	if len(deviceIDs) > 0 {
-		// Build query with device filter
 		placeholders := make([]string, len(deviceIDs))
-		args = append(args, lat, lng, radius)
+		args = append(args, lng, lat, radiusMeters)
 		for i, deviceID := range deviceIDs {
 			placeholders[i] = fmt.Sprintf("$%d", i+4)
 			args = append(args, deviceID)
 		}
 
 		query = fmt.Sprintf(`
-			SELECT device_id, latitude, longitude, timestamp
+			SELECT device_id,
+			       ST_Y(location::geometry) as latitude,
+			       ST_X(location::geometry) as longitude,
+			       timestamp
 			FROM %s
-			WHERE (6371 * acos(
-			    cos(radians($1)) * cos(radians(latitude)) *
-			    cos(radians(longitude) - radians($2)) +
-			    sin(radians($1)) * sin(radians(latitude))
-			)) <= $3
+			WHERE ST_DWithin(
+				location,
+				ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+				$3
+			)
 			AND device_id IN (%s)
 			ORDER BY timestamp DESC
 			LIMIT 1000
 		`, tableName, strings.Join(placeholders, ","))
 	} else {
-		// No device filter
 		query = fmt.Sprintf(`
-			SELECT device_id, latitude, longitude, timestamp
+			SELECT device_id,
+			       ST_Y(location::geometry) as latitude,
+			       ST_X(location::geometry) as longitude,
+			       timestamp
 			FROM %s
-			WHERE (6371 * acos(
-			    cos(radians($1)) * cos(radians(latitude)) *
-			    cos(radians(longitude) - radians($2)) +
-			    sin(radians($1)) * sin(radians(latitude))
-			)) <= $3
+			WHERE ST_DWithin(
+				location,
+				ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+				$3
+			)
 			ORDER BY timestamp DESC
 			LIMIT 1000
 		`, tableName)
-		args = []interface{}{lat, lng, radius}
+		args = []interface{}{lng, lat, radiusMeters}
 	}
 
 	rows, err := api.db.Query(query, args...)
@@ -1054,7 +1071,10 @@ func (api *APIServer) deviceLocationHistoryHandler(w http.ResponseWriter, r *htt
 	}
 
 	query := fmt.Sprintf(`
-		SELECT device_id, latitude, longitude, timestamp
+		SELECT device_id,
+		       ST_Y(location::geometry) as latitude,
+		       ST_X(location::geometry) as longitude,
+		       timestamp
 		FROM %s
 		WHERE device_id = $1
 		ORDER BY timestamp DESC
