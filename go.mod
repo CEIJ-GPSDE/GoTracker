@@ -8,3 +8,5 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/paulmach/orb v0.12.0
 )
+
+require go.mongodb.org/mongo-driver v1.11.4 // indirect
