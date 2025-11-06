@@ -172,8 +172,7 @@
       <div class="button-group">
         <button onclick="createSampleGeofence()" class="success">Create Sample Geofence</button>
         <button onclick="loadGeofences()">Load All Geofences</button>
-        <button onclick="testCheckPoint(40.7660, -73.9712)">Test Central Park Point</button>
-        <button onclick="testDistance()">Calculate Distance</button>
+        <button onclick="toggleDistanceMode()" id="distanceBtn">Calculate Distance</button>
         <button onclick="loadRoutes()">Load Routes</button>
         <button onclick="clearMap()">Clear Map</button>
       </div>
@@ -238,6 +237,10 @@
     let geofencePolygons = [];
     let testPoints = [];
     let addPointMode = false;
+    let distanceMode = false;
+    let distancePoints = [];
+    let distanceMarkers = [];
+    let routeMarkers = [];
 
     // ============== LOGGER ==============
     function log(message, type = 'info') {
@@ -398,11 +401,17 @@
     }
 
     async function testDistance() {
+      if (distancePoints.length !== 2) {
+        log('Please select exactly 2 points on the map', 'error');
+        return;
+      }
+
+      const [point1, point2] = distancePoints;
       const params = new URLSearchParams({
-        lat1: 40.7580,
-        lng1: -73.9855,
-        lat2: 40.7489,
-        lng2: -73.9680
+        lat1: point1.lat,
+        lng1: point1.lng,
+        lat2: point2.lat,
+        lng2: point2.lng
       });
 
       try {
@@ -411,8 +420,58 @@
         
         log(`✓ Distance: ${result.distance_kilometers.toFixed(2)} km`, 'success');
         logJSON(result, 'Distance calculation:');
+
+        // Draw a line between the two points
+        const lineId = `distance-line-${Date.now()}`;
+        map.addSource(lineId, {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            geometry: {
+              type: 'LineString',
+              coordinates: [[point1.lng, point1.lat], [point2.lng, point2.lat]]
+            }
+          }
+        });
+
+        map.addLayer({
+          id: lineId,
+          type: 'line',
+          source: lineId,
+          paint: {
+            'line-color': '#3b82f6',
+            'line-width': 3,
+            'line-dasharray': [2, 2]
+          }
+        });
+
       } catch (error) {
         log(`✗ Error: ${error.message}`, 'error');
+      }
+    }
+
+    function toggleDistanceMode() {
+      distanceMode = !distanceMode;
+      const btn = document.getElementById('distanceBtn');
+      
+      if (distanceMode) {
+        // Clear previous distance points
+        distancePoints = [];
+        distanceMarkers.forEach(m => m.remove());
+        distanceMarkers = [];
+        
+        btn.textContent = 'Cancel Distance';
+        btn.style.background = '#ef4444';
+        map.getCanvas().style.cursor = 'crosshair';
+        log('Click 2 points on map to calculate distance', 'info');
+      } else {
+        btn.textContent = 'Calculate Distance';
+        btn.style.background = '#667eea';
+        map.getCanvas().style.cursor = '';
+        distancePoints = [];
+        distanceMarkers.forEach(m => m.remove());
+        distanceMarkers = [];
+        log('Distance mode cancelled', 'info');
       }
     }
 
@@ -427,6 +486,12 @@
         routes.forEach(route => {
           if (route.coordinates && route.coordinates.length > 1) {
             const sourceId = `route-${route.id}`;
+            
+            // Remove existing source if it exists
+            if (map.getSource(sourceId)) {
+              if (map.getLayer(sourceId)) map.removeLayer(sourceId);
+              map.removeSource(sourceId);
+            }
             
             map.addSource(sourceId, {
               type: 'geojson',
@@ -448,6 +513,20 @@
                 'line-width': 3
               }
             });
+
+            // Add marker at route start
+            const startPoint = route.coordinates[0];
+            const marker = new maplibregl.Marker({ color: '#f59e0b' })
+              .setLngLat(startPoint)
+              .setPopup(new maplibregl.Popup().setHTML(`
+                <strong>Route: ${route.route_name || 'Unnamed'}</strong><br>
+                Device: ${route.device_id}<br>
+                Distance: ${(route.distance_meters / 1000).toFixed(2)} km<br>
+                <small>${new Date(route.start_time).toLocaleString()}</small>
+              `))
+              .addTo(map);
+
+            routeMarkers.push(marker);
           }
         });
       } catch (error) {
@@ -456,9 +535,11 @@
     }
 
     function clearMap() {
+      // Clear geofence markers
       geofenceMarkers.forEach(m => m.remove());
       geofenceMarkers = [];
       
+      // Clear geofence polygons
       geofencePolygons.forEach(id => {
         if (map.getLayer(`${id}-fill`)) map.removeLayer(`${id}-fill`);
         if (map.getLayer(`${id}-outline`)) map.removeLayer(`${id}-outline`);
@@ -466,6 +547,39 @@
       });
       geofencePolygons = [];
       
+      // Clear drawing markers (from drawing mode)
+      const markers = document.querySelectorAll('.maplibregl-marker');
+      markers.forEach(marker => {
+        // Only remove markers that are not in our tracked arrays
+        const markerElement = marker;
+        let isTracked = false;
+        
+        // Check if it's a tracked marker
+        testPoints.forEach(tp => {
+          if (tp.marker._element === markerElement) isTracked = true;
+        });
+        routeMarkers.forEach(rm => {
+          if (rm._element === markerElement) isTracked = true;
+        });
+        distanceMarkers.forEach(dm => {
+          if (dm._element === markerElement) isTracked = true;
+        });
+        
+        if (!isTracked) {
+          marker.remove();
+        }
+      });
+      
+      // Clear route markers
+      routeMarkers.forEach(m => m.remove());
+      routeMarkers = [];
+      
+      // Clear distance markers
+      distanceMarkers.forEach(m => m.remove());
+      distanceMarkers = [];
+      distancePoints = [];
+      
+      // Clear test points
       clearTestPoints();
       
       log('Map cleared', 'info');
@@ -545,6 +659,31 @@
     }
 
     map.on('click', (e) => {
+      if (distanceMode) {
+        // Distance mode - collect 2 points
+        if (distancePoints.length < 2) {
+          const point = { lat: e.lngLat.lat, lng: e.lngLat.lng };
+          distancePoints.push(point);
+          
+          const marker = new maplibregl.Marker({ color: '#3b82f6' })
+            .setLngLat([point.lng, point.lat])
+            .setPopup(new maplibregl.Popup().setHTML(`
+              <strong>Distance Point ${distancePoints.length}</strong><br>
+              ${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}
+            `))
+            .addTo(map);
+          
+          distanceMarkers.push(marker);
+          log(`Distance point ${distancePoints.length}: ${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}`, 'info');
+          
+          if (distancePoints.length === 2) {
+            testDistance();
+            toggleDistanceMode(); // Exit mode after calculating
+          }
+        }
+        return;
+      }
+
       if (addPointMode) {
         // Add test point mode
         testCheckPoint(e.lngLat.lat, e.lngLat.lng);
