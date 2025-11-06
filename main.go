@@ -24,8 +24,8 @@ import (
 	"github.com/gorilla/websocket"
 	_ "github.com/lib/pq"
   "github.com/paulmach/orb"
-  "github.com/paulmach/orb/encoding/wkt"
-  "github.com/paulmach/orb/geojson"
+  _ "github.com/paulmach/orb/encoding/wkt"
+  _ "github.com/paulmach/orb/geojson"
 )
 
 // ========== CONFIGURACIÓN DE ENCRIPTACIÓN ==========
@@ -1085,82 +1085,6 @@ func (api *APIServer) deviceLocationHistoryHandler(w http.ResponseWriter, r *htt
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(locations)
-}
-
-// Geofence check - detect if location is inside a geofence
-func (api *APIServer) geofenceCheckHandler(w http.ResponseWriter, r *http.Request) {
-    latStr := r.URL.Query().Get("lat")
-    lngStr := r.URL.Query().Get("lng")
-    
-    lat, _ := strconv.ParseFloat(latStr, 64)
-    lng, _ := strconv.ParseFloat(lngStr, 64)
-    
-    query := `
-        SELECT id, name, description, 
-               ST_AsText(geom::geometry) as geom_wkt
-        FROM geofences
-        WHERE active = true
-          AND ST_Contains(geom, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography)
-    `
-    
-    rows, err := api.db.Query(query, lng, lat)
-    if err != nil {
-        http.Error(w, "Database error", http.StatusInternalServerError)
-        return
-    }
-    defer rows.Close()
-    
-    type GeofenceResult struct {
-        ID          int    `json:"id"`
-        Name        string `json:"name"`
-        Description string `json:"description"`
-        GeomWKT     string `json:"geom_wkt"`
-    }
-    
-    var results []GeofenceResult
-    for rows.Next() {
-        var gf GeofenceResult
-        if err := rows.Scan(&gf.ID, &gf.Name, &gf.Description, &gf.GeomWKT); err != nil {
-            continue
-        }
-        results = append(results, gf)
-    }
-    
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(results)
-}
-
-// Distance calculation between two points
-func (api *APIServer) distanceHandler(w http.ResponseWriter, r *http.Request) {
-    lat1Str := r.URL.Query().Get("lat1")
-    lng1Str := r.URL.Query().Get("lng1")
-    lat2Str := r.URL.Query().Get("lat2")
-    lng2Str := r.URL.Query().Get("lng2")
-    
-    lat1, _ := strconv.ParseFloat(lat1Str, 64)
-    lng1, _ := strconv.ParseFloat(lng1Str, 64)
-    lat2, _ := strconv.ParseFloat(lat2Str, 64)
-    lng2, _ := strconv.ParseFloat(lng2Str, 64)
-    
-    var distanceMeters float64
-    query := `
-        SELECT ST_Distance(
-            ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
-            ST_SetSRID(ST_MakePoint($3, $4), 4326)::geography
-        )
-    `
-    
-    err := api.db.QueryRow(query, lng1, lat1, lng2, lat2).Scan(&distanceMeters)
-    if err != nil {
-        http.Error(w, "Database error", http.StatusInternalServerError)
-        return
-    }
-    
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(map[string]interface{}{
-        "distance_meters": distanceMeters,
-        "distance_km":     distanceMeters / 1000,
-    })
 }
 
 func (api *APIServer) createGeofenceHandler(w http.ResponseWriter, r *http.Request) {
