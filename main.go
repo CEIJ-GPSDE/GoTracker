@@ -1407,7 +1407,7 @@ func (api *APIServer) geofenceCheckHandler(w http.ResponseWriter, r *http.Reques
                active
         FROM geofences
         WHERE active = true
-          AND ST_Contains(geom, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography)
+          AND ST_Intersects(geom, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography)
     `
 
     rows, err := api.db.Query(query, lng, lat)
