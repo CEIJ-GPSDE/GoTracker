@@ -25,6 +25,14 @@
       color: #333;
       margin-bottom: 20px;
     }
+    .info-banner {
+      background: #667eea;
+      color: white;
+      padding: 10px 15px;
+      border-radius: 6px;
+      margin-bottom: 20px;
+      font-size: 14px;
+    }
     .map-container {
       height: 500px;
       background: white;
@@ -115,21 +123,6 @@
     .log-info {
       color: #3b82f6;
     }
-    .status {
-      display: inline-block;
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 12px;
-      font-weight: 500;
-    }
-    .status.success {
-      background: #d1fae5;
-      color: #065f46;
-    }
-    .status.error {
-      background: #fee2e2;
-      color: #991b1b;
-    }
     .drawing-mode {
       position: absolute;
       top: 20px;
@@ -160,6 +153,10 @@
   <div class="container">
     <h1>🗺️ Geofence API Tester</h1>
     
+    <div class="info-banner" id="path-info">
+      Loading path information...
+    </div>
+
     <div class="map-container">
       <div id="map"></div>
       <div class="drawing-mode" id="drawing-mode">
@@ -195,7 +192,41 @@
   </div>
 
   <script>
-    // Initialize map
+    // ============== DYNAMIC BASE PATH DETECTION ==============
+    // Automatically detect the base path based on current URL
+    function getBasePath() {
+      const path = window.location.pathname;
+      
+      // Remove trailing slash and any file names
+      let basePath = path.replace(/\/[^\/]*\.(html|htm)$/i, '');
+      
+      // Remove trailing slash
+      basePath = basePath.replace(/\/$/, '');
+      
+      // If we're at root, base path is empty
+      if (basePath === '' || basePath === '/') {
+        return '';
+      }
+      
+      return basePath;
+    }
+
+    const BASE_PATH = getBasePath();
+    const API_BASE = BASE_PATH ? `${BASE_PATH}/api` : '/api';
+    const WS_BASE = BASE_PATH ? `${BASE_PATH}/ws` : '/ws';
+
+    // Update info banner
+    document.getElementById('path-info').innerHTML = `
+      <strong>Environment:</strong> ${BASE_PATH || '/' } (Main Branch) | 
+      <strong>API Base:</strong> ${API_BASE} | 
+      <strong>WebSocket:</strong> ${WS_BASE}
+    `;
+
+    console.log('Base Path:', BASE_PATH);
+    console.log('API Base:', API_BASE);
+    console.log('WebSocket Base:', WS_BASE);
+
+    // ============== MAP INITIALIZATION ==============
     const map = new maplibregl.Map({
       container: 'map',
       style: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
@@ -210,7 +241,7 @@
     let geofenceMarkers = [];
     let geofencePolygons = [];
 
-    // Logger
+    // ============== LOGGER ==============
     function log(message, type = 'info') {
       const result = document.getElementById('result');
       const timestamp = new Date().toLocaleTimeString();
@@ -228,7 +259,7 @@
       log(`${label}\n${formatted}`, 'info');
     }
 
-    // Create sample geofence
+    // ============== API FUNCTIONS ==============
     async function createSampleGeofence() {
       const geofence = {
         name: `Test Geofence ${Date.now()}`,
@@ -243,7 +274,7 @@
       };
 
       try {
-        const response = await fetch('/api/geofences', {
+        const response = await fetch(`${API_BASE}/geofences`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(geofence)
@@ -255,17 +286,17 @@
           logJSON(result, 'Created geofence:');
           drawGeofenceOnMap(result);
         } else {
-          log(`✗ Failed to create geofence: ${response.status}`, 'error');
+          const errorText = await response.text();
+          log(`✗ Failed to create geofence: ${response.status} - ${errorText}`, 'error');
         }
       } catch (error) {
         log(`✗ Error: ${error.message}`, 'error');
       }
     }
 
-    // Load all geofences
     async function loadGeofences() {
       try {
-        const response = await fetch('/api/geofences');
+        const response = await fetch(`${API_BASE}/geofences`);
         const geofences = await response.json();
         
         log(`✓ Loaded ${geofences.length} geofence(s)`, 'success');
@@ -278,11 +309,9 @@
       }
     }
 
-    // Draw geofence on map
     function drawGeofenceOnMap(geofence) {
       if (!geofence.coordinates || geofence.coordinates.length < 3) return;
 
-      // Add polygon
       const sourceId = `geofence-${geofence.id}`;
       
       if (map.getSource(sourceId)) {
@@ -324,7 +353,6 @@
 
       geofencePolygons.push(sourceId);
 
-      // Add label marker
       const center = geofence.coordinates[0];
       const marker = new maplibregl.Marker({ color: geofence.active ? '#667eea' : '#9ca3af' })
         .setLngLat(center)
@@ -338,10 +366,9 @@
       geofenceMarkers.push(marker);
     }
 
-    // Test point inside geofence
     async function testCheckPoint(lat, lng) {
       try {
-        const response = await fetch(`/api/geofence/check?lat=${lat}&lng=${lng}`);
+        const response = await fetch(`${API_BASE}/geofence/check?lat=${lat}&lng=${lng}`);
         const result = await response.json();
         
         if (result.count > 0) {
@@ -352,7 +379,6 @@
         
         logJSON(result, 'Check result:');
 
-        // Add marker on map
         new maplibregl.Marker({ color: result.count > 0 ? '#10b981' : '#ef4444' })
           .setLngLat([lng, lat])
           .setPopup(new maplibregl.Popup().setHTML(`
@@ -366,7 +392,6 @@
       }
     }
 
-    // Test distance calculation
     async function testDistance() {
       const params = new URLSearchParams({
         lat1: 40.7580,
@@ -376,7 +401,7 @@
       });
 
       try {
-        const response = await fetch(`/api/distance?${params}`);
+        const response = await fetch(`${API_BASE}/distance?${params}`);
         const result = await response.json();
         
         log(`✓ Distance: ${result.distance_kilometers.toFixed(2)} km`, 'success');
@@ -386,10 +411,9 @@
       }
     }
 
-    // Load routes
     async function loadRoutes() {
       try {
-        const response = await fetch('/api/routes?limit=10');
+        const response = await fetch(`${API_BASE}/routes?limit=10`);
         const routes = await response.json();
         
         log(`✓ Loaded ${routes.length} route(s)`, 'success');
@@ -426,7 +450,6 @@
       }
     }
 
-    // Clear map
     function clearMap() {
       geofenceMarkers.forEach(m => m.remove());
       geofenceMarkers = [];
@@ -441,7 +464,7 @@
       log('Map cleared', 'info');
     }
 
-    // Drawing mode
+    // ============== DRAWING MODE ==============
     function startDrawing() {
       drawingMode = true;
       drawingPoints = [];
@@ -481,7 +504,6 @@
         return;
       }
 
-      // Close the polygon
       const coords = [...drawingPoints, drawingPoints[0]];
 
       const geofence = {
@@ -491,7 +513,7 @@
       };
 
       try {
-        const response = await fetch('/api/geofences', {
+        const response = await fetch(`${API_BASE}/geofences`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(geofence)
@@ -503,7 +525,8 @@
           clearMap();
           await loadGeofences();
         } else {
-          log(`✗ Failed to create geofence: ${response.status}`, 'error');
+          const errorText = await response.text();
+          log(`✗ Failed to create geofence: ${response.status} - ${errorText}`, 'error');
         }
       } catch (error) {
         log(`✗ Error: ${error.message}`, 'error');
@@ -512,8 +535,9 @@
       stopDrawing();
     });
 
-    // Initial log
+    // ============== INITIALIZATION ==============
     log('Geofence API Tester initialized', 'success');
+    log(`Using API base path: ${API_BASE}`, 'info');
     log('Click "Load All Geofences" to see existing geofences', 'info');
   </script>
 </body>
