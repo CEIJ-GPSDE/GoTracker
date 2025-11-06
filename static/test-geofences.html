@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Geofence API Tester</title>
+  <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+  <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f5f5;
+    }
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 20px;
+    }
+    .map-container {
+      height: 500px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+      position: relative;
+    }
+    #map {
+      height: 100%;
+      border-radius: 8px;
+    }
+    .controls {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+    .button-group {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 15px;
+    }
+    button {
+      padding: 10px 20px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 0.3s;
+    }
+    button:hover {
+      background: #5568d3;
+    }
+    button.danger {
+      background: #ef4444;
+    }
+    button.danger:hover {
+      background: #dc2626;
+    }
+    button.success {
+      background: #10b981;
+    }
+    button.success:hover {
+      background: #059669;
+    }
+    .output {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .output h2 {
+      margin-bottom: 15px;
+      color: #333;
+      font-size: 18px;
+    }
+    #result {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      padding: 15px;
+      border-radius: 6px;
+      max-height: 400px;
+      overflow-y: auto;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    .log-entry {
+      margin-bottom: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .log-entry:last-child {
+      border-bottom: none;
+    }
+    .log-success {
+      color: #10b981;
+    }
+    .log-error {
+      color: #ef4444;
+    }
+    .log-info {
+      color: #3b82f6;
+    }
+    .status {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .status.success {
+      background: #d1fae5;
+      color: #065f46;
+    }
+    .status.error {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+    .drawing-mode {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: rgba(255, 255, 255, 0.95);
+      padding: 15px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      z-index: 1000;
+      display: none;
+    }
+    .drawing-mode.active {
+      display: block;
+    }
+    .drawing-mode h3 {
+      margin: 0 0 10px 0;
+      font-size: 14px;
+      color: #667eea;
+    }
+    .drawing-mode p {
+      margin: 0;
+      font-size: 12px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🗺️ Geofence API Tester</h1>
+    
+    <div class="map-container">
+      <div id="map"></div>
+      <div class="drawing-mode" id="drawing-mode">
+        <h3>🖊️ Drawing Mode Active</h3>
+        <p>Click on the map to add points</p>
+        <p>Double-click or press Enter to finish</p>
+      </div>
+    </div>
+
+    <div class="controls">
+      <h2>Test Operations</h2>
+      
+      <div class="button-group">
+        <button onclick="createSampleGeofence()" class="success">Create Sample Geofence</button>
+        <button onclick="loadGeofences()">Load All Geofences</button>
+        <button onclick="testPointInside()">Test Point Inside</button>
+        <button onclick="testDistance()">Calculate Distance</button>
+        <button onclick="loadRoutes()">Load Routes</button>
+        <button onclick="clearMap()">Clear Map</button>
+      </div>
+
+      <div class="button-group">
+        <button onclick="startDrawing()" class="success">Draw New Geofence</button>
+        <button onclick="testCheckPoint(40.7660, -73.9712)">Check Central Park Point</button>
+        <button onclick="testCheckPoint(40.7128, -74.0060)">Check Times Square Point</button>
+      </div>
+    </div>
+
+    <div class="output">
+      <h2>Output Log</h2>
+      <div id="result"></div>
+    </div>
+  </div>
+
+  <script>
+    // Initialize map
+    const map = new maplibregl.Map({
+      container: 'map',
+      style: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
+      center: [-73.9712, 40.7660],
+      zoom: 12
+    });
+
+    map.addControl(new maplibregl.NavigationControl());
+
+    let drawingPoints = [];
+    let drawingMode = false;
+    let geofenceMarkers = [];
+    let geofencePolygons = [];
+
+    // Logger
+    function log(message, type = 'info') {
+      const result = document.getElementById('result');
+      const timestamp = new Date().toLocaleTimeString();
+      const className = `log-${type}`;
+      
+      const entry = document.createElement('div');
+      entry.className = 'log-entry';
+      entry.innerHTML = `<span class="${className}">[${timestamp}] ${message}</span>`;
+      
+      result.insertBefore(entry, result.firstChild);
+    }
+
+    function logJSON(data, label = '') {
+      const formatted = JSON.stringify(data, null, 2);
+      log(`${label}\n${formatted}`, 'info');
+    }
+
+    // Create sample geofence
+    async function createSampleGeofence() {
+      const geofence = {
+        name: `Test Geofence ${Date.now()}`,
+        description: 'Sample geofence created from test page',
+        coordinates: [
+          [-73.9815, 40.7681],
+          [-73.9815, 40.7644],
+          [-73.9495, 40.7644],
+          [-73.9495, 40.7681],
+          [-73.9815, 40.7681]
+        ]
+      };
+
+      try {
+        const response = await fetch('/api/geofences', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(geofence)
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          log(`✓ Geofence created successfully (ID: ${result.id})`, 'success');
+          logJSON(result, 'Created geofence:');
+          drawGeofenceOnMap(result);
+        } else {
+          log(`✗ Failed to create geofence: ${response.status}`, 'error');
+        }
+      } catch (error) {
+        log(`✗ Error: ${error.message}`, 'error');
+      }
+    }
+
+    // Load all geofences
+    async function loadGeofences() {
+      try {
+        const response = await fetch('/api/geofences');
+        const geofences = await response.json();
+        
+        log(`✓ Loaded ${geofences.length} geofence(s)`, 'success');
+        logJSON(geofences, 'Geofences:');
+        
+        clearMap();
+        geofences.forEach(gf => drawGeofenceOnMap(gf));
+      } catch (error) {
+        log(`✗ Error: ${error.message}`, 'error');
+      }
+    }
+
+    // Draw geofence on map
+    function drawGeofenceOnMap(geofence) {
+      if (!geofence.coordinates || geofence.coordinates.length < 3) return;
+
+      // Add polygon
+      const sourceId = `geofence-${geofence.id}`;
+      
+      if (map.getSource(sourceId)) {
+        map.removeLayer(`${sourceId}-fill`);
+        map.removeLayer(`${sourceId}-outline`);
+        map.removeSource(sourceId);
+      }
+
+      map.addSource(sourceId, {
+        type: 'geojson',
+        data: {
+          type: 'Feature',
+          geometry: {
+            type: 'Polygon',
+            coordinates: [geofence.coordinates]
+          }
+        }
+      });
+
+      map.addLayer({
+        id: `${sourceId}-fill`,
+        type: 'fill',
+        source: sourceId,
+        paint: {
+          'fill-color': geofence.active ? '#667eea' : '#9ca3af',
+          'fill-opacity': 0.3
+        }
+      });
+
+      map.addLayer({
+        id: `${sourceId}-outline`,
+        type: 'line',
+        source: sourceId,
+        paint: {
+          'line-color': geofence.active ? '#667eea' : '#9ca3af',
+          'line-width': 2
+        }
+      });
+
+      geofencePolygons.push(sourceId);
+
+      // Add label marker
+      const center = geofence.coordinates[0];
+      const marker = new maplibregl.Marker({ color: geofence.active ? '#667eea' : '#9ca3af' })
+        .setLngLat(center)
+        .setPopup(new maplibregl.Popup().setHTML(`
+          <strong>${geofence.name}</strong><br>
+          ${geofence.description || ''}<br>
+          <small>ID: ${geofence.id} | ${geofence.active ? 'Active' : 'Inactive'}</small>
+        `))
+        .addTo(map);
+
+      geofenceMarkers.push(marker);
+    }
+
+    // Test point inside geofence
+    async function testCheckPoint(lat, lng) {
+      try {
+        const response = await fetch(`/api/geofence/check?lat=${lat}&lng=${lng}`);
+        const result = await response.json();
+        
+        if (result.count > 0) {
+          log(`✓ Point (${lat}, ${lng}) is inside ${result.count} geofence(s)`, 'success');
+        } else {
+          log(`Point (${lat}, ${lng}) is not inside any geofence`, 'info');
+        }
+        
+        logJSON(result, 'Check result:');
+
+        // Add marker on map
+        new maplibregl.Marker({ color: result.count > 0 ? '#10b981' : '#ef4444' })
+          .setLngLat([lng, lat])
+          .setPopup(new maplibregl.Popup().setHTML(`
+            <strong>Test Point</strong><br>
+            ${lat}, ${lng}<br>
+            ${result.count > 0 ? '✓ Inside geofence' : '✗ Outside geofence'}
+          `))
+          .addTo(map);
+      } catch (error) {
+        log(`✗ Error: ${error.message}`, 'error');
+      }
+    }
+
+    // Test distance calculation
+    async function testDistance() {
+      const params = new URLSearchParams({
+        lat1: 40.7580,
+        lng1: -73.9855,
+        lat2: 40.7489,
+        lng2: -73.9680
+      });
+
+      try {
+        const response = await fetch(`/api/distance?${params}`);
+        const result = await response.json();
+        
+        log(`✓ Distance: ${result.distance_kilometers.toFixed(2)} km`, 'success');
+        logJSON(result, 'Distance calculation:');
+      } catch (error) {
+        log(`✗ Error: ${error.message}`, 'error');
+      }
+    }
+
+    // Load routes
+    async function loadRoutes() {
+      try {
+        const response = await fetch('/api/routes?limit=10');
+        const routes = await response.json();
+        
+        log(`✓ Loaded ${routes.length} route(s)`, 'success');
+        logJSON(routes, 'Routes:');
+        
+        routes.forEach(route => {
+          if (route.coordinates && route.coordinates.length > 1) {
+            const sourceId = `route-${route.id}`;
+            
+            map.addSource(sourceId, {
+              type: 'geojson',
+              data: {
+                type: 'Feature',
+                geometry: {
+                  type: 'LineString',
+                  coordinates: route.coordinates
+                }
+              }
+            });
+
+            map.addLayer({
+              id: sourceId,
+              type: 'line',
+              source: sourceId,
+              paint: {
+                'line-color': '#f59e0b',
+                'line-width': 3
+              }
+            });
+          }
+        });
+      } catch (error) {
+        log(`✗ Error: ${error.message}`, 'error');
+      }
+    }
+
+    // Clear map
+    function clearMap() {
+      geofenceMarkers.forEach(m => m.remove());
+      geofenceMarkers = [];
+      
+      geofencePolygons.forEach(id => {
+        if (map.getLayer(`${id}-fill`)) map.removeLayer(`${id}-fill`);
+        if (map.getLayer(`${id}-outline`)) map.removeLayer(`${id}-outline`);
+        if (map.getSource(id)) map.removeSource(id);
+      });
+      geofencePolygons = [];
+      
+      log('Map cleared', 'info');
+    }
+
+    // Drawing mode
+    function startDrawing() {
+      drawingMode = true;
+      drawingPoints = [];
+      document.getElementById('drawing-mode').classList.add('active');
+      map.getCanvas().style.cursor = 'crosshair';
+      log('Drawing mode activated - click on map to add points', 'info');
+    }
+
+    function stopDrawing() {
+      drawingMode = false;
+      document.getElementById('drawing-mode').classList.remove('active');
+      map.getCanvas().style.cursor = '';
+    }
+
+    map.on('click', (e) => {
+      if (!drawingMode) return;
+
+      drawingPoints.push([e.lngLat.lng, e.lngLat.lat]);
+      
+      new maplibregl.Marker({ color: '#667eea' })
+        .setLngLat([e.lngLat.lng, e.lngLat.lat])
+        .addTo(map);
+
+      log(`Point added: ${e.lngLat.lat.toFixed(6)}, ${e.lngLat.lng.toFixed(6)}`, 'info');
+
+      if (drawingPoints.length >= 3) {
+        log('Press Enter or double-click to finish drawing', 'info');
+      }
+    });
+
+    map.on('dblclick', async (e) => {
+      if (!drawingMode || drawingPoints.length < 3) return;
+
+      const name = prompt('Enter geofence name:', `Geofence ${Date.now()}`);
+      if (!name) {
+        stopDrawing();
+        return;
+      }
+
+      // Close the polygon
+      const coords = [...drawingPoints, drawingPoints[0]];
+
+      const geofence = {
+        name: name,
+        description: 'Created by drawing on map',
+        coordinates: coords
+      };
+
+      try {
+        const response = await fetch('/api/geofences', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(geofence)
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          log(`✓ Geofence "${name}" created successfully`, 'success');
+          clearMap();
+          await loadGeofences();
+        } else {
+          log(`✗ Failed to create geofence: ${response.status}`, 'error');
+        }
+      } catch (error) {
+        log(`✗ Error: ${error.message}`, 'error');
+      }
+
+      stopDrawing();
+    });
+
+    // Initial log
+    log('Geofence API Tester initialized', 'success');
+    log('Click "Load All Geofences" to see existing geofences', 'info');
+  </script>
+</body>
+</html>

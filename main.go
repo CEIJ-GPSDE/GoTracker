@@ -23,6 +23,9 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	_ "github.com/lib/pq"
+  "github.com/paulmach/orb"
+  "github.com/paulmach/orb/encoding/wkt"
+  "github.com/paulmach/orb/geojson"
 )
 
 // ========== CONFIGURACIÓN DE ENCRIPTACIÓN ==========
@@ -158,28 +161,62 @@ func NewDatabase(config *Config) (*Database, error) {
 }
 
 func (db *Database) InitializeSchema(prefix string) error {
-	tableName := "locations"
-	if prefix != "" {
-		tableName = prefix + "_locations"
-	}
+    tableName := "locations"
+    if prefix != "" {
+        tableName = prefix + "_locations"
+    }
 
-	schema := fmt.Sprintf(`
+    // Enable PostGIS
+    _, err := db.Exec(`CREATE EXTENSION IF NOT EXISTS postgis;`)
+    if err != nil {
+        log.Printf("Warning: Could not create PostGIS extension: %v", err)
+    }
+
+    schema := fmt.Sprintf(`
+    -- Locations table with PostGIS
     CREATE TABLE IF NOT EXISTS %s (
         id SERIAL PRIMARY KEY,
         device_id VARCHAR(255) NOT NULL,
-        latitude DECIMAL(10, 8) NOT NULL,
-        longitude DECIMAL(11, 8) NOT NULL,
+        location GEOGRAPHY(POINT, 4326) NOT NULL,
         timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     );
 
+    CREATE INDEX IF NOT EXISTS idx_%s_geography ON %s USING GIST(location);
     CREATE INDEX IF NOT EXISTS idx_%s_timestamp ON %s(timestamp DESC);
     CREATE INDEX IF NOT EXISTS idx_%s_device_timestamp ON %s(device_id, timestamp DESC);
-    CREATE INDEX IF NOT EXISTS idx_%s_timestamp_range ON %s(timestamp);
+    
+    -- Geofences table
+    CREATE TABLE IF NOT EXISTS geofences (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        description TEXT,
+        geom GEOGRAPHY(POLYGON, 4326) NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        active BOOLEAN DEFAULT TRUE
+    );
+    
+    CREATE INDEX IF NOT EXISTS idx_geofences_geom ON geofences USING GIST(geom);
+    
+    -- Routes table
+    CREATE TABLE IF NOT EXISTS routes (
+        id SERIAL PRIMARY KEY,
+        device_id VARCHAR(255) NOT NULL,
+        route_name VARCHAR(255),
+        geom GEOGRAPHY(LINESTRING, 4326) NOT NULL,
+        start_time TIMESTAMP WITH TIME ZONE NOT NULL,
+        end_time TIMESTAMP WITH TIME ZONE NOT NULL,
+        distance_meters DECIMAL(12, 2),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+    
+    CREATE INDEX IF NOT EXISTS idx_routes_geom ON routes USING GIST(geom);
+    CREATE INDEX IF NOT EXISTS idx_routes_device ON routes(device_id);
     `, tableName, tableName, tableName, tableName, tableName, tableName, tableName)
 
-	_, err := db.Exec(schema)
-	return err
+    _, err = db.Exec(schema)
+    return err
 }
 
 // Location data structure
@@ -188,6 +225,27 @@ type LocationPacket struct {
 	Latitude  float64   `json:"latitude"`
 	Longitude float64   `json:"longitude"`
 	Timestamp time.Time `json:"timestamp"`
+}
+
+type Geofence struct {
+    ID          int       `json:"id"`
+    Name        string    `json:"name"`
+    Description string    `json:"description"`
+    Coordinates [][]float64 `json:"coordinates"` // [[lng, lat], [lng, lat], ...]
+    Active      bool      `json:"active"`
+    CreatedAt   time.Time `json:"created_at"`
+    UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type Route struct {
+    ID            int         `json:"id"`
+    DeviceID      string      `json:"device_id"`
+    RouteName     string      `json:"route_name"`
+    Coordinates   [][]float64 `json:"coordinates"` // [[lng, lat], [lng, lat], ...]
+    StartTime     time.Time   `json:"start_time"`
+    EndTime       time.Time   `json:"end_time"`
+    DistanceMeters float64    `json:"distance_meters"`
+    CreatedAt     time.Time   `json:"created_at"`
 }
 
 // WebSocket Hub for real-time updates
@@ -438,17 +496,24 @@ func (us *UDPSniffer) parsePacket(data []byte) *LocationPacket {
 }
 
 func (us *UDPSniffer) storeLocation(packet *LocationPacket) error {
-	tableName := "locations"
-	if us.tablePrefix != "" {
-		tableName = us.tablePrefix + "_locations"
-	}
+    tableName := "locations"
+    if us.tablePrefix != "" {
+        tableName = us.tablePrefix + "_locations"
+    }
 
-	query := fmt.Sprintf(`
-        INSERT INTO %s (device_id, latitude, longitude, timestamp)
-        VALUES ($1, $2, $3, $4)
+    // Use ST_SetSRID and ST_MakePoint for PostGIS
+    query := fmt.Sprintf(`
+        INSERT INTO %s (device_id, location, timestamp)
+        VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, $4)
     `, tableName)
-	_, err := us.db.Exec(query, packet.DeviceID, packet.Latitude, packet.Longitude, packet.Timestamp)
-	return err
+    
+    _, err := us.db.Exec(query, 
+        packet.DeviceID, 
+        packet.Longitude,  // X coordinate (longitude)
+        packet.Latitude,   // Y coordinate (latitude)
+        packet.Timestamp,
+    )
+    return err
 }
 
 // API Server - SIN CAMBIOS
@@ -477,7 +542,7 @@ func NewAPIServer(db *Database, wsHub *WebSocketHub, port string, tablePrefix st
 func (api *APIServer) Run(ctx context.Context) {
 	r := mux.NewRouter()
 
-	// API routes
+	// Existing routes...
 	r.HandleFunc("/api/devices", api.activeDevicesHandler).Methods("GET")
 	r.HandleFunc("/api/health", api.healthHandler).Methods("GET")
 	r.HandleFunc("/api/health/db", api.dbHealthHandler).Methods("GET")
@@ -487,9 +552,21 @@ func (api *APIServer) Run(ctx context.Context) {
 	r.HandleFunc("/api/locations/nearby", api.locationNearbyHandler).Methods("GET")
 	r.HandleFunc("/api/locations/device/{deviceId}", api.deviceLocationHistoryHandler).Methods("GET")
 	r.HandleFunc("/api/stats", api.statsHandler).Methods("GET")
-	r.HandleFunc("/ws", api.wsHub.HandleWebSocket)
 
-	// Static files
+	// NEW: Geofence routes
+	r.HandleFunc("/api/geofences", api.getGeofencesHandler).Methods("GET")
+	r.HandleFunc("/api/geofences", api.createGeofenceHandler).Methods("POST")
+	r.HandleFunc("/api/geofences/{id}", api.getGeofenceHandler).Methods("GET")
+	r.HandleFunc("/api/geofences/{id}", api.updateGeofenceHandler).Methods("PUT")
+	r.HandleFunc("/api/geofences/{id}", api.deleteGeofenceHandler).Methods("DELETE")
+	r.HandleFunc("/api/geofence/check", api.geofenceCheckHandler).Methods("GET")
+  r.HandleFunc("/api/distance", api.distanceHandler).Methods("GET")
+   
+	// NEW: Route routes
+	r.HandleFunc("/api/routes", api.getRoutesHandler).Methods("GET")
+	r.HandleFunc("/api/routes", api.createRouteHandler).Methods("POST")
+
+	r.HandleFunc("/ws", api.wsHub.HandleWebSocket)
 	r.PathPrefix("/").Handler(http.FileServer(http.Dir("./static/")))
 	r.Use(corsMiddleware)
 
@@ -1009,6 +1086,659 @@ func (api *APIServer) deviceLocationHistoryHandler(w http.ResponseWriter, r *htt
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(locations)
 }
+
+// Geofence check - detect if location is inside a geofence
+func (api *APIServer) geofenceCheckHandler(w http.ResponseWriter, r *http.Request) {
+    latStr := r.URL.Query().Get("lat")
+    lngStr := r.URL.Query().Get("lng")
+    
+    lat, _ := strconv.ParseFloat(latStr, 64)
+    lng, _ := strconv.ParseFloat(lngStr, 64)
+    
+    query := `
+        SELECT id, name, description, 
+               ST_AsText(geom::geometry) as geom_wkt
+        FROM geofences
+        WHERE active = true
+          AND ST_Contains(geom, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography)
+    `
+    
+    rows, err := api.db.Query(query, lng, lat)
+    if err != nil {
+        http.Error(w, "Database error", http.StatusInternalServerError)
+        return
+    }
+    defer rows.Close()
+    
+    type GeofenceResult struct {
+        ID          int    `json:"id"`
+        Name        string `json:"name"`
+        Description string `json:"description"`
+        GeomWKT     string `json:"geom_wkt"`
+    }
+    
+    var results []GeofenceResult
+    for rows.Next() {
+        var gf GeofenceResult
+        if err := rows.Scan(&gf.ID, &gf.Name, &gf.Description, &gf.GeomWKT); err != nil {
+            continue
+        }
+        results = append(results, gf)
+    }
+    
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(results)
+}
+
+// Distance calculation between two points
+func (api *APIServer) distanceHandler(w http.ResponseWriter, r *http.Request) {
+    lat1Str := r.URL.Query().Get("lat1")
+    lng1Str := r.URL.Query().Get("lng1")
+    lat2Str := r.URL.Query().Get("lat2")
+    lng2Str := r.URL.Query().Get("lng2")
+    
+    lat1, _ := strconv.ParseFloat(lat1Str, 64)
+    lng1, _ := strconv.ParseFloat(lng1Str, 64)
+    lat2, _ := strconv.ParseFloat(lat2Str, 64)
+    lng2, _ := strconv.ParseFloat(lng2Str, 64)
+    
+    var distanceMeters float64
+    query := `
+        SELECT ST_Distance(
+            ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+            ST_SetSRID(ST_MakePoint($3, $4), 4326)::geography
+        )
+    `
+    
+    err := api.db.QueryRow(query, lng1, lat1, lng2, lat2).Scan(&distanceMeters)
+    if err != nil {
+        http.Error(w, "Database error", http.StatusInternalServerError)
+        return
+    }
+    
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "distance_meters": distanceMeters,
+        "distance_km":     distanceMeters / 1000,
+    })
+}
+
+func (api *APIServer) createGeofenceHandler(w http.ResponseWriter, r *http.Request) {
+    var input struct {
+        Name        string      `json:"name"`
+        Description string      `json:"description"`
+        Coordinates [][]float64 `json:"coordinates"` // Array of [lng, lat]
+    }
+
+    if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+        http.Error(w, "Invalid JSON", http.StatusBadRequest)
+        return
+    }
+
+    // Validate
+    if input.Name == "" {
+        http.Error(w, "Name is required", http.StatusBadRequest)
+        return
+    }
+
+    if len(input.Coordinates) < 3 {
+        http.Error(w, "At least 3 coordinates required for a polygon", http.StatusBadRequest)
+        return
+    }
+
+    // Close the polygon if not already closed
+    firstPoint := input.Coordinates[0]
+    lastPoint := input.Coordinates[len(input.Coordinates)-1]
+    if firstPoint[0] != lastPoint[0] || firstPoint[1] != lastPoint[1] {
+        input.Coordinates = append(input.Coordinates, firstPoint)
+    }
+
+    // Build WKT string for polygon
+    var wktPoints []string
+    for _, coord := range input.Coordinates {
+        wktPoints = append(wktPoints, fmt.Sprintf("%f %f", coord[0], coord[1]))
+    }
+    wkt := fmt.Sprintf("POLYGON((%s))", strings.Join(wktPoints, ", "))
+
+    query := `
+        INSERT INTO geofences (name, description, geom, active)
+        VALUES ($1, $2, ST_GeogFromText($3), true)
+        RETURNING id, created_at, updated_at
+    `
+
+    var geofence Geofence
+    err := api.db.QueryRow(query, input.Name, input.Description, wkt).Scan(
+        &geofence.ID, &geofence.CreatedAt, &geofence.UpdatedAt,
+    )
+
+    if err != nil {
+        log.Printf("Error creating geofence: %v", err)
+        http.Error(w, "Database error", http.StatusInternalServerError)
+        return
+    }
+
+    geofence.Name = input.Name
+    geofence.Description = input.Description
+    geofence.Coordinates = input.Coordinates
+    geofence.Active = true
+
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(http.StatusCreated)
+    json.NewEncoder(w).Encode(geofence)
+}
+
+func (api *APIServer) getGeofencesHandler(w http.ResponseWriter, r *http.Request) {
+    activeOnly := r.URL.Query().Get("active") == "true"
+
+    query := `
+        SELECT id, name, description, 
+               ST_AsGeoJSON(geom::geometry) as geom_json,
+               active, created_at, updated_at
+        FROM geofences
+    `
+
+    if activeOnly {
+        query += " WHERE active = true"
+    }
+
+    query += " ORDER BY created_at DESC"
+
+    rows, err := api.db.Query(query)
+    if err != nil {
+        log.Printf("Error querying geofences: %v", err)
+        http.Error(w, "Database error", http.StatusInternalServerError)
+        return
+    }
+    defer rows.Close()
+
+    var geofences []Geofence
+    for rows.Next() {
+        var gf Geofence
+        var geomJSON string
+
+        if err := rows.Scan(&gf.ID, &gf.Name, &gf.Description, &geomJSON, 
+                           &gf.Active, &gf.CreatedAt, &gf.UpdatedAt); err != nil {
+            continue
+        }
+
+        // Parse GeoJSON to extract coordinates
+        var geoJSON map[string]interface{}
+        if err := json.Unmarshal([]byte(geomJSON), &geoJSON); err == nil {
+            if coords, ok := geoJSON["coordinates"].([]interface{}); ok {
+                if polygon, ok := coords[0].([]interface{}); ok {
+                    for _, point := range polygon {
+                        if pt, ok := point.([]interface{}); ok && len(pt) >= 2 {
+                            lng, _ := pt[0].(float64)
+                            lat, _ := pt[1].(float64)
+                            gf.Coordinates = append(gf.Coordinates, []float64{lng, lat})
+                        }
+                    }
+                }
+            }
+        }
+
+        geofences = append(geofences, gf)
+    }
+
+    if geofences == nil {
+        geofences = []Geofence{}
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(geofences)
+}
+
+// Get a single geofence by ID
+func (api *APIServer) getGeofenceHandler(w http.ResponseWriter, r *http.Request) {
+    vars := mux.Vars(r)
+    geofenceID := vars["id"]
+
+    query := `
+        SELECT id, name, description, 
+               ST_AsGeoJSON(geom::geometry) as geom_json,
+               active, created_at, updated_at
+        FROM geofences
+        WHERE id = $1
+    `
+
+    var gf Geofence
+    var geomJSON string
+
+    err := api.db.QueryRow(query, geofenceID).Scan(
+        &gf.ID, &gf.Name, &gf.Description, &geomJSON,
+        &gf.Active, &gf.CreatedAt, &gf.UpdatedAt,
+    )
+
+    if err == sql.ErrNoRows {
+        http.Error(w, "Geofence not found", http.StatusNotFound)
+        return
+    } else if err != nil {
+        log.Printf("Error querying geofence: %v", err)
+        http.Error(w, "Database error", http.StatusInternalServerError)
+        return
+    }
+
+    // Parse GeoJSON
+    var geoJSON map[string]interface{}
+    if err := json.Unmarshal([]byte(geomJSON), &geoJSON); err == nil {
+        if coords, ok := geoJSON["coordinates"].([]interface{}); ok {
+            if polygon, ok := coords[0].([]interface{}); ok {
+                for _, point := range polygon {
+                    if pt, ok := point.([]interface{}); ok && len(pt) >= 2 {
+                        lng, _ := pt[0].(float64)
+                        lat, _ := pt[1].(float64)
+                        gf.Coordinates = append(gf.Coordinates, []float64{lng, lat})
+                    }
+                }
+            }
+        }
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(gf)
+}
+
+// Update geofence
+func (api *APIServer) updateGeofenceHandler(w http.ResponseWriter, r *http.Request) {
+    vars := mux.Vars(r)
+    geofenceID := vars["id"]
+
+    var input struct {
+        Name        *string      `json:"name"`
+        Description *string      `json:"description"`
+        Coordinates [][]float64  `json:"coordinates"`
+        Active      *bool        `json:"active"`
+    }
+
+    if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+        http.Error(w, "Invalid JSON", http.StatusBadRequest)
+        return
+    }
+
+    updates := []string{}
+    args := []interface{}{}
+    argIdx := 1
+
+    if input.Name != nil {
+        updates = append(updates, fmt.Sprintf("name = $%d", argIdx))
+        args = append(args, *input.Name)
+        argIdx++
+    }
+
+    if input.Description != nil {
+        updates = append(updates, fmt.Sprintf("description = $%d", argIdx))
+        args = append(args, *input.Description)
+        argIdx++
+    }
+
+    if input.Coordinates != nil && len(input.Coordinates) >= 3 {
+        // Close polygon if needed
+        firstPoint := input.Coordinates[0]
+        lastPoint := input.Coordinates[len(input.Coordinates)-1]
+        if firstPoint[0] != lastPoint[0] || firstPoint[1] != lastPoint[1] {
+            input.Coordinates = append(input.Coordinates, firstPoint)
+        }
+
+        var wktPoints []string
+        for _, coord := range input.Coordinates {
+            wktPoints = append(wktPoints, fmt.Sprintf("%f %f", coord[0], coord[1]))
+        }
+        wkt := fmt.Sprintf("POLYGON((%s))", strings.Join(wktPoints, ", "))
+
+        updates = append(updates, fmt.Sprintf("geom = ST_GeogFromText($%d)", argIdx))
+        args = append(args, wkt)
+        argIdx++
+    }
+
+    if input.Active != nil {
+        updates = append(updates, fmt.Sprintf("active = $%d", argIdx))
+        args = append(args, *input.Active)
+        argIdx++
+    }
+
+    if len(updates) == 0 {
+        http.Error(w, "No fields to update", http.StatusBadRequest)
+        return
+    }
+
+    updates = append(updates, "updated_at = NOW()")
+    args = append(args, geofenceID)
+
+    query := fmt.Sprintf(`
+        UPDATE geofences
+        SET %s
+        WHERE id = $%d
+        RETURNING id, name, description, active, created_at, updated_at
+    `, strings.Join(updates, ", "), argIdx)
+
+    var gf Geofence
+    err := api.db.QueryRow(query, args...).Scan(
+        &gf.ID, &gf.Name, &gf.Description, &gf.Active, &gf.CreatedAt, &gf.UpdatedAt,
+    )
+
+    if err == sql.ErrNoRows {
+        http.Error(w, "Geofence not found", http.StatusNotFound)
+        return
+    } else if err != nil {
+        log.Printf("Error updating geofence: %v", err)
+        http.Error(w, "Database error", http.StatusInternalServerError)
+        return
+    }
+
+    if input.Coordinates != nil {
+        gf.Coordinates = input.Coordinates
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(gf)
+}
+
+// Delete geofence
+func (api *APIServer) deleteGeofenceHandler(w http.ResponseWriter, r *http.Request) {
+    vars := mux.Vars(r)
+    geofenceID := vars["id"]
+
+    result, err := api.db.Exec("DELETE FROM geofences WHERE id = $1", geofenceID)
+    if err != nil {
+        log.Printf("Error deleting geofence: %v", err)
+        http.Error(w, "Database error", http.StatusInternalServerError)
+        return
+    }
+
+    rowsAffected, _ := result.RowsAffected()
+    if rowsAffected == 0 {
+        http.Error(w, "Geofence not found", http.StatusNotFound)
+        return
+    }
+
+    w.WriteHeader(http.StatusNoContent)
+}
+
+// Check which geofences contain a point
+func (api *APIServer) geofenceCheckHandler(w http.ResponseWriter, r *http.Request) {
+    latStr := r.URL.Query().Get("lat")
+    lngStr := r.URL.Query().Get("lng")
+
+    if latStr == "" || lngStr == "" {
+        http.Error(w, "lat and lng parameters required", http.StatusBadRequest)
+        return
+    }
+
+    lat, err1 := strconv.ParseFloat(latStr, 64)
+    lng, err2 := strconv.ParseFloat(lngStr, 64)
+
+    if err1 != nil || err2 != nil {
+        http.Error(w, "Invalid coordinates", http.StatusBadRequest)
+        return
+    }
+
+    query := `
+        SELECT id, name, description,
+               ST_AsGeoJSON(geom::geometry) as geom_json,
+               active
+        FROM geofences
+        WHERE active = true
+          AND ST_Contains(geom, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography)
+    `
+
+    rows, err := api.db.Query(query, lng, lat)
+    if err != nil {
+        log.Printf("Database error: %v", err)
+        http.Error(w, "Database error", http.StatusInternalServerError)
+        return
+    }
+    defer rows.Close()
+
+    var geofences []Geofence
+    for rows.Next() {
+        var gf Geofence
+        var geomJSON string
+
+        if err := rows.Scan(&gf.ID, &gf.Name, &gf.Description, &geomJSON, &gf.Active); err != nil {
+            continue
+        }
+
+        // Parse GeoJSON
+        var geoJSON map[string]interface{}
+        if err := json.Unmarshal([]byte(geomJSON), &geoJSON); err == nil {
+            if coords, ok := geoJSON["coordinates"].([]interface{}); ok {
+                if polygon, ok := coords[0].([]interface{}); ok {
+                    for _, point := range polygon {
+                        if pt, ok := point.([]interface{}); ok && len(pt) >= 2 {
+                            lng, _ := pt[0].(float64)
+                            lat, _ := pt[1].(float64)
+                            gf.Coordinates = append(gf.Coordinates, []float64{lng, lat})
+                        }
+                    }
+                }
+            }
+        }
+
+        geofences = append(geofences, gf)
+    }
+
+    if geofences == nil {
+        geofences = []Geofence{}
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "point":     []float64{lng, lat},
+        "geofences": geofences,
+        "count":     len(geofences),
+    })
+}
+
+// Get routes
+func (api *APIServer) getRoutesHandler(w http.ResponseWriter, r *http.Request) {
+    deviceID := r.URL.Query().Get("device_id")
+    limitStr := r.URL.Query().Get("limit")
+    
+    limit := 50
+    if limitStr != "" {
+        if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 1000 {
+            limit = l
+        }
+    }
+
+    query := `
+        SELECT id, device_id, route_name,
+               ST_AsGeoJSON(geom::geometry) as geom_json,
+               start_time, end_time, distance_meters, created_at
+        FROM routes
+    `
+
+    args := []interface{}{}
+    if deviceID != "" {
+        query += " WHERE device_id = $1"
+        args = append(args, deviceID)
+    }
+
+    query += " ORDER BY start_time DESC LIMIT $" + fmt.Sprintf("%d", len(args)+1)
+    args = append(args, limit)
+
+    rows, err := api.db.Query(query, args...)
+    if err != nil {
+        log.Printf("Error querying routes: %v", err)
+        http.Error(w, "Database error", http.StatusInternalServerError)
+        return
+    }
+    defer rows.Close()
+
+    var routes []Route
+    for rows.Next() {
+        var rt Route
+        var geomJSON string
+        var routeName sql.NullString
+        var distanceMeters sql.NullFloat64
+
+        if err := rows.Scan(&rt.ID, &rt.DeviceID, &routeName, &geomJSON,
+                           &rt.StartTime, &rt.EndTime, &distanceMeters, &rt.CreatedAt); err != nil {
+            continue
+        }
+
+        if routeName.Valid {
+            rt.RouteName = routeName.String
+        }
+        if distanceMeters.Valid {
+            rt.DistanceMeters = distanceMeters.Float64
+        }
+
+        // Parse GeoJSON
+        var geoJSON map[string]interface{}
+        if err := json.Unmarshal([]byte(geomJSON), &geoJSON); err == nil {
+            if coords, ok := geoJSON["coordinates"].([]interface{}); ok {
+                for _, point := range coords {
+                    if pt, ok := point.([]interface{}); ok && len(pt) >= 2 {
+                        lng, _ := pt[0].(float64)
+                        lat, _ := pt[1].(float64)
+                        rt.Coordinates = append(rt.Coordinates, []float64{lng, lat})
+                    }
+                }
+            }
+        }
+
+        routes = append(routes, rt)
+    }
+
+    if routes == nil {
+        routes = []Route{}
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(routes)
+}
+
+// Create route from device history
+func (api *APIServer) createRouteHandler(w http.ResponseWriter, r *http.Request) {
+    var input struct {
+        DeviceID  string    `json:"device_id"`
+        RouteName string    `json:"route_name"`
+        StartTime time.Time `json:"start_time"`
+        EndTime   time.Time `json:"end_time"`
+    }
+
+    if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+        http.Error(w, "Invalid JSON", http.StatusBadRequest)
+        return
+    }
+
+    if input.DeviceID == "" {
+        http.Error(w, "device_id is required", http.StatusBadRequest)
+        return
+    }
+
+    tableName := "locations"
+    if api.tablePrefix != "" {
+        tableName = api.tablePrefix + "_locations"
+    }
+
+    // Query to create route from location points
+    query := fmt.Sprintf(`
+        WITH route_points AS (
+            SELECT location::geometry as geom
+            FROM %s
+            WHERE device_id = $1
+              AND timestamp >= $2
+              AND timestamp <= $3
+            ORDER BY timestamp ASC
+        )
+        INSERT INTO routes (device_id, route_name, geom, start_time, end_time, distance_meters)
+        SELECT 
+            $1,
+            $4,
+            ST_MakeLine(geom)::geography,
+            $2,
+            $3,
+            ST_Length(ST_MakeLine(geom)::geography)
+        FROM route_points
+        WHERE (SELECT COUNT(*) FROM route_points) >= 2
+        RETURNING id, device_id, route_name, start_time, end_time, distance_meters, created_at
+    `, tableName)
+
+    var route Route
+    var routeName sql.NullString
+    var distanceMeters sql.NullFloat64
+
+    err := api.db.QueryRow(query, input.DeviceID, input.StartTime, input.EndTime, input.RouteName).Scan(
+        &route.ID, &route.DeviceID, &routeName, &route.StartTime, &route.EndTime, &distanceMeters, &route.CreatedAt,
+    )
+
+    if err != nil {
+        if strings.Contains(err.Error(), "violates check constraint") {
+            http.Error(w, "Not enough points to create route (minimum 2 required)", http.StatusBadRequest)
+        } else {
+            log.Printf("Error creating route: %v", err)
+            http.Error(w, "Database error", http.StatusInternalServerError)
+        }
+        return
+    }
+
+    if routeName.Valid {
+        route.RouteName = routeName.String
+    }
+    if distanceMeters.Valid {
+        route.DistanceMeters = distanceMeters.Float64
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(http.StatusCreated)
+    json.NewEncoder(w).Encode(route)
+}
+
+// Distance calculation between two points
+func (api *APIServer) distanceHandler(w http.ResponseWriter, r *http.Request) {
+    lat1Str := r.URL.Query().Get("lat1")
+    lng1Str := r.URL.Query().Get("lng1")
+    lat2Str := r.URL.Query().Get("lat2")
+    lng2Str := r.URL.Query().Get("lng2")
+
+    if lat1Str == "" || lng1Str == "" || lat2Str == "" || lng2Str == "" {
+        http.Error(w, "All parameters required: lat1, lng1, lat2, lng2", http.StatusBadRequest)
+        return
+    }
+
+    lat1, err1 := strconv.ParseFloat(lat1Str, 64)
+    lng1, err2 := strconv.ParseFloat(lng1Str, 64)
+    lat2, err3 := strconv.ParseFloat(lat2Str, 64)
+    lng2, err4 := strconv.ParseFloat(lng2Str, 64)
+
+    if err1 != nil || err2 != nil || err3 != nil || err4 != nil {
+        http.Error(w, "Invalid coordinates", http.StatusBadRequest)
+        return
+    }
+
+    var distanceMeters float64
+    query := `
+        SELECT ST_Distance(
+            ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+            ST_SetSRID(ST_MakePoint($3, $4), 4326)::geography
+        )
+    `
+
+    err := api.db.QueryRow(query, lng1, lat1, lng2, lat2).Scan(&distanceMeters)
+    if err != nil {
+        log.Printf("Error calculating distance: %v", err)
+        http.Error(w, "Database error", http.StatusInternalServerError)
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "point1": map[string]float64{
+            "latitude":  lat1,
+            "longitude": lng1,
+        },
+        "point2": map[string]float64{
+            "latitude":  lat2,
+            "longitude": lng2,
+        },
+        "distance_meters":     distanceMeters,
+        "distance_kilometers": distanceMeters / 1000,
+        "distance_miles":      distanceMeters / 1609.34,
+    })
+}
+
 
 // Main Application
 type App struct {
