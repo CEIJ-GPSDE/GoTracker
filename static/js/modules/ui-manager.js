@@ -15,7 +15,6 @@ export class UIManager {
     const tabButtons = document.querySelectorAll('.tab-button');
     const tabContents = document.querySelectorAll('.tab-content');
 
-    // Menu toggle from bottom button
     menuToggleBottom.addEventListener('click', () => {
       popupMenu.classList.add('active');
     });
@@ -141,17 +140,17 @@ export class UIManager {
       this.tracker.updateLocationSelection();
     });
 
-    // History Mode button - now opens config directly
+    // History Mode button
     document.getElementById('history-mode-btn').addEventListener('click', () => {
       this.tracker.historyManager.openHistoryConfig();
     });
 
-    // Change Filter button - opens config when in history mode
+    // Change Filter button
     document.getElementById('change-filter-btn').addEventListener('click', () => {
       this.tracker.historyManager.openHistoryConfig();
     });
 
-    // Live Mode button - deactivates history mode
+    // Live Mode button
     document.getElementById('live-mode-btn').addEventListener('click', () => {
       this.tracker.historyManager.deactivateHistoryMode();
     });
@@ -161,6 +160,18 @@ export class UIManager {
       this.tracker.showTraceDots = e.target.checked;
       this.tracker.applyTraceDotsVisibility();
     });
+
+    // Clustering toggle
+    const clusteringToggle = document.getElementById('toggle-clustering');
+    if (clusteringToggle) {
+      clusteringToggle.addEventListener('change', (e) => {
+        if (e.target.checked) {
+          this.tracker.enableClustering();
+        } else {
+          this.tracker.disableClustering();
+        }
+      });
+    }
 
     // History limit
     document.getElementById('history-limit').addEventListener('change', (e) => {
@@ -182,6 +193,28 @@ export class UIManager {
 
     // Setup filter application buttons
     this.setupFilterButtons();
+  }
+
+  setupGeofenceControls() {
+    // Draw Geofence button
+    const drawBtn = document.getElementById('draw-geofence-btn');
+    if (drawBtn) {
+      drawBtn.addEventListener('click', () => {
+        if (this.tracker.geofenceManager) {
+          this.tracker.geofenceManager.startDrawing();
+        }
+      });
+    }
+
+    // Toggle Geofences button
+    const toggleBtn = document.getElementById('toggle-geofences-btn');
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', () => {
+        if (this.tracker.geofenceManager) {
+          this.tracker.geofenceManager.toggleGeofenceVisibility();
+        }
+      });
+    }
   }
 
   setupFilterButtons() {
@@ -229,20 +262,17 @@ export class UIManager {
       });
     }
 
-    // Select on map button - add event listener properly
+    // Select on map button
     const selectOnMapBtn = document.getElementById('select-on-map-btn');
     if (selectOnMapBtn) {
       selectOnMapBtn.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
         
-        // Check if we're in selection mode (button shows Cancel)
         if (this.tracker.isSelectingLocationOnMap) {
-          // Cancel selection
           this.endMapLocationSelection();
           this.reopenHistoryConfigPopup();
         } else {
-          // Start selection
           this.startMapLocationSelection();
         }
       });
@@ -254,47 +284,35 @@ export class UIManager {
     const selectBtn = document.getElementById('select-on-map-btn');
     const historyConfigPopup = document.getElementById('history-config-popup');
     
-    // Remember which tab was active (should be location-filter)
     const activeTab = document.querySelector('#history-config-popup .tab-button.active');
     if (activeTab) {
       this.tracker.historyManager.lastActiveConfigTab = activeTab.dataset.tab;
     }
     
-    // Close the popup to allow map interaction
     if (historyConfigPopup) {
       historyConfigPopup.classList.remove('active');
     }
     
-    // Update button state
     selectBtn.textContent = '✖ ' + this.tracker.t('cancelSelection');
     selectBtn.classList.add('secondary');
     
-    // Change cursor
     const mapContainer = document.getElementById('map');
     mapContainer.style.cursor = 'crosshair';
 
-    // Create click handler
     this.tracker.mapSelectionHandler = (e) => {
       const {lng, lat} = e.lngLat;
       
-      // Update inputs (overwrite existing values)
       document.getElementById('location-lat-input').value = lat.toFixed(6);
       document.getElementById('location-lng-input').value = lng.toFixed(6);
       
-      // End selection mode
       this.endMapLocationSelection();
-      
-      // Reopen the popup on the same tab
       this.reopenHistoryConfigPopup();
       
-      // Show feedback
       console.log(this.tracker.t('locationSelected'), `Lat: ${lat.toFixed(6)}, Lng: ${lng.toFixed(6)}`);
     };
 
-    // Add click listener to map
     this.tracker.mapManager.map.once('click', this.tracker.mapSelectionHandler);
 
-    // Update button to cancel selection
     selectBtn.onclick = (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -308,33 +326,27 @@ export class UIManager {
     const selectBtn = document.getElementById('select-on-map-btn');
     const mapContainer = document.getElementById('map');
     
-    // Reset button text
     selectBtn.textContent = '🗺 ' + this.tracker.t('selectOnMap');
     selectBtn.classList.remove('secondary');
     
-    // Reset cursor
     mapContainer.style.cursor = '';
     
-    // Remove map listener if it exists
     if (this.tracker.mapSelectionHandler) {
       this.tracker.mapManager.map.off('click', this.tracker.mapSelectionHandler);
       this.tracker.mapSelectionHandler = null;
     }
 
-    // Restore normal button behavior - this is critical for reusability
-    selectBtn.onclick = null; // Clear the cancel handler first
+    selectBtn.onclick = null;
   }
 
   reopenHistoryConfigPopup() {
     const historyConfigPopup = document.getElementById('history-config-popup');
     const lastTab = this.tracker.historyManager.lastActiveConfigTab || 'location-filter';
     
-    // Reopen popup
     if (historyConfigPopup) {
       historyConfigPopup.classList.add('active');
     }
     
-    // Restore the correct tab
     const tabButtons = document.querySelectorAll('#history-config-popup .tab-button');
     const tabContents = document.querySelectorAll('#history-config-popup .tab-content');
     
@@ -375,7 +387,6 @@ export class UIManager {
     document.querySelector('#change-filter-btn span:last-child').textContent = this.tracker.t('changeFilter');
     document.querySelector('#live-mode-btn span:last-child').textContent = this.tracker.t('liveMode');
     
-    // Update bottom menu button
     const menuTextBottom = document.querySelector('#menu-toggle-btn-bottom span:last-child');
     if (menuTextBottom) {
       menuTextBottom.textContent = this.tracker.t('menu');
@@ -423,14 +434,6 @@ export class UIManager {
     if (noFilterBtnText) noFilterBtnText.textContent = this.tracker.t('openHistorySettings');
     if (noFilterDismissText) noFilterDismissText.textContent = this.tracker.t('dismiss');
 
-    const noFilterSelectedTitle = document.getElementById('no-filter-selected-title');
-    const pleaseSelectFilter = document.getElementById('please-select-filter');
-    const selectFilterTab = document.getElementById('select-filter-tab');
-
-    if (noFilterSelectedTitle) noFilterSelectedTitle.textContent = this.tracker.t('noFilterSelected');
-    if (pleaseSelectFilter) pleaseSelectFilter.textContent = this.tracker.t('pleaseSelectFilter');
-    if (selectFilterTab) selectFilterTab.textContent = this.tracker.t('selectFilterTab');
-
     const emptyResultsTitle = document.getElementById('empty-results-title');
     const emptyResultsMessage = document.getElementById('empty-results-message');
     const emptyResultsAdjustBtn = document.getElementById('empty-results-adjust-btn');
@@ -446,13 +449,11 @@ export class UIManager {
     if (legendStart) legendStart.textContent = this.tracker.t('legendStart');
     if (legendEnd) legendEnd.textContent = this.tracker.t('legendEnd');
 
-    // Update device legend text
     const devicesText = document.getElementById('devices-text');
     if (devicesText) {
       devicesText.textContent = this.tracker.t('devices');
     }
 
-    // Update center devices button text
     const centerDevicesText = document.getElementById('center-devices-text');
     if (centerDevicesText) {
       centerDevicesText.textContent = this.tracker.t('centerOnDevices');

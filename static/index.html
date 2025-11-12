@@ -11,7 +11,6 @@
 </head>
 
 <body>
-  <!-- Configuration injected at build time -->
   <script>
     window.APP_CONFIG = {
       basePath: '${BASE_PATH}',
@@ -51,30 +50,35 @@
             <div class="track-icon"></div>
             <span>Track Latest</span>
           </button>
-          <!-- Single History Mode button - opens filter config directly -->
           <button id="history-mode-btn" class="history-btn">
             <span>📅</span>
             <span>History Mode</span>
           </button>
-          <!-- Change Filter button - only visible when in history mode with active filter -->
           <button id="change-filter-btn" class="history-btn"
             style="display: none; background: linear-gradient(135deg, #f59e0b, #d97706);">
             <span>🔄</span>
             <span>Change Filter</span>
           </button>
-          <!-- Live Mode button - only visible when in history mode -->
           <button id="live-mode-btn" class="history-btn"
             style="display: none; background: linear-gradient(135deg, #dc2626, #b91c1c);">
             <span>🔴</span>
             <span>Live Mode</span>
           </button>
+          
+          <!-- NUEVO: Controles de Geocercas -->
+          <button id="draw-geofence-btn" class="geofence-btn" style="background: linear-gradient(135deg, #667eea, #764ba2);">
+            <span>🖊️</span>
+            <span>Draw Geofence</span>
+          </button>
+          <button id="toggle-geofences-btn" class="geofence-btn" style="background: linear-gradient(135deg, #10b981, #059669);">
+            <span>👁️</span>
+            <span>Hide Geofences</span>
+          </button>
         </div>
         
         <div id="map"></div>
         
-        <!-- Bottom Right Controls: Device Legend + Menu Button -->
         <div class="bottom-right-controls">
-          <!-- Device Legend -->
           <div class="device-legend" id="device-legend">
             <div class="device-legend-header" onclick="window.locationTracker.toggleDeviceLegend()">
               <h4>
@@ -89,14 +93,12 @@
             </button>
           </div>
           
-          <!-- Menu Button -->
           <button id="menu-toggle-btn-bottom" class="menu-toggle-btn-bottom">
             <span>⚙️</span>
             <span id="menu-text">Menu</span>
           </button>
         </div>
         
-        <!-- No Filter Overlay -->
         <div class="no-filter-overlay" id="no-filter-overlay">
           <h3 id="no-filter-title">⚠️ No Time Filter Applied</h3>
           <p id="no-filter-message">Please configure a time filter in History Settings to view historical data.</p>
@@ -108,7 +110,6 @@
           </button>
         </div>
 
-        <!-- Empty Results Popup -->
         <div class="no-results-overlay" id="no-results-overlay" style="border-color: #ef4444; z-index: 10600;">
           <h3 id="empty-results-title">⚠️ No Results Found</h3>
           <p id="empty-results-message">No location data matches your filter criteria. Try adjusting the parameters.</p>
@@ -153,6 +154,7 @@
         <div class="menu-tabs">
           <button class="tab-button active" data-tab="controls">⚙️ Controls</button>
           <button class="tab-button" data-tab="locations">📍 Locations</button>
+          <button class="tab-button" data-tab="geofences">🗺️ Geofences</button>
         </div>
 
         <!-- Controls Tab -->
@@ -171,6 +173,12 @@
                 <span id="trace-dots-label">Show trace dots</span>
               </label>
             </div>
+            <div class="control-item">
+              <label style="display:flex; align-items:center; gap:6px; cursor:pointer; width:100%;">
+                <input type="checkbox" id="toggle-clustering">
+                <span>Use marker clustering (>100 points)</span>
+              </label>
+            </div>
           </div>
         </div>
 
@@ -182,6 +190,32 @@
                 <div class="loading">
                   <div class="spinner"></div>Loading locations...
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- NUEVO: Geofences Tab -->
+        <div class="tab-content" id="geofences-tab">
+          <div class="card">
+            <div class="card-body">
+              <h4 style="margin-bottom: 15px; color: #374151;">📍 Geofence Management</h4>
+              <p style="font-size: 13px; color: #6b7280; margin-bottom: 15px;">
+                Create and manage geofences to monitor when devices enter or exit specific areas.
+              </p>
+              <div class="button-group" style="display: flex; flex-direction: column; gap: 10px;">
+                <button class="btn" onclick="window.locationTracker.geofenceManager?.startDrawing()">
+                  🖊️ Draw New Geofence
+                </button>
+                <button class="btn secondary" onclick="window.locationTracker.geofenceManager?.loadGeofences()">
+                  🔄 Reload Geofences
+                </button>
+                <button class="btn secondary" onclick="window.locationTracker.geofenceManager?.toggleGeofenceVisibility()">
+                  👁️ Toggle Visibility
+                </button>
+              </div>
+              <div id="geofence-list" style="margin-top: 20px; max-height: 300px; overflow-y: auto;">
+                <!-- Geofences will be listed here dynamically -->
               </div>
             </div>
           </div>

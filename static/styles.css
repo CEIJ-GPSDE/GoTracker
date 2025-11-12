@@ -1339,3 +1339,243 @@ body {
 .validation-error.show {
   display: block;
 }
+
+/* Geofence Controls */
+.geofence-btn {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+  border: none;
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.geofence-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+}
+
+.geofence-btn.danger {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+}
+
+.geofence-btn.danger:hover {
+  box-shadow: 0 8px 20px rgba(239, 68, 68, 0.4);
+}
+
+/* Geofence Notification */
+.geofence-notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: #3b82f6;
+  color: white;
+  padding: 15px 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 10000;
+  font-size: 14px;
+  max-width: 400px;
+  animation: slideInRight 0.3s ease-out;
+}
+
+.geofence-notification.error {
+  background: #ef4444;
+}
+
+.geofence-notification.success {
+  background: #10b981;
+}
+
+.geofence-notification.warning {
+  background: #f59e0b;
+}
+
+.geofence-notification.info {
+  background: #3b82f6;
+}
+
+/* Animation for notifications */
+@keyframes slideInRight {
+  from {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOutRight {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+}
+
+/* Geofence List in Popup */
+#geofence-list {
+  margin-top: 20px;
+}
+
+.geofence-list-item {
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  background: #f9fafb;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.geofence-list-item:hover {
+  background: #f3f4f6;
+  border-color: #667eea;
+}
+
+.geofence-list-item.active {
+  background: #eff6ff;
+  border-color: #3b82f6;
+}
+
+.geofence-list-item h5 {
+  margin: 0 0 5px 0;
+  color: #374151;
+  font-size: 14px;
+}
+
+.geofence-list-item p {
+  margin: 0;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.geofence-list-item .badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  margin-top: 5px;
+}
+
+.geofence-list-item .badge.active {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.geofence-list-item .badge.inactive {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+/* Drawing Mode Indicator - Map Overlay */
+.drawing-mode-indicator {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(102, 126, 234, 0.95);
+  backdrop-filter: blur(10px);
+  color: white;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  z-index: 1000;
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.15);
+  display: none;
+  animation: bounceIn 0.3s ease-out;
+}
+
+.drawing-mode-indicator.active {
+  display: block;
+}
+
+@keyframes bounceIn {
+  0% {
+    transform: translateX(-50%) scale(0.8);
+    opacity: 0;
+  }
+  50% {
+    transform: translateX(-50%) scale(1.05);
+  }
+  100% {
+    transform: translateX(-50%) scale(1);
+    opacity: 1;
+  }
+}
+
+/* Pulse animation for geofence violations */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.1);
+  }
+}
+
+/* Marker violation state */
+.marker-violation {
+  border: 3px solid #ef4444 !important;
+  animation: pulse 1s infinite;
+}
+
+/* Cluster marker styles */
+.maplibregl-marker.cluster {
+  background: #51bbd6;
+  border-radius: 50%;
+  color: white;
+  text-align: center;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 768px) {
+  .geofence-btn {
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+  
+  .geofence-notification {
+    max-width: calc(100vw - 40px);
+    font-size: 13px;
+  }
+  
+  .drawing-mode-indicator {
+    left: 10px;
+    right: 10px;
+    transform: none;
+    font-size: 12px;
+    padding: 10px 15px;
+  }
+}
+
+/* Performance optimization classes */
+.will-change-transform {
+  will-change: transform;
+}
+
+.gpu-accelerated {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
