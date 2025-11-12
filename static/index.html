@@ -54,6 +54,18 @@
             <span>📅</span>
             <span>History Mode</span>
           </button>
+          
+          <!-- Geofence Management Buttons -->
+          <button id="draw-geofence-btn" class="geofence-control-btn" title="Draw Geofence">
+            <span>🖊️</span>
+          </button>
+          <button id="toggle-geofences-btn" class="geofence-control-btn" title="Toggle Geofences">
+            <span>👁️</span>
+          </button>
+          <button id="open-geofence-menu-btn" class="geofence-control-btn" title="Geofence Management">
+            <span>🗺️</span>
+          </button>
+          
           <button id="change-filter-btn" class="history-btn"
             style="display: none; background: linear-gradient(135deg, #f59e0b, #d97706);">
             <span>🔄</span>
@@ -69,6 +81,7 @@
         <div id="map"></div>
         
         <div class="bottom-right-controls">
+          <!-- Device Legend -->
           <div class="device-legend" id="device-legend">
             <div class="device-legend-header" onclick="window.locationTracker.toggleDeviceLegend()">
               <h4>
@@ -80,6 +93,21 @@
             <div id="legend-items"></div>
             <button class="center-devices-btn" id="center-devices-btn" onclick="window.locationTracker.centerOnSelectedDevices()">
               🎯 <span id="center-devices-text">Center on Devices</span>
+            </button>
+          </div>
+          
+          <!-- Geofence Legend -->
+          <div class="geofence-legend" id="geofence-legend">
+            <div class="geofence-legend-header" onclick="window.locationTracker.geofenceManager?.toggleGeofenceLegend()">
+              <h4>
+                🗺️ <span id="geofences-text">Geofences</span>
+                <span id="geofence-count" style="font-size: 12px; font-weight: normal; color: #6b7280;">0</span>
+              </h4>
+              <button class="geofence-legend-toggle">▼</button>
+            </div>
+            <div id="geofence-legend-items"></div>
+            <button class="center-geofences-btn" id="center-geofences-btn" onclick="window.locationTracker.geofenceManager?.centerOnGeofences()">
+              🎯 <span id="center-geofences-text">Center on Geofences</span>
             </button>
           </div>
           

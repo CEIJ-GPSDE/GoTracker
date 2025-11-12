@@ -1597,3 +1597,223 @@ body {
   backface-visibility: hidden;
   perspective: 1000px;
 }
+
+/* Geofence Control Buttons (map controls) */
+.geofence-control-btn {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+  border: none;
+  padding: 12px;
+  border-radius: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  width: 44px;
+  height: 44px;
+  position: relative;
+}
+
+.geofence-control-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+}
+
+.geofence-control-btn:hover::after {
+  content: attr(title);
+  position: absolute;
+  right: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+  z-index: 10001;
+  pointer-events: none;
+}
+
+.geofence-control-btn.active {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+}
+
+/* Geofence Legend */
+.geofence-legend {
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(10px);
+  padding: 15px;
+  border-radius: 12px;
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.15);
+  max-width: 280px;
+  max-height: 400px;
+  transition: all 0.3s ease;
+  margin-bottom: 10px;
+}
+
+.geofence-legend.collapsed {
+  max-height: 50px;
+  overflow: hidden;
+}
+
+.geofence-legend-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.geofence-legend-header h4 {
+  margin: 0;
+  font-size: 14px;
+  color: #374151;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.geofence-legend-toggle {
+  background: #f3f4f6;
+  border: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  font-size: 12px;
+}
+
+.geofence-legend-toggle:hover {
+  background: #e5e7eb;
+}
+
+.geofence-legend.collapsed .geofence-legend-toggle {
+  transform: rotate(180deg);
+}
+
+#geofence-legend-items {
+  overflow-y: auto;
+  max-height: 280px;
+}
+
+.geofence-legend.collapsed #geofence-legend-items {
+  display: none;
+}
+
+.geofence-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+  margin-bottom: 4px;
+}
+
+.geofence-legend-item:hover {
+  background: #f3f4f6;
+}
+
+.geofence-legend-item.inactive {
+  opacity: 0.5;
+}
+
+.geofence-checkbox {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #667eea;
+}
+
+.geofence-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  background: #667eea;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.geofence-icon.inactive {
+  background: #9ca3af;
+}
+
+.geofence-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.geofence-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.geofence-details {
+  font-size: 11px;
+  color: #6b7280;
+  display: flex;
+  gap: 8px;
+}
+
+.center-geofences-btn {
+  width: 100%;
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.center-geofences-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(102, 126, 234, 0.4);
+}
+
+.geofence-legend.collapsed .center-geofences-btn {
+  display: none;
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+  .geofence-control-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 16px;
+    padding: 10px;
+  }
+  
+  .geofence-control-btn:hover::after {
+    display: none;
+  }
+  
+  .geofence-legend {
+    max-width: 240px;
+  }
+}

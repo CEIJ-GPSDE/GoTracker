@@ -153,6 +153,10 @@ export class HistoryManager {
 
         if (this.tracker.filteredLocations.length > 0) {
           this.tracker.mapManager.fitMapToLocations(this.tracker.filteredLocations);
+          // Check geofences for historical data
+          if (this.tracker.geofenceManager) {
+            await this.tracker.geofenceManager.checkHistoricalLocationsAgainstGeofences();
+          }
         } else {
           setTimeout(() => this.tracker.showEmptyResultsPopup(), 500);
         }
@@ -224,6 +228,10 @@ export class HistoryManager {
           console.log('Has results, fitting map');
           this.tracker.mapManager.fitMapToLocations(this.tracker.filteredLocations);
           this.tracker.updateRouteForFiltered();
+          // Check geofences for historical data
+          if (this.tracker.geofenceManager) {
+            await this.tracker.geofenceManager.checkHistoricalLocationsAgainstGeofences();
+          }
         } else {
           console.log('No results, showing empty results popup');
           setTimeout(() => {

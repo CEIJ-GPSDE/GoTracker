@@ -110,7 +110,6 @@ export class LocationTracker {
       this.uiManager.setupEventListeners();
       this.uiManager.setupPopupMenu();
       this.uiManager.setupOverlayEventListeners();
-      this.uiManager.setupGeofenceControls(); // New method for geofence UI
       await this.deviceManager.loadDevices();
       await this.loadInitialData();
       

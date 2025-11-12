@@ -129,6 +129,10 @@ export const TRANSLATIONS = {
     geofence: "Geofence",
     activated: "activated",
     deactivated: "deactivated",
+    geofences: "Geofences",
+    centerGeofences: "Center on Geofences",
+    hideGeofences: "Hide Geofences",
+    showGeofences: "Show Geofences",
     geofenceStatus: "Status"
   },
   es: {
@@ -261,6 +265,10 @@ export const TRANSLATIONS = {
     geofence: "Geocerca",
     activated: "activada",
     deactivated: "desactivada",
+    geofences: "Geocercas",
+    centerGeofences: "Centrar en Geocercas",
+    hideGeofences: "Ocultar Geocercas",
+    showGeofences: "Mostrar Geocercas", 
     geofenceStatus: "Estado"
   }
 };

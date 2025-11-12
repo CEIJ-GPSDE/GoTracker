@@ -34,16 +34,22 @@ export class WebSocketManager {
 
       this.ws.onmessage = (event) => {
         try {
-          // Handle pong messages
-          if (event.data === 'pong') {
-            this.lastPong = Date.now();
+          // Handle pong messages (plain text, not JSON)
+          if (event.data === 'pong' || event.data === 'ping') {
+            if (event.data === 'pong') {
+              this.lastPong = Date.now();
+            }
             return;
           }
 
+          // Try to parse as JSON
           const data = JSON.parse(event.data);
           this.tracker.handleLocationUpdate(data);
         } catch (error) {
-          console.error('Error parsing WebSocket message:', error);
+          // Ignore non-JSON messages that aren't ping/pong
+          if (event.data !== 'pong' && event.data !== 'ping') {
+            console.error('Error parsing WebSocket message:', error);
+          }
         }
       };
 

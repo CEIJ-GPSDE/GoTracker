@@ -8,10 +8,12 @@ export class GeofenceManager {
     this.drawingPoints = [];
     this.drawingMarkers = [];
     this.tempLineSourceId = 'temp-drawing-line';
-    this.geofenceViolations = new Map(); // Track violations per device
+    this.geofenceViolations = new Map();
     this.showGeofences = true;
-    this.devicesInsideGeofences = new Map(); // Track which devices are in which geofences
+    this.devicesInsideGeofences = new Map();
     this.totalAlerts = 0;
+    this.geofenceLegendCollapsed = false;
+    this.visibleGeofences = new Set(); // Track which geofences are visible
   }
 
   initialize() {
@@ -38,7 +40,7 @@ export class GeofenceManager {
     // Load existing geofences
     this.loadGeofences();
 
-    // Listen for location updates to check violations
+    // Listen for location updates
     this.setupViolationDetection();
 
     // Update stats periodically
@@ -57,10 +59,12 @@ export class GeofenceManager {
         
         geofences.forEach(gf => {
           this.geofences.set(gf.id, gf);
+          this.visibleGeofences.add(gf.id); // All visible by default
           this.drawGeofence(gf);
         });
         
         console.log(`Loaded ${geofences.length} geofences`);
+        this.updateGeofenceLegend();
         this.updateGeofenceList();
         this.updateGeofenceStats();
         
@@ -119,11 +123,16 @@ export class GeofenceManager {
       }
     });
 
+    const isVisible = this.visibleGeofences.has(geofence.id) && this.showGeofences;
+
     // Add fill layer
     this.map.addLayer({
       id: `${sourceId}-fill`,
       type: 'fill',
       source: sourceId,
+      layout: {
+        'visibility': isVisible ? 'visible' : 'none'
+      },
       paint: {
         'fill-color': geofence.active ? '#667eea' : '#9ca3af',
         'fill-opacity': 0.2
@@ -135,13 +144,16 @@ export class GeofenceManager {
       id: `${sourceId}-outline`,
       type: 'line',
       source: sourceId,
+      layout: {
+        'visibility': isVisible ? 'visible' : 'none'
+      },
       paint: {
         'line-color': geofence.active ? '#667eea' : '#9ca3af',
         'line-width': 2
       }
     });
 
-    // Add click handler for geofence info
+    // Add click handler
     this.map.on('click', `${sourceId}-fill`, (e) => {
       this.showGeofencePopup(geofence, e.lngLat);
     });
@@ -206,19 +218,25 @@ export class GeofenceManager {
   }
 
   calculateGeofenceArea(coordinates) {
-    // Simple area calculation using Shoelace formula
-    // Convert to approximate km² (very rough estimate)
+    // Validate coordinates
+    if (!coordinates || !Array.isArray(coordinates) || coordinates.length < 3) {
+      return 0;
+    }
+
     let area = 0;
-    const n = coordinates.length - 1; // Exclude closing point
+    const n = coordinates.length - 1;
     
     for (let i = 0; i < n; i++) {
       const j = (i + 1) % n;
+      if (!coordinates[i] || !coordinates[j] || 
+          coordinates[i].length < 2 || coordinates[j].length < 2) {
+        continue;
+      }
       area += coordinates[i][0] * coordinates[j][1];
       area -= coordinates[j][0] * coordinates[i][1];
     }
     
     area = Math.abs(area) / 2;
-    // Convert from degrees² to approximate km² (very rough at equator)
     const kmPerDegree = 111.32;
     return area * kmPerDegree * kmPerDegree;
   }
@@ -248,6 +266,7 @@ export class GeofenceManager {
         const updated = await response.json();
         this.geofences.set(geofenceId, updated);
         this.drawGeofence(updated);
+        this.updateGeofenceLegend();
         this.updateGeofenceList();
         this.showNotification(
           `${this.tracker.t('geofence')} "${geofence.name}" ${updated.active ? this.tracker.t('activated') : this.tracker.t('deactivated')}`,
@@ -257,6 +276,146 @@ export class GeofenceManager {
     } catch (error) {
       console.error('Error toggling geofence:', error);
     }
+  }
+
+  toggleGeofenceVisibility(geofenceId, visible) {
+    if (visible) {
+      this.visibleGeofences.add(geofenceId);
+    } else {
+      this.visibleGeofences.delete(geofenceId);
+    }
+
+    const sourceId = `geofence-${geofenceId}`;
+    const visibility = visible && this.showGeofences ? 'visible' : 'none';
+    
+    if (this.map.getLayer(`${sourceId}-fill`)) {
+      this.map.setLayoutProperty(`${sourceId}-fill`, 'visibility', visibility);
+    }
+    if (this.map.getLayer(`${sourceId}-outline`)) {
+      this.map.setLayoutProperty(`${sourceId}-outline`, 'visibility', visibility);
+    }
+
+    this.updateGeofenceLegend();
+  }
+
+  toggleAllGeofencesVisibility() {
+    this.showGeofences = !this.showGeofences;
+    
+    this.geofences.forEach((gf, id) => {
+      const sourceId = `geofence-${id}`;
+      const isVisible = this.visibleGeofences.has(id) && this.showGeofences;
+      const visibility = isVisible ? 'visible' : 'none';
+      
+      if (this.map.getLayer(`${sourceId}-fill`)) {
+        this.map.setLayoutProperty(`${sourceId}-fill`, 'visibility', visibility);
+      }
+      if (this.map.getLayer(`${sourceId}-outline`)) {
+        this.map.setLayoutProperty(`${sourceId}-outline`, 'visibility', visibility);
+      }
+    });
+    
+    const btn = document.getElementById('toggle-geofences-btn');
+    if (btn) {
+      btn.classList.toggle('active', !this.showGeofences);
+      btn.title = this.showGeofences ? this.tracker.t('hideGeofences') : this.tracker.t('showGeofences');
+    }
+    
+    this.showNotification(
+      this.showGeofences ? this.tracker.t('geofencesVisible') : this.tracker.t('geofencesHidden'),
+      'info'
+    );
+  }
+
+  toggleGeofenceLegend() {
+    this.geofenceLegendCollapsed = !this.geofenceLegendCollapsed;
+    const legend = document.getElementById('geofence-legend');
+    
+    if (this.geofenceLegendCollapsed) {
+      legend.classList.add('collapsed');
+    } else {
+      legend.classList.remove('collapsed');
+    }
+  }
+
+  centerOnGeofences() {
+    const visibleGeofences = Array.from(this.visibleGeofences).filter(id => {
+      const geofence = this.geofences.get(id);
+      return geofence && geofence.active;
+    });
+
+    if (visibleGeofences.length === 0) {
+      console.log('No visible geofences to center on');
+      return;
+    }
+
+    const bounds = new maplibregl.LngLatBounds();
+    
+    visibleGeofences.forEach(id => {
+      const geofence = this.geofences.get(id);
+      if (geofence && geofence.coordinates) {
+        geofence.coordinates.forEach(coord => {
+          bounds.extend(coord);
+        });
+      }
+    });
+
+    this.map.fitBounds(bounds, {
+      padding: 100,
+      duration: 800
+    });
+  }
+
+  updateGeofenceLegend() {
+    const container = document.getElementById('geofence-legend-items');
+    const countElement = document.getElementById('geofence-count');
+
+    if (countElement) {
+      countElement.textContent = this.geofences.size;
+    }
+
+    if (!container) return;
+
+    if (this.geofences.size === 0) {
+      container.innerHTML = `<div style="color: #9ca3af; font-size: 12px;">${this.tracker.t('noGeofencesCreated')}</div>`;
+      return;
+    }
+
+    container.innerHTML = '';
+
+    this.geofences.forEach((geofence, id) => {
+      const devicesInside = this.getDevicesInGeofence(id);
+      const isVisible = this.visibleGeofences.has(id);
+
+      const item = document.createElement('div');
+      item.className = `geofence-legend-item ${!geofence.active ? 'inactive' : ''}`;
+
+      item.innerHTML = `
+        <input type="checkbox" class="geofence-checkbox" ${isVisible ? 'checked' : ''} 
+              data-geofence="${id}">
+        <div class="geofence-icon ${!geofence.active ? 'inactive' : ''}">🗺️</div>
+        <div class="geofence-info">
+          <div class="geofence-name">${geofence.name}</div>
+          <div class="geofence-details">
+            <span>${devicesInside.length} 📱</span>
+            <span>${geofence.active ? '✓' : '✗'}</span>
+          </div>
+        </div>
+      `;
+
+      const checkbox = item.querySelector('.geofence-checkbox');
+      checkbox.addEventListener('change', (e) => {
+        e.stopPropagation();
+        this.toggleGeofenceVisibility(id, checkbox.checked);
+      });
+
+      item.addEventListener('click', (e) => {
+        if (e.target !== checkbox) {
+          this.focusGeofence(id);
+        }
+      });
+
+      container.appendChild(item);
+    });
   }
 
   startDrawing() {
@@ -271,6 +430,11 @@ export class GeofenceManager {
     
     this.map.getCanvas().style.cursor = 'crosshair';
     
+    const btn = document.getElementById('draw-geofence-btn');
+    if (btn) {
+      btn.classList.add('active');
+    }
+    
     this.showNotification(
       this.tracker.t('drawingModeActive') + ' ' + this.tracker.t('doubleClickToFinish'),
       'info'
@@ -283,6 +447,11 @@ export class GeofenceManager {
     this.clearDrawingMarkers();
     this.updateTempLine();
     this.map.getCanvas().style.cursor = '';
+    
+    const btn = document.getElementById('draw-geofence-btn');
+    if (btn) {
+      btn.classList.remove('active');
+    }
     
     this.showNotification(this.tracker.t('drawingCancelled'), 'info');
   }
@@ -380,9 +549,11 @@ export class GeofenceManager {
       if (response.ok) {
         const newGeofence = await response.json();
         this.geofences.set(newGeofence.id, newGeofence);
+        this.visibleGeofences.add(newGeofence.id);
         this.drawGeofence(newGeofence);
         this.showNotification(`✓ ${this.tracker.t('geofenceCreated')}: "${name}"`, 'success');
         this.cancelDrawing();
+        this.updateGeofenceLegend();
         this.updateGeofenceList();
         this.updateGeofenceStats();
       } else {
@@ -420,7 +591,9 @@ export class GeofenceManager {
         }
         
         this.geofences.delete(geofenceId);
+        this.visibleGeofences.delete(geofenceId);
         this.showNotification(`✓ ${this.tracker.t('geofenceDeleted')}: "${geofence.name}"`, 'success');
+        this.updateGeofenceLegend();
         this.updateGeofenceList();
         this.updateGeofenceStats();
       } else {
@@ -440,7 +613,10 @@ export class GeofenceManager {
     const originalHandleUpdate = this.tracker.handleLocationUpdate.bind(this.tracker);
     this.tracker.handleLocationUpdate = (location) => {
       originalHandleUpdate(location);
-      this.checkGeofenceViolation(location);
+      // Only check violations in live mode
+      if (!this.tracker.isHistoryMode) {
+        this.checkGeofenceViolation(location);
+      }
     };
   }
 
@@ -488,15 +664,54 @@ export class GeofenceManager {
     }
   }
 
+  // Check geofences for historical data
+  async checkHistoricalLocationsAgainstGeofences() {
+    if (!this.tracker.isHistoryMode || this.tracker.filteredLocations.length === 0) {
+      return;
+    }
+
+    // Clear previous state
+    this.devicesInsideGeofences.clear();
+
+    // Check each location
+    for (const location of this.tracker.filteredLocations) {
+      try {
+        const response = await fetch(
+          `${this.tracker.config.apiBaseUrl}/api/geofence/check?lat=${location.latitude}&lng=${location.longitude}`
+        );
+        
+        if (response.ok) {
+          const result = await response.json();
+          if (result.count > 0) {
+            const currentGeofences = new Set(result.geofences.map(gf => gf.id));
+            this.devicesInsideGeofences.set(location.device_id, currentGeofences);
+          }
+        }
+      } catch (error) {
+        console.error('Error checking historical location:', error);
+      }
+    }
+
+    this.updateGeofenceStats();
+    this.updateGeofenceLegend();
+  }
+
   checkAllDeviceLocations() {
     // Check all current device locations against geofences
-    this.tracker.locations.forEach(location => {
-      this.checkGeofenceViolation(location);
-    });
+    const locationsToCheck = this.tracker.isHistoryMode 
+      ? this.tracker.filteredLocations 
+      : this.tracker.locations;
+
+    if (!this.tracker.isHistoryMode) {
+      locationsToCheck.forEach(location => {
+        this.checkGeofenceViolation(location);
+      });
+    } else {
+      this.checkHistoricalLocationsAgainstGeofences();
+    }
   }
 
   handleViolationEvent(location, eventType, geofences) {
-    const deviceInfo = this.tracker.devices.get(location.device_id);
     const geofenceNames = geofences.map(gf => gf.name).join(', ');
     
     const message = eventType === 'entered' 
@@ -522,26 +737,6 @@ export class GeofenceManager {
       geofences: geofenceNames,
       location: { lat: location.latitude, lng: location.longitude }
     });
-  }
-
-  toggleGeofenceVisibility() {
-    this.showGeofences = !this.showGeofences;
-    const visibility = this.showGeofences ? 'visible' : 'none';
-    
-    this.geofences.forEach((gf, id) => {
-      const sourceId = `geofence-${id}`;
-      if (this.map.getLayer(`${sourceId}-fill`)) {
-        this.map.setLayoutProperty(`${sourceId}-fill`, 'visibility', visibility);
-      }
-      if (this.map.getLayer(`${sourceId}-outline`)) {
-        this.map.setLayoutProperty(`${sourceId}-outline`, 'visibility', visibility);
-      }
-    });
-    
-    this.showNotification(
-      this.showGeofences ? this.tracker.t('geofencesVisible') : this.tracker.t('geofencesHidden'),
-      'info'
-    );
   }
 
   updateGeofenceList() {

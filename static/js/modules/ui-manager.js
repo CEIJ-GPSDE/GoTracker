@@ -193,6 +193,9 @@ export class UIManager {
 
     // Setup filter application buttons
     this.setupFilterButtons();
+
+    // Setup geofence controls
+    this.setupGeofenceControls();
   }
 
   setupFilterButtons() {
@@ -252,6 +255,57 @@ export class UIManager {
           this.reopenHistoryConfigPopup();
         } else {
           this.startMapLocationSelection();
+        }
+      });
+    }
+  }
+
+  setupGeofenceControls() {
+    // Draw Geofence button
+    const drawBtn = document.getElementById('draw-geofence-btn');
+    if (drawBtn) {
+      drawBtn.addEventListener('click', () => {
+        if (this.tracker.geofenceManager) {
+          this.tracker.geofenceManager.startDrawing();
+        }
+      });
+    }
+
+    // Toggle Geofences button
+    const toggleBtn = document.getElementById('toggle-geofences-btn');
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', () => {
+        if (this.tracker.geofenceManager) {
+          this.tracker.geofenceManager.toggleAllGeofencesVisibility();
+        }
+      });
+    }
+
+    // Open Geofence Menu button
+    const menuBtn = document.getElementById('open-geofence-menu-btn');
+    if (menuBtn) {
+      menuBtn.addEventListener('click', () => {
+        const popup = document.getElementById('popup-menu');
+        if (popup) {
+          popup.classList.add('active');
+          
+          // Switch to geofences tab
+          const tabButtons = document.querySelectorAll('.tab-button');
+          const tabContents = document.querySelectorAll('.tab-content');
+          
+          tabButtons.forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.dataset.tab === 'geofences') {
+              btn.classList.add('active');
+            }
+          });
+          
+          tabContents.forEach(content => {
+            content.classList.remove('active');
+            if (content.id === 'geofences-tab') {
+              content.classList.add('active');
+            }
+          });
         }
       });
     }
@@ -492,7 +546,32 @@ export class UIManager {
     // Update geofence list to reflect language changes
     if (this.tracker.geofenceManager) {
       this.tracker.geofenceManager.updateGeofenceList();
-    } 
+    }
+
+    // Geofence legend translations
+    const geofencesText = document.getElementById('geofences-text');
+    if (geofencesText) geofencesText.textContent = this.tracker.t('geofences');
+
+    const centerGeofencesText = document.getElementById('center-geofences-text');
+    if (centerGeofencesText) centerGeofencesText.textContent = this.tracker.t('centerGeofences');
+
+    // Update geofence button titles
+    const drawBtn = document.getElementById('draw-geofence-btn');
+    if (drawBtn) drawBtn.title = this.tracker.t('drawNewGeofence');
+
+    const toggleBtn = document.getElementById('toggle-geofences-btn');
+    if (toggleBtn) {
+      const showingGeofences = !this.tracker.geofenceManager || this.tracker.geofenceManager.showGeofences;
+      toggleBtn.title = showingGeofences ? this.tracker.t('hideGeofences') : this.tracker.t('showGeofences');
+    }
+
+    const menuBtn = document.getElementById('open-geofence-menu-btn');
+    if (menuBtn) menuBtn.title = this.tracker.t('geofenceManagement');
+
+    // Update geofence legend
+    if (this.tracker.geofenceManager) {
+      this.tracker.geofenceManager.updateGeofenceLegend();
+    }
 
     this.tracker.updateConnectionStatus(
       this.tracker.wsManager.isConnected() ? this.tracker.t('connected') : this.tracker.t('connecting'),
