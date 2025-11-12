@@ -10,6 +10,8 @@ export class GeofenceManager {
     this.tempLineSourceId = 'temp-drawing-line';
     this.geofenceViolations = new Map(); // Track violations per device
     this.showGeofences = true;
+    this.devicesInsideGeofences = new Map(); // Track which devices are in which geofences
+    this.totalAlerts = 0;
   }
 
   initialize() {
@@ -38,6 +40,9 @@ export class GeofenceManager {
 
     // Listen for location updates to check violations
     this.setupViolationDetection();
+
+    // Update stats periodically
+    setInterval(() => this.updateGeofenceStats(), 5000);
   }
 
   async loadGeofences() {
@@ -45,15 +50,41 @@ export class GeofenceManager {
       const response = await fetch(`${this.tracker.config.apiBaseUrl}/api/geofences`);
       if (response.ok) {
         const geofences = await response.json();
+        this.geofences.clear();
+        
+        // Clear existing geofence layers
+        this.clearAllGeofenceLayers();
+        
         geofences.forEach(gf => {
           this.geofences.set(gf.id, gf);
           this.drawGeofence(gf);
         });
+        
         console.log(`Loaded ${geofences.length} geofences`);
+        this.updateGeofenceList();
+        this.updateGeofenceStats();
+        
+        // Check all current device locations against geofences
+        this.checkAllDeviceLocations();
       }
     } catch (error) {
       console.error('Error loading geofences:', error);
     }
+  }
+
+  clearAllGeofenceLayers() {
+    this.geofences.forEach((gf, id) => {
+      const sourceId = `geofence-${id}`;
+      if (this.map.getLayer(`${sourceId}-fill`)) {
+        this.map.removeLayer(`${sourceId}-fill`);
+      }
+      if (this.map.getLayer(`${sourceId}-outline`)) {
+        this.map.removeLayer(`${sourceId}-outline`);
+      }
+      if (this.map.getSource(sourceId)) {
+        this.map.removeSource(sourceId);
+      }
+    });
   }
 
   drawGeofence(geofence) {
@@ -112,28 +143,7 @@ export class GeofenceManager {
 
     // Add click handler for geofence info
     this.map.on('click', `${sourceId}-fill`, (e) => {
-      const coordinates = e.lngLat;
-      new maplibregl.Popup()
-        .setLngLat(coordinates)
-        .setHTML(`
-          <div style="font-family: system-ui; min-width: 200px;">
-            <h4 style="margin: 0 0 10px 0; color: #667eea;">
-              📍 ${geofence.name}
-            </h4>
-            <div style="font-size: 12px; color: #6b7280; margin-bottom: 5px;">
-              ${geofence.description || 'No description'}
-            </div>
-            <div style="font-size: 11px; color: #9ca3af;">
-              ID: ${geofence.id} | ${geofence.active ? '✓ Active' : '✗ Inactive'}
-            </div>
-            <button 
-              onclick="window.locationTracker.geofenceManager.deleteGeofence(${geofence.id})" 
-              style="margin-top: 10px; padding: 6px 12px; background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;">
-              🗑️ Delete Geofence
-            </button>
-          </div>
-        `)
-        .addTo(this.map);
+      this.showGeofencePopup(geofence, e.lngLat);
     });
 
     // Change cursor on hover
@@ -143,6 +153,110 @@ export class GeofenceManager {
     this.map.on('mouseleave', `${sourceId}-fill`, () => {
       this.map.getCanvas().style.cursor = '';
     });
+  }
+
+  showGeofencePopup(geofence, lngLat) {
+    const devicesInside = this.getDevicesInGeofence(geofence.id);
+    const devicesList = devicesInside.length > 0 
+      ? devicesInside.map(d => `<li>${d}</li>`).join('') 
+      : `<li style="color: #9ca3af;">${this.tracker.t('noDevicesFound')}</li>`;
+
+    const areaKm2 = this.calculateGeofenceArea(geofence.coordinates);
+
+    new maplibregl.Popup()
+      .setLngLat(lngLat)
+      .setHTML(`
+        <div style="font-family: system-ui; min-width: 250px;">
+          <h4 style="margin: 0 0 10px 0; color: #667eea;">
+            📍 ${geofence.name}
+          </h4>
+          <div style="font-size: 12px; color: #6b7280; margin-bottom: 8px;">
+            ${geofence.description || this.tracker.t('noDescription') || 'No description'}
+          </div>
+          <div style="font-size: 11px; color: #9ca3af; margin-bottom: 8px;">
+            ${this.tracker.t('geofenceArea')}: ${areaKm2.toFixed(2)} ${this.tracker.t('geofenceAreaKm')}
+          </div>
+          <div style="font-size: 11px; margin-bottom: 8px;">
+            <strong>${this.tracker.t('geofenceStatus')}:</strong> 
+            <span style="color: ${geofence.active ? '#10b981' : '#ef4444'};">
+              ${geofence.active ? '✓ ' + this.tracker.t('activeGeofences') : '✗ ' + this.tracker.t('inactive')}
+            </span>
+          </div>
+          <div style="font-size: 11px; margin-bottom: 10px;">
+            <strong>${this.tracker.t('devicesInside')} (${devicesInside.length}):</strong>
+            <ul style="margin: 5px 0; padding-left: 20px; max-height: 100px; overflow-y: auto;">
+              ${devicesList}
+            </ul>
+          </div>
+          <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+            <button 
+              onclick="window.locationTracker.geofenceManager.toggleGeofenceActive(${geofence.id})" 
+              style="flex: 1; padding: 6px 10px; background: ${geofence.active ? '#f59e0b' : '#10b981'}; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;">
+              ${geofence.active ? this.tracker.t('deactivateGeofence') : this.tracker.t('activateGeofence')}
+            </button>
+            <button 
+              onclick="window.locationTracker.geofenceManager.deleteGeofence(${geofence.id})" 
+              style="flex: 1; padding: 6px 10px; background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;">
+              🗑️ ${this.tracker.t('deleteGeofence')}
+            </button>
+          </div>
+        </div>
+      `)
+      .addTo(this.map);
+  }
+
+  calculateGeofenceArea(coordinates) {
+    // Simple area calculation using Shoelace formula
+    // Convert to approximate km² (very rough estimate)
+    let area = 0;
+    const n = coordinates.length - 1; // Exclude closing point
+    
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      area += coordinates[i][0] * coordinates[j][1];
+      area -= coordinates[j][0] * coordinates[i][1];
+    }
+    
+    area = Math.abs(area) / 2;
+    // Convert from degrees² to approximate km² (very rough at equator)
+    const kmPerDegree = 111.32;
+    return area * kmPerDegree * kmPerDegree;
+  }
+
+  getDevicesInGeofence(geofenceId) {
+    const devices = [];
+    this.devicesInsideGeofences.forEach((geofences, deviceId) => {
+      if (geofences.has(geofenceId)) {
+        devices.push(deviceId);
+      }
+    });
+    return devices;
+  }
+
+  async toggleGeofenceActive(geofenceId) {
+    const geofence = this.geofences.get(geofenceId);
+    if (!geofence) return;
+
+    try {
+      const response = await fetch(`${this.tracker.config.apiBaseUrl}/api/geofences/${geofenceId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: !geofence.active })
+      });
+
+      if (response.ok) {
+        const updated = await response.json();
+        this.geofences.set(geofenceId, updated);
+        this.drawGeofence(updated);
+        this.updateGeofenceList();
+        this.showNotification(
+          `${this.tracker.t('geofence')} "${geofence.name}" ${updated.active ? this.tracker.t('activated') : this.tracker.t('deactivated')}`,
+          'success'
+        );
+      }
+    } catch (error) {
+      console.error('Error toggling geofence:', error);
+    }
   }
 
   startDrawing() {
@@ -157,15 +271,10 @@ export class GeofenceManager {
     
     this.map.getCanvas().style.cursor = 'crosshair';
     
-    // Show notification
-    this.showNotification('🖊️ Drawing mode active. Click to add points. Double-click or press Enter to finish.', 'info');
-    
-    // Update button state
-    const btn = document.getElementById('draw-geofence-btn');
-    if (btn) {
-      btn.textContent = '✖ Cancel Drawing';
-      btn.classList.add('danger');
-    }
+    this.showNotification(
+      this.tracker.t('drawingModeActive') + ' ' + this.tracker.t('doubleClickToFinish'),
+      'info'
+    );
   }
 
   cancelDrawing() {
@@ -175,13 +284,7 @@ export class GeofenceManager {
     this.updateTempLine();
     this.map.getCanvas().style.cursor = '';
     
-    const btn = document.getElementById('draw-geofence-btn');
-    if (btn) {
-      btn.textContent = '🖊️ Draw Geofence';
-      btn.classList.remove('danger');
-    }
-    
-    this.showNotification('Drawing cancelled', 'info');
+    this.showNotification(this.tracker.t('drawingCancelled'), 'info');
   }
 
   handleMapClick(e) {
@@ -190,19 +293,25 @@ export class GeofenceManager {
     const point = [e.lngLat.lng, e.lngLat.lat];
     this.drawingPoints.push(point);
     
-    // Add marker
     const marker = new maplibregl.Marker({ color: '#667eea' })
       .setLngLat(point)
       .addTo(this.map);
     this.drawingMarkers.push(marker);
     
-    // Update temporary line
     this.updateTempLine();
     
     if (this.drawingPoints.length >= 3) {
-      this.showNotification(`${this.drawingPoints.length} points added. Double-click or press Enter to finish.`, 'info');
+      this.showNotification(
+        `${this.drawingPoints.length} ${this.tracker.t('pointsAdded')}. ${this.tracker.t('doubleClickToFinish')}`,
+        'info',
+        2000
+      );
     } else {
-      this.showNotification(`${this.drawingPoints.length} points added. Need at least 3 points.`, 'info');
+      this.showNotification(
+        `${this.drawingPoints.length} ${this.tracker.t('pointsAdded')}. ${this.tracker.t('minimumPoints')}`,
+        'info',
+        2000
+      );
     }
   }
 
@@ -224,7 +333,7 @@ export class GeofenceManager {
 
     const lineCoords = [...this.drawingPoints];
     if (this.drawingPoints.length >= 3) {
-      lineCoords.push(this.drawingPoints[0]); // Close the polygon
+      lineCoords.push(this.drawingPoints[0]);
     }
 
     this.map.getSource(this.tempLineSourceId).setData({
@@ -241,24 +350,23 @@ export class GeofenceManager {
 
   async finishDrawing() {
     if (this.drawingPoints.length < 3) {
-      this.showNotification('Need at least 3 points to create a geofence', 'error');
+      this.showNotification(this.tracker.t('minimumPoints'), 'error');
       return;
     }
 
-    const name = prompt('Enter geofence name:', `Geofence ${Date.now()}`);
+    const name = prompt(this.tracker.t('enterGeofenceName'), `${this.tracker.t('geofence')} ${Date.now()}`);
     if (!name) {
       this.cancelDrawing();
       return;
     }
 
-    const description = prompt('Enter description (optional):', '');
+    const description = prompt(this.tracker.t('enterDescription'), '');
 
-    // Close the polygon
     const coordinates = [...this.drawingPoints, this.drawingPoints[0]];
 
     const geofenceData = {
       name: name,
-      description: description || 'Created from map',
+      description: description || `${this.tracker.t('created')} ${new Date().toLocaleString()}`,
       coordinates: coordinates
     };
 
@@ -273,19 +381,24 @@ export class GeofenceManager {
         const newGeofence = await response.json();
         this.geofences.set(newGeofence.id, newGeofence);
         this.drawGeofence(newGeofence);
-        this.showNotification(`✓ Geofence "${name}" created successfully`, 'success');
+        this.showNotification(`✓ ${this.tracker.t('geofenceCreated')}: "${name}"`, 'success');
         this.cancelDrawing();
+        this.updateGeofenceList();
+        this.updateGeofenceStats();
       } else {
         const errorText = await response.text();
-        this.showNotification(`✗ Failed to create geofence: ${errorText}`, 'error');
+        this.showNotification(`✗ ${this.tracker.t('error')}: ${errorText}`, 'error');
       }
     } catch (error) {
-      this.showNotification(`✗ Error: ${error.message}`, 'error');
+      this.showNotification(`✗ ${this.tracker.t('error')}: ${error.message}`, 'error');
     }
   }
 
   async deleteGeofence(geofenceId) {
-    if (!confirm('Are you sure you want to delete this geofence?')) {
+    const geofence = this.geofences.get(geofenceId);
+    if (!geofence) return;
+
+    if (!confirm(this.tracker.t('confirmDelete'))) {
       return;
     }
 
@@ -295,7 +408,6 @@ export class GeofenceManager {
       });
 
       if (response.ok || response.status === 204) {
-        // Remove from map
         const sourceId = `geofence-${geofenceId}`;
         if (this.map.getLayer(`${sourceId}-fill`)) {
           this.map.removeLayer(`${sourceId}-fill`);
@@ -308,12 +420,14 @@ export class GeofenceManager {
         }
         
         this.geofences.delete(geofenceId);
-        this.showNotification('✓ Geofence deleted', 'success');
+        this.showNotification(`✓ ${this.tracker.t('geofenceDeleted')}: "${geofence.name}"`, 'success');
+        this.updateGeofenceList();
+        this.updateGeofenceStats();
       } else {
-        this.showNotification('✗ Failed to delete geofence', 'error');
+        this.showNotification(`✗ ${this.tracker.t('error')}`, 'error');
       }
     } catch (error) {
-      this.showNotification(`✗ Error: ${error.message}`, 'error');
+      this.showNotification(`✗ ${this.tracker.t('error')}: ${error.message}`, 'error');
     }
   }
 
@@ -323,7 +437,6 @@ export class GeofenceManager {
   }
 
   setupViolationDetection() {
-    // Check violations when new location arrives
     const originalHandleUpdate = this.tracker.handleLocationUpdate.bind(this.tracker);
     this.tracker.handleLocationUpdate = (location) => {
       originalHandleUpdate(location);
@@ -339,34 +452,59 @@ export class GeofenceManager {
       
       if (response.ok) {
         const result = await response.json();
-        const wasInside = this.geofenceViolations.get(location.device_id) || false;
-        const isInside = result.count > 0;
+        const currentGeofences = new Set(result.geofences.map(gf => gf.id));
         
-        // Detect state change
-        if (wasInside !== isInside) {
-          const eventType = isInside ? 'entered' : 'exited';
-          this.handleViolationEvent(location, eventType, result.geofences);
-        }
+        // Get previous state
+        const previousGeofences = this.devicesInsideGeofences.get(location.device_id) || new Set();
         
-        this.geofenceViolations.set(location.device_id, isInside);
+        // Check for entries
+        currentGeofences.forEach(gfId => {
+          if (!previousGeofences.has(gfId)) {
+            const geofence = this.geofences.get(gfId);
+            if (geofence) {
+              this.handleViolationEvent(location, 'entered', [geofence]);
+              this.totalAlerts++;
+            }
+          }
+        });
+        
+        // Check for exits
+        previousGeofences.forEach(gfId => {
+          if (!currentGeofences.has(gfId)) {
+            const geofence = this.geofences.get(gfId);
+            if (geofence) {
+              this.handleViolationEvent(location, 'exited', [geofence]);
+              this.totalAlerts++;
+            }
+          }
+        });
+        
+        // Update state
+        this.devicesInsideGeofences.set(location.device_id, currentGeofences);
+        this.updateGeofenceStats();
       }
     } catch (error) {
       console.error('Error checking geofence violation:', error);
     }
   }
 
+  checkAllDeviceLocations() {
+    // Check all current device locations against geofences
+    this.tracker.locations.forEach(location => {
+      this.checkGeofenceViolation(location);
+    });
+  }
+
   handleViolationEvent(location, eventType, geofences) {
     const deviceInfo = this.tracker.devices.get(location.device_id);
-    const geofenceNames = geofences ? geofences.map(gf => gf.name).join(', ') : 'unknown';
+    const geofenceNames = geofences.map(gf => gf.name).join(', ');
     
     const message = eventType === 'entered' 
-      ? `🚨 Device ${location.device_id} ENTERED geofence: ${geofenceNames}`
-      : `🚨 Device ${location.device_id} EXITED geofence: ${geofenceNames}`;
+      ? `🚨 ${location.device_id} ${this.tracker.t('deviceEntered')}: ${geofenceNames}`
+      : `🚨 ${location.device_id} ${this.tracker.t('deviceExited')}: ${geofenceNames}`;
     
-    // Show notification
     this.showNotification(message, eventType === 'entered' ? 'warning' : 'info', 5000);
     
-    // Update marker appearance
     const marker = this.tracker.mapManager.markers.get(location.device_id);
     if (marker) {
       const el = marker.getElement();
@@ -379,7 +517,6 @@ export class GeofenceManager {
       }
     }
     
-    // Log to console
     console.log(`Geofence ${eventType}:`, {
       device: location.device_id,
       geofences: geofenceNames,
@@ -401,9 +538,133 @@ export class GeofenceManager {
       }
     });
     
-    const btn = document.getElementById('toggle-geofences-btn');
-    if (btn) {
-      btn.textContent = this.showGeofences ? '👁️ Hide Geofences' : '👁️‍🗨️ Show Geofences';
+    this.showNotification(
+      this.showGeofences ? this.tracker.t('geofencesVisible') : this.tracker.t('geofencesHidden'),
+      'info'
+    );
+  }
+
+  updateGeofenceList() {
+    const container = document.getElementById('geofence-items');
+    if (!container) return;
+
+    if (this.geofences.size === 0) {
+      container.innerHTML = `
+        <div style="color: #9ca3af; font-size: 12px; text-align: center; padding: 20px;">
+          <span>${this.tracker.t('noGeofencesCreated')}</span>
+        </div>
+      `;
+      return;
+    }
+
+    const items = Array.from(this.geofences.values()).map(gf => {
+      const devicesInside = this.getDevicesInGeofence(gf.id);
+      const areaKm2 = this.calculateGeofenceArea(gf.coordinates);
+      
+      return `
+        <div class="geofence-list-item" style="padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 10px; background: #f9fafb; cursor: pointer; transition: all 0.2s;" 
+             onclick="window.locationTracker.geofenceManager.focusGeofence(${gf.id})">
+          <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
+            <div style="flex: 1;">
+              <h5 style="margin: 0 0 4px 0; color: #374151; font-size: 14px; font-weight: 600;">
+                ${gf.name}
+              </h5>
+              <p style="margin: 0; color: #6b7280; font-size: 11px;">
+                ${gf.description || this.tracker.t('noDescription') || 'No description'}
+              </p>
+            </div>
+            <span class="badge ${gf.active ? 'active' : 'inactive'}" style="display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; white-space: nowrap;">
+              ${gf.active ? '✓ ' + this.tracker.t('active') : '✗ ' + this.tracker.t('inactive')}
+            </span>
+          </div>
+          
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 11px; color: #6b7280;">
+            <div>
+              <strong>${this.tracker.t('geofenceArea')}:</strong> ${areaKm2.toFixed(2)} ${this.tracker.t('geofenceAreaKm')}
+            </div>
+            <div>
+              <strong>${this.tracker.t('devicesInside')}:</strong> 
+              <span style="color: ${devicesInside.length > 0 ? '#10b981' : '#9ca3af'}; font-weight: 600;">
+                ${devicesInside.length}
+              </span>
+            </div>
+          </div>
+          
+          ${devicesInside.length > 0 ? `
+            <div style="margin-top: 8px; font-size: 11px;">
+              <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                ${devicesInside.map(deviceId => {
+                  const deviceInfo = this.tracker.devices.get(deviceId);
+                  const color = deviceInfo ? deviceInfo.color : '#6b7280';
+                  return `
+                    <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; background: white; border-radius: 4px; border: 1px solid #e5e7eb;">
+                      <div style="width: 8px; height: 8px; border-radius: 50%; background: ${color};"></div>
+                      <span style="font-size: 10px; color: #374151;">${deviceId}</span>
+                    </span>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          ` : ''}
+          
+          <div style="margin-top: 8px; font-size: 10px; color: #9ca3af;">
+            ${this.tracker.t('created')}: ${new Date(gf.created_at).toLocaleDateString()}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    container.innerHTML = items;
+  }
+
+  focusGeofence(geofenceId) {
+    const geofence = this.geofences.get(geofenceId);
+    if (!geofence || !geofence.coordinates) return;
+
+    // Calculate bounds
+    const bounds = new maplibregl.LngLatBounds();
+    geofence.coordinates.forEach(coord => {
+      bounds.extend(coord);
+    });
+
+    // Fit map to geofence
+    this.map.fitBounds(bounds, {
+      padding: 100,
+      duration: 1000
+    });
+
+    // Show popup at center
+    setTimeout(() => {
+      const center = bounds.getCenter();
+      this.showGeofencePopup(geofence, center);
+    }, 1000);
+  }
+
+  updateGeofenceStats() {
+    // Update total geofences
+    const totalElement = document.getElementById('total-geofences-count');
+    if (totalElement) {
+      totalElement.textContent = this.geofences.size;
+    }
+
+    // Update active geofences
+    const activeCount = Array.from(this.geofences.values()).filter(gf => gf.active).length;
+    const activeElement = document.getElementById('active-geofences-count');
+    if (activeElement) {
+      activeElement.textContent = activeCount;
+    }
+
+    // Update devices inside
+    const devicesInsideCount = this.devicesInsideGeofences.size;
+    const devicesElement = document.getElementById('devices-inside-count');
+    if (devicesElement) {
+      devicesElement.textContent = devicesInsideCount;
+    }
+
+    // Update total alerts
+    const alertsElement = document.getElementById('total-violations-count');
+    if (alertsElement) {
+      alertsElement.textContent = this.totalAlerts;
     }
   }
 
@@ -434,30 +695,3 @@ export class GeofenceManager {
     }, duration);
   }
 }
-
-// Add CSS animations
-const style = document.createElement('style');
-style.textContent = `
-  @keyframes slideInRight {
-    from {
-      transform: translateX(400px);
-      opacity: 0;
-    }
-    to {
-      transform: translateX(0);
-      opacity: 1;
-    }
-  }
-  
-  @keyframes slideOutRight {
-    from {
-      transform: translateX(0);
-      opacity: 1;
-    }
-    to {
-      transform: translateX(400px);
-      opacity: 0;
-    }
-  }
-`;
-document.head.appendChild(style);

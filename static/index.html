@@ -64,16 +64,6 @@
             <span>🔴</span>
             <span>Live Mode</span>
           </button>
-          
-          <!-- NUEVO: Controles de Geocercas -->
-          <button id="draw-geofence-btn" class="geofence-btn" style="background: linear-gradient(135deg, #667eea, #764ba2);">
-            <span>🖊️</span>
-            <span>Draw Geofence</span>
-          </button>
-          <button id="toggle-geofences-btn" class="geofence-btn" style="background: linear-gradient(135deg, #10b981, #059669);">
-            <span>👁️</span>
-            <span>Hide Geofences</span>
-          </button>
         </div>
         
         <div id="map"></div>
@@ -195,27 +185,60 @@
           </div>
         </div>
 
-        <!-- NUEVO: Geofences Tab -->
+        <!-- Geofences Tab -->
         <div class="tab-content" id="geofences-tab">
           <div class="card">
             <div class="card-body">
-              <h4 style="margin-bottom: 15px; color: #374151;">📍 Geofence Management</h4>
-              <p style="font-size: 13px; color: #6b7280; margin-bottom: 15px;">
-                Create and manage geofences to monitor when devices enter or exit specific areas.
-              </p>
-              <div class="button-group" style="display: flex; flex-direction: column; gap: 10px;">
+              <h4 style="margin-bottom: 15px; color: #374151;">🗺️ <span id="geofence-management-title">Geofence Management</span></h4>
+              
+              <!-- Actions -->
+              <div class="button-group" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
                 <button class="btn" onclick="window.locationTracker.geofenceManager?.startDrawing()">
-                  🖊️ Draw New Geofence
+                  🖊️ <span id="draw-geofence-btn-text">Draw New Geofence</span>
                 </button>
                 <button class="btn secondary" onclick="window.locationTracker.geofenceManager?.loadGeofences()">
-                  🔄 Reload Geofences
+                  🔄 <span id="reload-geofences-btn-text">Reload Geofences</span>
                 </button>
                 <button class="btn secondary" onclick="window.locationTracker.geofenceManager?.toggleGeofenceVisibility()">
-                  👁️ Toggle Visibility
+                  👁️ <span id="toggle-visibility-btn-text">Toggle Visibility</span>
                 </button>
               </div>
-              <div id="geofence-list" style="margin-top: 20px; max-height: 300px; overflow-y: auto;">
-                <!-- Geofences will be listed here dynamically -->
+
+              <!-- Statistics -->
+              <div class="geofence-stats" style="background: #f9fafb; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                <h5 style="margin: 0 0 10px 0; color: #374151; font-size: 13px;">
+                  📊 <span id="geofence-stats-title">Statistics</span>
+                </h5>
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
+                  <div class="stat-item" style="padding: 8px; background: white; border-radius: 6px;">
+                    <span class="stat-label" style="font-size: 11px;" id="total-geofences-label">Total Geofences:</span>
+                    <span class="stat-value" id="total-geofences-count" style="font-size: 16px;">0</span>
+                  </div>
+                  <div class="stat-item" style="padding: 8px; background: white; border-radius: 6px;">
+                    <span class="stat-label" style="font-size: 11px;" id="active-geofences-label">Active:</span>
+                    <span class="stat-value" id="active-geofences-count" style="font-size: 16px;">0</span>
+                  </div>
+                  <div class="stat-item" style="padding: 8px; background: white; border-radius: 6px;">
+                    <span class="stat-label" style="font-size: 11px;" id="devices-inside-label">Devices Inside:</span>
+                    <span class="stat-value" id="devices-inside-count" style="font-size: 16px;">0</span>
+                  </div>
+                  <div class="stat-item" style="padding: 8px; background: white; border-radius: 6px;">
+                    <span class="stat-label" style="font-size: 11px;" id="total-violations-label">Total Alerts:</span>
+                    <span class="stat-value" id="total-violations-count" style="font-size: 16px;">0</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Geofence List -->
+              <div id="geofence-list" style="max-height: 350px; overflow-y: auto;">
+                <h5 style="margin: 0 0 10px 0; color: #374151; font-size: 13px;">
+                  📍 <span id="geofence-list-title">Active Geofences</span>
+                </h5>
+                <div id="geofence-items">
+                  <div style="color: #9ca3af; font-size: 12px; text-align: center; padding: 20px;">
+                    <span id="no-geofences-msg">No geofences created yet</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

@@ -195,28 +195,6 @@ export class UIManager {
     this.setupFilterButtons();
   }
 
-  setupGeofenceControls() {
-    // Draw Geofence button
-    const drawBtn = document.getElementById('draw-geofence-btn');
-    if (drawBtn) {
-      drawBtn.addEventListener('click', () => {
-        if (this.tracker.geofenceManager) {
-          this.tracker.geofenceManager.startDrawing();
-        }
-      });
-    }
-
-    // Toggle Geofences button
-    const toggleBtn = document.getElementById('toggle-geofences-btn');
-    if (toggleBtn) {
-      toggleBtn.addEventListener('click', () => {
-        if (this.tracker.geofenceManager) {
-          this.tracker.geofenceManager.toggleGeofenceVisibility();
-        }
-      });
-    }
-  }
-
   setupFilterButtons() {
     // Time filter quick ranges
     document.querySelectorAll('.quick-range-btn').forEach(btn => {
@@ -478,6 +456,43 @@ export class UIManager {
 
     const selectOnMapText = document.getElementById('select-on-map-text');
     if (selectOnMapText) selectOnMapText.textContent = '🗺 ' + this.tracker.t('selectOnMap');
+    const geofenceManagementTitle = document.getElementById('geofence-management-title');
+    if (geofenceManagementTitle) geofenceManagementTitle.textContent = this.tracker.t('geofenceManagement');
+
+    const drawGeofenceBtnText = document.getElementById('draw-geofence-btn-text');
+    if (drawGeofenceBtnText) drawGeofenceBtnText.textContent = this.tracker.t('drawNewGeofence');
+
+    const reloadGeofencesBtnText = document.getElementById('reload-geofences-btn-text');
+    if (reloadGeofencesBtnText) reloadGeofencesBtnText.textContent = this.tracker.t('reloadGeofences');
+
+    const toggleVisibilityBtnText = document.getElementById('toggle-visibility-btn-text');
+    if (toggleVisibilityBtnText) toggleVisibilityBtnText.textContent = this.tracker.t('toggleVisibility');
+
+    const geofenceStatsTitle = document.getElementById('geofence-stats-title');
+    if (geofenceStatsTitle) geofenceStatsTitle.textContent = this.tracker.t('geofenceStats');
+
+    const totalGeofencesLabel = document.getElementById('total-geofences-label');
+    if (totalGeofencesLabel) totalGeofencesLabel.textContent = this.tracker.t('totalGeofences') + ':';
+
+    const activeGeofencesLabel = document.getElementById('active-geofences-label');
+    if (activeGeofencesLabel) activeGeofencesLabel.textContent = this.tracker.t('activeGeofences') + ':';
+
+    const devicesInsideLabel = document.getElementById('devices-inside-label');
+    if (devicesInsideLabel) devicesInsideLabel.textContent = this.tracker.t('devicesInside') + ':';
+
+    const totalViolationsLabel = document.getElementById('total-violations-label');
+    if (totalViolationsLabel) totalViolationsLabel.textContent = this.tracker.t('totalAlerts') + ':';
+
+    const geofenceListTitle = document.getElementById('geofence-list-title');
+    if (geofenceListTitle) geofenceListTitle.textContent = this.tracker.t('activeGeofencesTitle');
+
+    const noGeofencesMsg = document.getElementById('no-geofences-msg');
+    if (noGeofencesMsg) noGeofencesMsg.textContent = this.tracker.t('noGeofencesCreated');
+
+    // Update geofence list to reflect language changes
+    if (this.tracker.geofenceManager) {
+      this.tracker.geofenceManager.updateGeofenceList();
+    } 
 
     this.tracker.updateConnectionStatus(
       this.tracker.wsManager.isConnected() ? this.tracker.t('connected') : this.tracker.t('connecting'),

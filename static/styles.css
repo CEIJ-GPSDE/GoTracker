@@ -1440,11 +1440,6 @@ body {
   transition: all 0.2s;
 }
 
-.geofence-list-item:hover {
-  background: #f3f4f6;
-  border-color: #667eea;
-}
-
 .geofence-list-item.active {
   background: #eff6ff;
   border-color: #3b82f6;
@@ -1471,15 +1466,6 @@ body {
   margin-top: 5px;
 }
 
-.geofence-list-item .badge.active {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.geofence-list-item .badge.inactive {
-  background: #f3f4f6;
-  color: #6b7280;
-}
 
 /* Drawing Mode Indicator - Map Overlay */
 .drawing-mode-indicator {
@@ -1548,24 +1534,56 @@ body {
   justify-content: center;
 }
 
-/* Mobile responsive adjustments */
+/* Geofence Stats Styling */
+.geofence-stats .stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.geofence-list-item:hover {
+  background: #f3f4f6 !important;
+  border-color: #667eea !important;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.geofence-list-item .badge.active {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.geofence-list-item .badge.inactive {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* Geofence notification improvements */
+.geofence-notification {
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Responsive adjustments for geofence tab */
 @media (max-width: 768px) {
-  .geofence-btn {
-    padding: 10px 14px;
-    font-size: 13px;
+  .geofence-stats {
+    margin-bottom: 15px !important;
   }
   
-  .geofence-notification {
-    max-width: calc(100vw - 40px);
-    font-size: 13px;
+  .geofence-stats > div {
+    grid-template-columns: 1fr !important;
   }
   
-  .drawing-mode-indicator {
-    left: 10px;
-    right: 10px;
-    transform: none;
-    font-size: 12px;
-    padding: 10px 15px;
+  .geofence-list-item {
+    padding: 10px !important;
+  }
+  
+  .geofence-list-item h5 {
+    font-size: 13px !important;
   }
 }
 
