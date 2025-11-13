@@ -41,6 +41,11 @@ export class VehiclePanelManager {
   updateVehiclePanel() {
     const container = document.getElementById('vehicle-list-panel');
     
+    if (!container) {
+      console.debug('Vehicle list panel not found - skipping update');
+      return;
+    }
+    
     if (this.tracker.devices.size === 0) {
       container.innerHTML = `
         <div style="text-align: center; padding: 40px 20px; color: #9ca3af;">
@@ -75,9 +80,16 @@ export class VehiclePanelManager {
       const { info, location, online } = data;
       const isActive = deviceId === this.activeVehicleId;
       
+      // ✅ ADD VISIBILITY TOGGLE CHECKBOX
       return `
-        <div class="vehicle-item ${isActive ? 'active' : ''}" onclick="window.locationTracker.vehiclePanelManager.selectVehicle('${deviceId}')">
+        <div class="vehicle-item ${isActive ? 'active' : ''} ${!info.visible ? 'dimmed' : ''}" 
+            onclick="window.locationTracker.vehiclePanelManager.selectVehicle('${deviceId}')">
           <div class="vehicle-item-header">
+            <input type="checkbox" 
+                  class="vehicle-visibility-checkbox" 
+                  ${info.visible ? 'checked' : ''} 
+                  onclick="event.stopPropagation(); window.locationTracker.deviceManager.toggleDeviceVisibility('${deviceId}', this.checked)"
+                  title="${info.visible ? 'Hide device' : 'Show device'}">
             <div class="vehicle-color-indicator" style="background: ${info.color};"></div>
             <div class="vehicle-item-title">${deviceId}</div>
             <div class="vehicle-item-status ${online ? 'online' : 'offline'}">

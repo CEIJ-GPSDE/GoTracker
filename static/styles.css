@@ -183,6 +183,29 @@ body {
   animation: pulse-track 2s infinite;
 }
 
+/* ========== MAP NOTIFICATIONS ========== */
+@keyframes slideInRight {
+  from {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOutRight {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+}
+
 /* ========== GEOFENCE & ROUTE CONTROLS ========== */
 .geofence-controls-row,
 .route-controls-row {
@@ -558,11 +581,23 @@ body {
   transition: all 0.3s;
 }
 
+.vehicle-item.dimmed {
+  opacity: 0.5;
+  background: #f3f4f6;
+}
+
 .vehicle-item:hover {
   background: #f3f4f6;
   border-color: #667eea;
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.vehicle-visibility-checkbox {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  margin-right: 8px;
 }
 
 .vehicle-item.active {

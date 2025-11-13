@@ -464,17 +464,6 @@ export class UIManager {
     if (legendStart) legendStart.textContent = this.tracker.t('legendStart');
     if (legendEnd) legendEnd.textContent = this.tracker.t('legendEnd');
 
-    // Center buttons
-    const devicesText = document.getElementById('devices-text');
-    if (devicesText) {
-      devicesText.textContent = this.tracker.t('devices');
-    }
-
-    const centerDevicesText = document.getElementById('center-devices-text');
-    if (centerDevicesText) {
-      centerDevicesText.textContent = this.tracker.t('centerOnDevices');
-    }
-
     // Filter tabs
     const timeFilterTabBtn = document.querySelector('#time-filter-tab-label');
     const locationFilterTabBtn = document.querySelector('#location-filter-tab-label');

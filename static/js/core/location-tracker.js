@@ -27,7 +27,6 @@ export class LocationTracker {
     this.clusteringManager = null; // Initialized after map loads
     this.routeManager = null; // Initialized after map loads
     this.vehiclePanelManager = null; // Initialized after map loads
-    this.deviceLegendCollapsed = false;
     this.useMarkerClustering = false; // Toggle for clustering
     this.slidingPanelOpen = false; // Panel starts closed
     this.activePanelTab = 'vehicles'; // Default tab
@@ -173,45 +172,8 @@ export class LocationTracker {
     }
   }
 
-  toggleDeviceLegend() {
-    const legend = document.getElementById('device-legend');
-    this.deviceLegendCollapsed = !this.deviceLegendCollapsed;
-    
-    if (this.deviceLegendCollapsed) {
-      legend.classList.add('collapsed');
-    } else {
-      legend.classList.remove('collapsed');
-    }
-  }
-
   centerOnSelectedDevices() {
-    const visibleDevices = Array.from(this.selectedDevices).filter(deviceId => {
-      const deviceInfo = this.devices.get(deviceId);
-      return deviceInfo && deviceInfo.visible;
-    });
-
-    if (visibleDevices.length === 0) {
-      console.log('No visible devices to center on');
-      return;
-    }
-
-    let locationsToConsider;
-    if (this.isHistoryMode) {
-      locationsToConsider = this.filteredLocations.filter(loc => 
-        visibleDevices.includes(loc.device_id)
-      );
-    } else {
-      locationsToConsider = this.locations.filter(loc => 
-        visibleDevices.includes(loc.device_id)
-      );
-    }
-
-    if (locationsToConsider.length === 0) {
-      console.log('No locations found for visible devices');
-      return;
-    }
-
-    this.mapManager.fitMapToLocations(locationsToConsider);
+    this.mapManager.centerOnSelectedDevices();
   }
 
   async loadInitialData() {
