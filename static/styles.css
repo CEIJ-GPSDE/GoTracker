@@ -510,26 +510,26 @@ body {
 
 /* Panel Actions */
 .panel-section-actions {
-  display: flex;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
   margin-bottom: 15px;
 }
 
 .panel-action-btn {
-  flex: 1;
-  padding: 10px 12px;
+  padding: 10px 8px;
   background: linear-gradient(135deg, #667eea, #764ba2);
   color: white;
   border: none;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: 12px; 
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .panel-action-btn:hover {

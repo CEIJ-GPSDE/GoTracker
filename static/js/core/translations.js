@@ -165,6 +165,8 @@ export const TRANSLATIONS = {
     centerOnRoutes: "Center on Routes",
     hideRoutes: "Hide Routes",
     showRoutes: "Show Routes",
+    reloadGeofences: "Reload Geofences",
+    reloadRoutes: "Reload Routes", 
     geofenceStatus: "Status"
   },
   es: {
@@ -333,6 +335,8 @@ export const TRANSLATIONS = {
     centerOnRoutes: "Centrar en Rutas",
     hideRoutes: "Ocultar Rutas",
     showRoutes: "Mostrar Rutas",
+    reloadGeofences: "Recargar Geocercas",
+    reloadRoutes: "Recargar Rutas",
     geofenceStatus: "Estado"
   }
 };

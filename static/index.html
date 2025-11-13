@@ -242,13 +242,13 @@
               
               <!-- actions -->
               <div class="button-group" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
-                <button class="btn" onclick="window.locationtracker.routemanager?.startcreatingroute()">
+                <button class="btn" onclick="window.locationTracker.routeManager?.startcreatingroute()">
                   📍 <span id="create-route-btn-text">create route from history</span>
                 </button>
-                <button class="btn secondary" onclick="window.locationtracker.routemanager?.loadroutes()">
+                <button class="btn secondary" onclick="window.locationTracker.routeManager?.loadroutes()">
                   🔄 <span id="reload-routes-btn-text">reload routes</span>
                 </button>
-                <button class="btn secondary" onclick="window.locationtracker.routemanager?.toggleallroutesvisibility()">
+                <button class="btn secondary" onclick="window.locationTracker.routeManager?.toggleallroutesvisibility()">
                   👁️ <span id="toggle-routes-visibility-btn-text">toggle visibility</span>
                 </button>
               </div>
@@ -452,6 +452,9 @@
             <button class="panel-action-btn secondary" onclick="window.locationTracker.geofenceManager?.toggleGeofenceVisibility()">
               👁️ <span id="toggle-geofence-panel-text">Toggle</span>
             </button>
+            <button class="panel-action-btn secondary" onclick="window.locationTracker.geofenceManager?.loadGeofences()">
+              🔄 <span id="reload-geofence-panel-text">Reload</span>
+            </button>
           </div>
           
           <div class="panel-stats">
@@ -484,6 +487,9 @@
             </button>
             <button class="panel-action-btn secondary" onclick="window.locationTracker.routeManager?.toggleAllRoutesVisibility()">
               👁️ <span id="toggle-route-panel-text">Toggle</span>
+            </button>
+            <button class="panel-action-btn secondary" onclick="window.locationTracker.routeManager?.loadRoutes()">
+              🔄 <span id="reload-route-panel-text">Reload</span>
             </button>
           </div>
           

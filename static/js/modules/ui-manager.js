@@ -614,6 +614,26 @@ export class UIManager {
       toggleRoutesBtn.title = showingRoutes ? this.tracker.t('hideRoutes') : this.tracker.t('showRoutes');
     }
 
+    // Geofence panel buttons
+    const drawGeofencePanelText = document.getElementById('draw-geofence-panel-text');
+    if (drawGeofencePanelText) drawGeofencePanelText.textContent = this.tracker.t('drawNewGeofence');
+
+    const toggleGeofencePanelText = document.getElementById('toggle-geofence-panel-text');
+    if (toggleGeofencePanelText) toggleGeofencePanelText.textContent = this.tracker.t('toggleVisibility');
+
+    const reloadGeofencePanelText = document.getElementById('reload-geofence-panel-text');
+    if (reloadGeofencePanelText) reloadGeofencePanelText.textContent = this.tracker.t('reloadGeofences');
+
+    // Route panel buttons
+    const createRoutePanelText = document.getElementById('create-route-panel-text');
+    if (createRoutePanelText) createRoutePanelText.textContent = this.tracker.t('createRouteFromHistory');
+
+    const toggleRoutePanelText = document.getElementById('toggle-route-panel-text');
+    if (toggleRoutePanelText) toggleRoutePanelText.textContent = this.tracker.t('toggleVisibility');
+
+    const reloadRoutePanelText = document.getElementById('reload-route-panel-text');
+    if (reloadRoutePanelText) reloadRoutePanelText.textContent = this.tracker.t('reloadRoutes');
+
     const routeMenuBtn = document.getElementById('open-route-menu-btn');
     if (routeMenuBtn) routeMenuBtn.title = this.tracker.t('routeManagement');
 
