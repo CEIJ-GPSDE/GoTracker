@@ -457,4 +457,180 @@ export class HistoryManager {
       }, 5000);
     }
   }
+
+  setupFilterButtons() {
+    // Enable/disable time filter
+    const timeCheckbox = document.getElementById('enable-time-filter');
+    const timeContent = document.getElementById('time-filter-content');
+    
+    if (timeCheckbox) {
+      timeCheckbox.addEventListener('change', (e) => {
+        this.tracker.historyManager.timeFilterEnabled = e.target.checked;
+        timeContent.style.display = e.target.checked ? 'block' : 'none';
+        
+        // Validate immediately if enabled
+        if (e.target.checked) {
+          this.validateTimeFilter();
+        } else {
+          this.tracker.clearValidationError(
+            document.getElementById('apply-unified-filter'),
+            document.getElementById('time-validation-error')
+          );
+        }
+      });
+    }
+
+    // Enable/disable location filter
+    const locationCheckbox = document.getElementById('enable-location-filter');
+    const locationContent = document.getElementById('location-filter-content');
+    
+    if (locationCheckbox) {
+      locationCheckbox.addEventListener('change', (e) => {
+        this.tracker.historyManager.locationFilterEnabled = e.target.checked;
+        locationContent.style.display = e.target.checked ? 'block' : 'none';
+        
+        // Validate immediately if enabled
+        if (e.target.checked) {
+          this.validateLocationFilter();
+        } else {
+          this.tracker.clearValidationError(
+            document.getElementById('apply-unified-filter'),
+            document.getElementById('location-validation-error')
+          );
+        }
+      });
+    }
+
+    // Add real-time validation to time inputs
+    const startInput = document.getElementById('start-time-popup');
+    const endInput = document.getElementById('end-time-popup');
+    
+    if (startInput && endInput) {
+      startInput.addEventListener('input', () => {
+        if (this.tracker.historyManager.timeFilterEnabled) {
+          this.validateTimeFilter();
+        }
+      });
+      
+      endInput.addEventListener('input', () => {
+        if (this.tracker.historyManager.timeFilterEnabled) {
+          this.validateTimeFilter();
+        }
+      });
+    }
+
+    // Add real-time validation to location inputs
+    const latInput = document.getElementById('location-lat-input');
+    const lngInput = document.getElementById('location-lng-input');
+    const radiusInput = document.getElementById('location-radius-input');
+    
+    if (latInput && lngInput && radiusInput) {
+      latInput.addEventListener('input', () => {
+        if (this.tracker.historyManager.locationFilterEnabled) {
+          this.validateLocationFilter();
+        }
+      });
+      
+      lngInput.addEventListener('input', () => {
+        if (this.tracker.historyManager.locationFilterEnabled) {
+          this.validateLocationFilter();
+        }
+      });
+      
+      radiusInput.addEventListener('input', () => {
+        if (this.tracker.historyManager.locationFilterEnabled) {
+          this.validateLocationFilter();
+        }
+      });
+    }
+
+    // Time filter quick ranges
+    document.querySelectorAll('.quick-range-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const hours = parseInt(btn.dataset.hours);
+        this.tracker.historyManager.setQuickTimeRange(hours);
+        
+        // Update active state
+        document.querySelectorAll('.quick-range-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        
+        // Validate after setting
+        if (this.tracker.historyManager.timeFilterEnabled) {
+          this.validateTimeFilter();
+        }
+      });
+    });
+
+    // Apply unified filter
+    const applyBtn = document.getElementById('apply-unified-filter');
+    if (applyBtn) {
+      applyBtn.addEventListener('click', () => {
+        this.tracker.historyManager.applyUnifiedFilter();
+      });
+    }
+
+    // Clear all filters
+    const clearBtn = document.getElementById('clear-unified-filter');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        this.tracker.historyManager.clearAllFilters();
+      });
+    }
+
+    // Select on map button
+    const selectOnMapBtn = document.getElementById('select-on-map-btn');
+    if (selectOnMapBtn) {
+      selectOnMapBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        if (this.tracker.isSelectingLocationOnMap) {
+          this.endMapLocationSelection();
+          this.reopenHistoryConfigPopup();
+        } else {
+          this.startMapLocationSelection();
+        }
+      });
+    }
+  }
+
+  validateTimeFilter() {
+    const startInput = document.getElementById('start-time-popup');
+    const endInput = document.getElementById('end-time-popup');
+    const errorElement = document.getElementById('time-validation-error');
+    const applyBtn = document.getElementById('apply-unified-filter');
+    
+    const result = Validator.validateTimeFilter(startInput, endInput);
+    
+    if (!result.isValid) {
+      this.tracker.showValidationError(result.error, applyBtn, errorElement);
+      return false;
+    } else {
+      this.tracker.clearValidationError(applyBtn, errorElement);
+      return true;
+    }
+  }
+
+  validateLocationFilter() {
+    const latInput = document.getElementById('location-lat-input');
+    const lngInput = document.getElementById('location-lng-input');
+    const radiusInput = document.getElementById('location-radius-input');
+    const errorElement = document.getElementById('location-validation-error');
+    const applyBtn = document.getElementById('apply-unified-filter');
+    
+    const lat = parseFloat(latInput.value);
+    const lng = parseFloat(lngInput.value);
+    const radius = parseFloat(radiusInput.value);
+    
+    const result = Validator.validateLocationFilter(lat, lng, radius);
+    
+    if (!result.isValid) {
+      this.tracker.showValidationError(result.error, applyBtn, errorElement);
+      return false;
+    } else {
+      this.tracker.clearValidationError(applyBtn, errorElement);
+      return true;
+    }
+  }
+
 }

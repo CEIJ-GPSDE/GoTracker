@@ -2349,21 +2349,22 @@ body {
   width: 20px;
   height: 20px;
   background: #ef4444;
+  border: 2px solid white;
   border-radius: 50%;
+  box-shadow: 0 0 10px rgba(0,0,0,0.3);
   position: relative;
   z-index: 9999;
-  transform: translate(0, 0) !important; /* Prevent translation issues */
 }
 
 .pulse-marker::after {
   content: "";
   width: 20px;
   height: 20px;
-  background: #ef4444;
+  background: inherit;
   border-radius: 50%;
   position: absolute;
-  top: 0;
-  left: 0;
+  top: -2px;
+  left: -2px;
   animation: pulse 2s infinite;
   opacity: 0.6;
   z-index: -1;
@@ -2372,10 +2373,14 @@ body {
 /* Fix for MapLibre marker positioning */
 .maplibregl-marker {
   transform-origin: center center;
+  will-change: transform;
 }
 
 .maplibregl-marker .pulse-marker {
   margin: 0;
+  position: absolute;
+  top: 50%;
+  left: 50%;
   transform: translate(-50%, -50%);
 }
 

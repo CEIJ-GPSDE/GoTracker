@@ -90,6 +90,11 @@ export class DeviceManager {
 
   updateDeviceFilterList() {
     const container = document.getElementById('device-filter-list');
+    
+    // Check if element exists (it may not be in current UI)
+    if (!container) {
+      return; // Element doesn't exist, skip update
+    }
 
     if (this.devices.size === 0) {
       container.innerHTML = `<div style="color: #9ca3af; padding: 10px;">${this.tracker.t('noDevicesFound')}</div>`;

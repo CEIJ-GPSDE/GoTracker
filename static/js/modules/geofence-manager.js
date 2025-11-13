@@ -124,6 +124,10 @@ export class GeofenceManager {
     });
 
     const isVisible = this.visibleGeofences.has(geofence.id) && this.showGeofences;
+    
+    // Visual distinction: active = blue/purple, inactive = gray with dashed outline
+    const fillColor = geofence.active ? '#667eea' : '#9ca3af';
+    const outlineColor = geofence.active ? '#667eea' : '#6b7280';
 
     // Add fill layer
     this.map.addLayer({
@@ -134,12 +138,12 @@ export class GeofenceManager {
         'visibility': isVisible ? 'visible' : 'none'
       },
       paint: {
-        'fill-color': geofence.active ? '#667eea' : '#9ca3af',
-        'fill-opacity': 0.2
+        'fill-color': fillColor,
+        'fill-opacity': geofence.active ? 0.2 : 0.1
       }
     });
 
-    // Add outline layer
+    // Add outline layer with dashed pattern for inactive
     this.map.addLayer({
       id: `${sourceId}-outline`,
       type: 'line',
@@ -148,8 +152,9 @@ export class GeofenceManager {
         'visibility': isVisible ? 'visible' : 'none'
       },
       paint: {
-        'line-color': geofence.active ? '#667eea' : '#9ca3af',
-        'line-width': 2
+        'line-color': outlineColor,
+        'line-width': 2,
+        'line-dasharray': geofence.active ? [1, 0] : [2, 2] // Dashed for inactive
       }
     });
 

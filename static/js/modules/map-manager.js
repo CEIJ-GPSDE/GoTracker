@@ -307,12 +307,17 @@ export class MapManager {
         el = document.createElement('div');
         el.className = 'pulse-marker';
         el.style.backgroundColor = deviceColor;
+        el.style.width = '20px';
+        el.style.height = '20px';
+        el.style.borderRadius = '50%';
+        el.style.border = '2px solid white';
+        el.style.boxShadow = '0 0 10px rgba(0,0,0,0.3)';
       }
 
       marker = new maplibregl.Marker({
         element: el || undefined,
         color: isLatest ? undefined : deviceColor,
-        anchor: 'center' // Ensure proper anchoring
+        anchor: 'center'
       })
         .setLngLat([location.longitude, location.latitude])
         .setPopup(new maplibregl.Popup({ offset: 25 }).setHTML(popupContent))
@@ -331,6 +336,11 @@ export class MapManager {
       if (isLatest && !el.classList.contains('pulse-marker')) {
         el.className = 'pulse-marker';
         el.style.backgroundColor = deviceColor;
+        el.style.width = '20px';
+        el.style.height = '20px';
+        el.style.borderRadius = '50%';
+        el.style.border = '2px solid white';
+        el.style.boxShadow = '0 0 10px rgba(0,0,0,0.3)';
       } else if (isLatest) {
         el.style.backgroundColor = deviceColor;
       }
