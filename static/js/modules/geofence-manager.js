@@ -170,19 +170,23 @@ export class GeofenceManager {
   showGeofencePopup(geofence, lngLat) {
     const devicesInside = this.getDevicesInGeofence(geofence.id);
     const devicesList = devicesInside.length > 0 
-      ? devicesInside.map(d => `<li>${d}</li>`).join('') 
+      ? devicesInside.map(d => `<li style="margin: 2px 0;">${d}</li>`).join('') 
       : `<li style="color: #9ca3af;">${this.tracker.t('noDevicesFound')}</li>`;
 
     const areaKm2 = this.calculateGeofenceArea(geofence.coordinates);
 
-    new maplibregl.Popup()
+    new maplibregl.Popup({
+      maxWidth: '300px',
+      closeButton: true,
+      closeOnClick: false
+    })
       .setLngLat(lngLat)
       .setHTML(`
-        <div style="font-family: system-ui; min-width: 250px;">
-          <h4 style="margin: 0 0 10px 0; color: #667eea;">
+        <div style="font-family: system-ui; min-width: 250px; max-width: 300px;">
+          <h4 style="margin: 0 0 10px 0; color: #667eea; word-wrap: break-word;">
             📍 ${geofence.name}
           </h4>
-          <div style="font-size: 12px; color: #6b7280; margin-bottom: 8px;">
+          <div style="font-size: 12px; color: #6b7280; margin-bottom: 8px; word-wrap: break-word;">
             ${geofence.description || this.tracker.t('noDescription') || 'No description'}
           </div>
           <div style="font-size: 11px; color: #9ca3af; margin-bottom: 8px;">
@@ -196,19 +200,19 @@ export class GeofenceManager {
           </div>
           <div style="font-size: 11px; margin-bottom: 10px;">
             <strong>${this.tracker.t('devicesInside')} (${devicesInside.length}):</strong>
-            <ul style="margin: 5px 0; padding-left: 20px; max-height: 100px; overflow-y: auto;">
+            <ul style="margin: 5px 0; padding-left: 20px; max-height: 80px; overflow-y: auto;">
               ${devicesList}
             </ul>
           </div>
-          <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+          <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
             <button 
               onclick="window.locationTracker.geofenceManager.toggleGeofenceActive(${geofence.id})" 
-              style="flex: 1; padding: 6px 10px; background: ${geofence.active ? '#f59e0b' : '#10b981'}; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;">
+              style="width: 100%; padding: 8px 12px; background: ${geofence.active ? '#f59e0b' : '#10b981'}; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500;">
               ${geofence.active ? this.tracker.t('deactivateGeofence') : this.tracker.t('activateGeofence')}
             </button>
             <button 
               onclick="window.locationTracker.geofenceManager.deleteGeofence(${geofence.id})" 
-              style="flex: 1; padding: 6px 10px; background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;">
+              style="width: 100%; padding: 8px 12px; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500;">
               🗑️ ${this.tracker.t('deleteGeofence')}
             </button>
           </div>

@@ -1156,29 +1156,6 @@ body {
   }
 }
 
-.pulse-marker {
-  width: 20px;
-  height: 20px;
-  background: #ef4444;
-  border-radius: 50%;
-  position: relative;
-  z-index: 9999;
-}
-
-.pulse-marker::after {
-  content: "";
-  width: 20px;
-  height: 20px;
-  background: #ef4444;
-  border-radius: 50%;
-  position: absolute;
-  top: 0;
-  left: 0;
-  animation: pulse 2s infinite;
-  opacity: 0.6;
-  z-index: -1;
-}
-
 @keyframes pulse {
   0% {
     transform: scale(1);
@@ -1501,18 +1478,6 @@ body {
   100% {
     transform: translateX(-50%) scale(1);
     opacity: 1;
-  }
-}
-
-/* Pulse animation for geofence violations */
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.7;
-    transform: scale(1.1);
   }
 }
 
@@ -2345,14 +2310,6 @@ body {
   }
 }
 
-/* Unified Filter Styles */
-.filter-section {
-  padding: 15px;
-  background: #f9fafb;
-  border-radius: 8px;
-  border: 1px solid #e5e7eb;
-}
-
 .filter-enable-checkbox {
   width: 18px;
   height: 18px;
@@ -2383,7 +2340,89 @@ body {
 }
 
 /* Error state for locked filters */
-.filter-section.error {
   border-color: #ef4444;
   background: #fef2f2;
+}
+
+/* Pulse Marker - Fixed positioning */
+.pulse-marker {
+  width: 20px;
+  height: 20px;
+  background: #ef4444;
+  border-radius: 50%;
+  position: relative;
+  z-index: 9999;
+  transform: translate(0, 0) !important; /* Prevent translation issues */
+}
+
+.pulse-marker::after {
+  content: "";
+  width: 20px;
+  height: 20px;
+  background: #ef4444;
+  border-radius: 50%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  animation: pulse 2s infinite;
+  opacity: 0.6;
+  z-index: -1;
+}
+
+/* Fix for MapLibre marker positioning */
+.maplibregl-marker {
+  transform-origin: center center;
+}
+
+.maplibregl-marker .pulse-marker {
+  margin: 0;
+  transform: translate(-50%, -50%);
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(2);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+}
+
+/* Filter section transitions */
+.filter-section {
+  padding: 15px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  transition: opacity 0.3s ease, filter 0.3s ease;
+}
+
+.filter-section[style*="opacity: 0.5"] {
+  filter: grayscale(50%);
+  cursor: not-allowed;
+}
+
+/* Popup improvements */
+.maplibregl-popup-content {
+  padding: 15px;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  max-width: 320px !important;
+}
+
+.maplibregl-popup-close-button {
+  font-size: 20px;
+  padding: 5px 10px;
+  color: #6b7280;
+}
+
+.maplibregl-popup-close-button:hover {
+  background: #f3f4f6;
+  color: #374151;
 }

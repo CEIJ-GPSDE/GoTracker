@@ -138,6 +138,10 @@ export const TRANSLATIONS = {
     fixErrorsBeforeApplying: "Please fix validation errors. Filters with errors are now locked.",
     clearAllFilters: "Clear All",
     applyFilter: "Apply Filter",
+    fixValidationErrors: "Please fix validation errors to apply filter.",
+    noResultsForFilters: "No results found. Try adjusting the location filter.",
+    noResultsForTimeFilter: "No results found for this time range.",
+    noResultsForLocationFilter: "No results found in this area.",
     geofenceStatus: "Status"
   },
   es: {
@@ -279,6 +283,10 @@ export const TRANSLATIONS = {
     fixErrorsBeforeApplying: "Por favor corrija los errores de validación. Los filtros con errores están ahora bloqueados.",
     clearAllFilters: "Limpiar Todo",
     applyFilter: "Aplicar Filtro", 
+    fixValidationErrors: "Por favor corrija los errores de validación para aplicar el filtro.",
+    noResultsForFilters: "No se encontraron resultados. Intente ajustar el filtro de ubicación.",
+    noResultsForTimeFilter: "No se encontraron resultados para este rango de tiempo.",
+    noResultsForLocationFilter: "No se encontraron resultados en esta área.",
     geofenceStatus: "Estado"
   }
 };

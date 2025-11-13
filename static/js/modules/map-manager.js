@@ -311,10 +311,11 @@ export class MapManager {
 
       marker = new maplibregl.Marker({
         element: el || undefined,
-        color: isLatest ? undefined : deviceColor
+        color: isLatest ? undefined : deviceColor,
+        anchor: 'center' // Ensure proper anchoring
       })
         .setLngLat([location.longitude, location.latitude])
-        .setPopup(new maplibregl.Popup().setHTML(popupContent))
+        .setPopup(new maplibregl.Popup({ offset: 25 }).setHTML(popupContent))
         .addTo(this.map);
 
       this.markers.set(deviceId, marker);
@@ -324,10 +325,13 @@ export class MapManager {
       }
     } else {
       marker.setLngLat([location.longitude, location.latitude]);
-      marker.setPopup(new maplibregl.Popup().setHTML(popupContent));
+      marker.setPopup(new maplibregl.Popup({ offset: 25 }).setHTML(popupContent));
 
       const el = marker.getElement();
-      if (isLatest) {
+      if (isLatest && !el.classList.contains('pulse-marker')) {
+        el.className = 'pulse-marker';
+        el.style.backgroundColor = deviceColor;
+      } else if (isLatest) {
         el.style.backgroundColor = deviceColor;
       }
     }

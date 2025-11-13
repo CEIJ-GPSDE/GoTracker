@@ -180,8 +180,9 @@ export class HistoryManager {
 
     let timeValid = true;
     let locationValid = true;
+    let hasResults = false;
 
-    // Validate time filter if enabled
+    // Validate and check time filter if enabled
     if (timeEnabled) {
       const startInput = document.getElementById('start-time-popup');
       const endInput = document.getElementById('end-time-popup');
@@ -191,20 +192,19 @@ export class HistoryManager {
       if (!timeResult.isValid) {
         this.tracker.showValidationError(timeResult.error, document.getElementById('apply-unified-filter'), timeErrorElement);
         timeValid = false;
-        // Lock time filter permanently
-        this.timeFilterLocked = true;
-        this.lockTimeFilterInputs();
-        document.getElementById('enable-time-filter').disabled = true;
+        // Grey out but don't lock
+        this.greyOutTimeFilter();
       } else {
         this.timeFilter = {
           start: new Date(startInput.value),
           end: new Date(endInput.value)
         };
         this.tracker.clearValidationError(document.getElementById('apply-unified-filter'), timeErrorElement);
+        this.ungreyTimeFilter();
       }
     }
 
-    // Validate location filter if enabled
+    // Validate and check location filter if enabled
     if (locationEnabled) {
       const latInput = document.getElementById('location-lat-input');
       const lngInput = document.getElementById('location-lng-input');
@@ -219,18 +219,17 @@ export class HistoryManager {
       if (!locationResult.isValid) {
         this.tracker.showValidationError(locationResult.error, document.getElementById('apply-unified-filter'), locationErrorElement);
         locationValid = false;
-        // Lock location filter permanently
-        this.locationFilterLocked = true;
-        this.lockLocationFilterInputs();
-        document.getElementById('enable-location-filter').disabled = true;
+        // Grey out but don't lock
+        this.greyOutLocationFilter();
       } else {
         this.locationFilter = { lat, lng, radius };
         this.tracker.clearValidationError(document.getElementById('apply-unified-filter'), locationErrorElement);
+        this.ungreyLocationFilter();
       }
     }
 
     if (!timeValid || !locationValid) {
-      this.showError(this.tracker.t('fixErrorsBeforeApplying') || 'Please fix validation errors. Filters with errors are now locked.');
+      this.showError(this.tracker.t('fixValidationErrors') || 'Please fix validation errors to apply filter.');
       return;
     }
 
@@ -243,12 +242,61 @@ export class HistoryManager {
     }
 
     // Load data based on enabled filters
-    await this.loadFilteredData();
+    hasResults = await this.loadFilteredData();
+
+    // If no results, grey out the problematic filter
+    if (!hasResults) {
+      if (timeEnabled && locationEnabled) {
+        // Both enabled - grey out location filter as it's more restrictive
+        this.greyOutLocationFilter();
+        this.showError(this.tracker.t('noResultsForFilters') || 'No results found. Try adjusting the location filter.');
+      } else if (timeEnabled) {
+        this.greyOutTimeFilter();
+        this.showError(this.tracker.t('noResultsForTimeFilter') || 'No results found for this time range.');
+      } else if (locationEnabled) {
+        this.greyOutLocationFilter();
+        this.showError(this.tracker.t('noResultsForLocationFilter') || 'No results found in this area.');
+      }
+      return;
+    }
 
     this.tracker.updateTimeFilterIndicator();
     this.tracker.hideNoFilterOverlay();
 
+    // Close popup and return to map
     document.getElementById('history-config-popup').classList.remove('active');
+  }
+
+  greyOutTimeFilter() {
+    const section = document.getElementById('time-filter-section');
+    if (section) {
+      section.style.opacity = '0.5';
+      section.style.pointerEvents = 'none';
+    }
+  }
+
+  ungreyTimeFilter() {
+    const section = document.getElementById('time-filter-section');
+    if (section) {
+      section.style.opacity = '1';
+      section.style.pointerEvents = 'auto';
+    }
+  }
+
+  greyOutLocationFilter() {
+    const section = document.getElementById('location-filter-section');
+    if (section) {
+      section.style.opacity = '0.5';
+      section.style.pointerEvents = 'none';
+    }
+  }
+
+  ungreyLocationFilter() {
+    const section = document.getElementById('location-filter-section');
+    if (section) {
+      section.style.opacity = '1';
+      section.style.pointerEvents = 'auto';
+    }
   }
 
   async loadFilteredData() {
@@ -258,12 +306,10 @@ export class HistoryManager {
 
       // Build query based on enabled filters
       if (this.timeFilterEnabled && this.timeFilter) {
-        // Time-based query
         url += 'range';
         params.append('start', this.timeFilter.start.toISOString());
         params.append('end', this.timeFilter.end.toISOString());
       } else if (this.locationFilterEnabled && this.locationFilter) {
-        // Location-based query
         url += 'nearby';
         params.append('lat', this.locationFilter.lat);
         params.append('lng', this.locationFilter.lng);
@@ -290,28 +336,31 @@ export class HistoryManager {
 
         this.tracker.filteredLocations = locations || [];
 
+        if (this.tracker.filteredLocations.length === 0) {
+          return false; // No results
+        }
+
         this.tracker.mapManager.clearAllMarkers();
         this.tracker.displayFilteredLocations();
         this.tracker.updateRouteForFiltered();
-
-        if (this.tracker.filteredLocations.length > 0) {
-          this.tracker.mapManager.fitMapToLocations(this.tracker.filteredLocations);
-          
-          // Check geofences
-          if (this.tracker.geofenceManager) {
-            await this.tracker.geofenceManager.checkHistoricalLocationsAgainstGeofences();
-          }
-        } else {
-          setTimeout(() => this.tracker.showEmptyResultsPopup(this.locationFilterEnabled, this.locationFilter?.radius || 0), 500);
+        this.tracker.mapManager.fitMapToLocations(this.tracker.filteredLocations);
+        
+        // Check geofences
+        if (this.tracker.geofenceManager) {
+          await this.tracker.geofenceManager.checkHistoricalLocationsAgainstGeofences();
         }
+
+        return true; // Has results
       } else {
         const errorText = await response.text();
         console.error('Failed to load filtered data:', response.status, errorText);
         this.tracker.showError('Failed to load data: ' + errorText);
+        return false;
       }
     } catch (error) {
       console.error('Error loading filtered data:', error);
       this.tracker.showError('Failed to load data: ' + error.message);
+      return false;
     }
   }
 
@@ -352,6 +401,7 @@ export class HistoryManager {
     document.getElementById('enable-time-filter').disabled = false;
     document.getElementById('time-filter-content').style.display = 'none';
     this.unlockTimeFilterInputs();
+    this.ungreyTimeFilter();
 
     // Clear location filter
     this.locationFilter = null;
@@ -364,6 +414,7 @@ export class HistoryManager {
     document.getElementById('enable-location-filter').disabled = false;
     document.getElementById('location-filter-content').style.display = 'none';
     this.unlockLocationFilterInputs();
+    this.ungreyLocationFilter();
 
     // Clear validation errors
     this.tracker.clearValidationError(
