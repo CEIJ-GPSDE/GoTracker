@@ -10,10 +10,6 @@ on:
         description: "Deploy to EC2_1"
         type: boolean
         default: true
-      deploy_to_EC2_2:
-        description: "Deploy to EC2_2"
-        type: boolean
-        default: true
       deploy_to_EC2_3:
         description: "Deploy to EC2_3"
         type: boolean
@@ -32,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        instance: [EC2_1, EC2_2, EC2_3, EC2_4]
+        instance: [EC2_1, EC2_3, EC2_4]
       fail-fast: false
     steps:
       - name: Determine deployment
@@ -45,9 +41,6 @@ jobs:
             case "${{ matrix.instance }}" in
               "EC2_1")
                 deploy="${{ github.event.inputs.deploy_to_EC2_1 }}"
-                ;;
-              "EC2_2")
-                deploy="${{ github.event.inputs.deploy_to_EC2_2 }}"
                 ;;
               "EC2_3")
                 deploy="${{ github.event.inputs.deploy_to_EC2_3 }}"

@@ -196,6 +196,59 @@ export class UIManager {
 
     // Setup geofence controls
     this.setupGeofenceControls();
+
+    this.setupRouteControls();
+  }
+
+  setupRouteControls() {
+    // Create Route button
+    const createBtn = document.getElementById('create-route-btn');
+    if (createBtn) {
+      createBtn.addEventListener('click', () => {
+        if (this.tracker.routeManager) {
+          this.tracker.routeManager.startCreatingRoute();
+        }
+      });
+    }
+
+    // Toggle Routes button
+    const toggleBtn = document.getElementById('toggle-routes-btn');
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', () => {
+        if (this.tracker.routeManager) {
+          this.tracker.routeManager.toggleAllRoutesVisibility();
+        }
+      });
+    }
+
+    // Open Route Menu button
+    const menuBtn = document.getElementById('open-route-menu-btn');
+    if (menuBtn) {
+      menuBtn.addEventListener('click', () => {
+        const popup = document.getElementById('popup-menu');
+        if (popup) {
+          popup.classList.add('active');
+          
+          // Switch to routes tab
+          const tabButtons = document.querySelectorAll('.tab-button');
+          const tabContents = document.querySelectorAll('.tab-content');
+          
+          tabButtons.forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.dataset.tab === 'routes') {
+              btn.classList.add('active');
+            }
+          });
+          
+          tabContents.forEach(content => {
+            content.classList.remove('active');
+            if (content.id === 'routes-tab') {
+              content.classList.add('active');
+            }
+          });
+        }
+      });
+    }
   }
 
   setupFilterButtons() {
@@ -622,6 +675,71 @@ export class UIManager {
     this.tracker.updateTimeFilterIndicator();
     this.tracker.displayLocations();
     this.tracker.deviceManager.updateDeviceLegend();
+
+    // Update vehicle panel translations
+    const vehiclesPanelTitle = document.getElementById('vehicles-panel-title');
+    if (vehiclesPanelTitle) {
+      vehiclesPanelTitle.textContent = this.tracker.t('vehiclesPanel');
+    }
+
+    // Update vehicle panel content
+    if (this.tracker.vehiclePanelManager) {
+      this.tracker.vehiclePanelManager.updateVehiclePanel();
+    }
+
+    // Update route management translations
+    const routeManagementTitle = document.getElementById('route-management-title');
+    if (routeManagementTitle) routeManagementTitle.textContent = this.tracker.t('routeManagement');
+
+    const createRouteBtnText = document.getElementById('create-route-btn-text');
+    if (createRouteBtnText) createRouteBtnText.textContent = this.tracker.t('createRouteFromHistory');
+
+    const reloadRoutesBtnText = document.getElementById('reload-routes-btn-text');
+    if (reloadRoutesBtnText) reloadRoutesBtnText.textContent = this.tracker.t('reloadRoutes');
+
+    const toggleRoutesVisibilityBtnText = document.getElementById('toggle-routes-visibility-btn-text');
+    if (toggleRoutesVisibilityBtnText) toggleRoutesVisibilityBtnText.textContent = this.tracker.t('toggleRoutesVisibility');
+
+    const routeStatsTitle = document.getElementById('route-stats-title');
+    if (routeStatsTitle) routeStatsTitle.textContent = this.tracker.t('routeStats');
+
+    const totalRoutesLabel = document.getElementById('total-routes-label');
+    if (totalRoutesLabel) totalRoutesLabel.textContent = this.tracker.t('totalRoutes') + ':';
+
+    const totalDistanceLabel = document.getElementById('total-distance-label');
+    if (totalDistanceLabel) totalDistanceLabel.textContent = this.tracker.t('totalDistance') + ':';
+
+    const routeListTitle = document.getElementById('route-list-title');
+    if (routeListTitle) routeListTitle.textContent = this.tracker.t('activeRoutes');
+
+    const noRoutesMsg = document.getElementById('no-routes-msg');
+    if (noRoutesMsg) noRoutesMsg.textContent = this.tracker.t('noRoutesCreated');
+
+    // Update route legend
+    const routesLegendText = document.getElementById('routes-legend-text');
+    if (routesLegendText) routesLegendText.textContent = this.tracker.t('routes');
+
+    const centerRoutesText = document.getElementById('center-routes-text');
+    if (centerRoutesText) centerRoutesText.textContent = this.tracker.t('centerOnRoutes');
+
+    // Update route button titles
+    const createRouteBtn = document.getElementById('create-route-btn');
+    if (createRouteBtn) createRouteBtn.title = this.tracker.t('createRouteFromHistory');
+
+    const toggleRoutesBtn = document.getElementById('toggle-routes-btn');
+    if (toggleRoutesBtn) {
+      const showingRoutes = !this.tracker.routeManager || this.tracker.routeManager.showRoutes;
+      toggleRoutesBtn.title = showingRoutes ? this.tracker.t('hideRoutes') : this.tracker.t('showRoutes');
+    }
+
+    const routeMenuBtn = document.getElementById('open-route-menu-btn');
+    if (routeMenuBtn) routeMenuBtn.title = this.tracker.t('routeManagement');
+
+    // Update route legend
+    if (this.tracker.routeManager) {
+      this.tracker.routeManager.updateRouteLegend();
+      this.tracker.routeManager.updateRouteList();
+    }
   }
 
   updateRefreshButtonState() {

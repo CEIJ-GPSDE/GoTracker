@@ -9,6 +9,7 @@ import { UIManager } from '../modules/ui-manager.js';
 import { GeofenceManager } from '../modules/geofence-manager.js';
 import { ClusteringManager } from '../modules/clustering-manager.js';
 import { RouteManager } from '../modules/route-manager.js';
+import { VehiclePanelManager } from '../modules/vehicle-panel-manager.js';
 
 export class LocationTracker {
   constructor() {
@@ -25,6 +26,7 @@ export class LocationTracker {
     this.geofenceManager = null; // Initialized after map loads
     this.clusteringManager = null; // Initialized after map loads
     this.routeManager = null; // Initialized after map loads
+    this.vehiclePanelManager = null; // Initialized after map loads
 
     // State variables
     this.locations = [];
@@ -90,6 +92,12 @@ export class LocationTracker {
         this.clusteringManager = new ClusteringManager(this.mapManager);
         this.clusteringManager.initialize();
         
+        // AGREGAR ESTAS LÍNEAS:
+        this.vehiclePanelManager = new VehiclePanelManager(this);
+        this.vehiclePanelManager.initialize();
+        
+        this.routeManager = new RouteManager(this);
+        this.routeManager.initialize();
         // Setup map event handlers for geofence drawing
         this.mapManager.map.on('click', (e) => {
           this.geofenceManager.handleMapClick(e);
@@ -277,6 +285,10 @@ export class LocationTracker {
       return;
     }
     this.applyLocationUpdate(location);
+    
+    if (this.vehiclePanelManager) {
+      this.vehiclePanelManager.updateVehiclePanel();
+    }
   }
 
   applyLocationUpdate(location) {
@@ -731,7 +743,12 @@ export class LocationTracker {
       this.wsManager.disconnect();
     });
   }
-
+  // Proxy method for vehicle panel
+  toggleVehiclePanel() {
+    if (this.vehiclePanelManager) {
+      this.vehiclePanelManager.toggleVehiclePanel();
+    }
+  }
   // Proxy methods for UI manager
   updateUILanguage() { this.uiManager.updateUILanguage(); }
   updateRefreshButtonState() { this.uiManager.updateRefreshButtonState(); }

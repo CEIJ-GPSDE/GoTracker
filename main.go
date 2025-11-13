@@ -165,6 +165,11 @@ func (db *Database) InitializeSchema(prefix string) error {
     if prefix != "" {
         tableName = prefix + "_locations"
     }
+    
+    routesTableName := "routes"
+    if prefix != "" {
+        routesTableName = prefix + "_routes"
+    }
 
     // Enable PostGIS
     _, err := db.Exec(`CREATE EXTENSION IF NOT EXISTS postgis;`)
@@ -184,7 +189,6 @@ func (db *Database) InitializeSchema(prefix string) error {
     if err == nil && hasLatColumn {
         log.Printf("⚠️  Old schema detected for %s, migrating to PostGIS...", tableName)
         
-        // Backup data if any exists
         var count int
         db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", tableName)).Scan(&count)
         
@@ -198,7 +202,6 @@ func (db *Database) InitializeSchema(prefix string) error {
             }
         }
         
-        // Drop old table
         log.Printf("🗑️  Dropping old table...")
         _, err = db.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s CASCADE", tableName))
         if err != nil {
@@ -221,8 +224,38 @@ func (db *Database) InitializeSchema(prefix string) error {
     CREATE INDEX IF NOT EXISTS idx_%s_timestamp ON %s(timestamp DESC);
     CREATE INDEX IF NOT EXISTS idx_%s_device_timestamp ON %s(device_id, timestamp DESC);
     
-    -- ... rest of your schema ...
-    `, tableName, tableName, tableName, tableName, tableName, tableName, tableName)
+    -- Routes table
+    CREATE TABLE IF NOT EXISTS %s (
+        id SERIAL PRIMARY KEY,
+        device_id VARCHAR(255) NOT NULL,
+        route_name VARCHAR(255),
+        geom GEOGRAPHY(LINESTRING, 4326) NOT NULL,
+        start_time TIMESTAMP WITH TIME ZONE NOT NULL,
+        end_time TIMESTAMP WITH TIME ZONE NOT NULL,
+        distance_meters DECIMAL(12, 2),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        CONSTRAINT check_route_points CHECK (ST_NPoints(geom::geometry) >= 2)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_%s_routes_geom ON %s USING GIST(geom);
+    CREATE INDEX IF NOT EXISTS idx_%s_routes_device ON %s(device_id);
+    CREATE INDEX IF NOT EXISTS idx_%s_routes_time ON %s(start_time, end_time);
+    
+    -- Geofences table (already exists but ensuring it's here)
+    CREATE TABLE IF NOT EXISTS geofences (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        description TEXT,
+        geom GEOGRAPHY(POLYGON, 4326) NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        active BOOLEAN DEFAULT TRUE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_geofences_geom ON geofences USING GIST(geom);
+    `, 
+    tableName, tableName, tableName, tableName, tableName, tableName, tableName,
+    routesTableName, routesTableName, routesTableName, routesTableName, routesTableName, routesTableName, routesTableName)
 
     _, err = db.Exec(schema)
     if err != nil {
@@ -255,7 +288,7 @@ func (db *Database) InitializeSchema(prefix string) error {
         }
     }
     
-    log.Printf("✅ Schema initialized for table: %s", tableName)
+    log.Printf("✅ Schema initialized for tables: %s, %s", tableName, routesTableName)
     return nil
 }
 
@@ -1531,12 +1564,17 @@ func (api *APIServer) getRoutesHandler(w http.ResponseWriter, r *http.Request) {
         }
     }
 
-    query := `
+    routesTableName := "routes"
+    if api.tablePrefix != "" {
+        routesTableName = api.tablePrefix + "_routes"
+    }
+
+    query := fmt.Sprintf(`
         SELECT id, device_id, route_name,
                ST_AsGeoJSON(geom::geometry) as geom_json,
                start_time, end_time, distance_meters, created_at
-        FROM routes
-    `
+        FROM %s
+    `, routesTableName)
 
     args := []interface{}{}
     if deviceID != "" {
@@ -1544,7 +1582,7 @@ func (api *APIServer) getRoutesHandler(w http.ResponseWriter, r *http.Request) {
         args = append(args, deviceID)
     }
 
-    query += " ORDER BY start_time DESC LIMIT $" + fmt.Sprintf("%d", len(args)+1)
+    query += fmt.Sprintf(" ORDER BY start_time DESC LIMIT $%d", len(args)+1)
     args = append(args, limit)
 
     rows, err := api.db.Query(query, args...)
@@ -1574,7 +1612,6 @@ func (api *APIServer) getRoutesHandler(w http.ResponseWriter, r *http.Request) {
             rt.DistanceMeters = distanceMeters.Float64
         }
 
-        // Parse GeoJSON
         var geoJSON map[string]interface{}
         if err := json.Unmarshal([]byte(geomJSON), &geoJSON); err == nil {
             if coords, ok := geoJSON["coordinates"].([]interface{}); ok {
@@ -1622,6 +1659,11 @@ func (api *APIServer) createRouteHandler(w http.ResponseWriter, r *http.Request)
     if api.tablePrefix != "" {
         tableName = api.tablePrefix + "_locations"
     }
+    
+    routesTableName := "routes"
+    if api.tablePrefix != "" {
+        routesTableName = api.tablePrefix + "_routes"
+    }
 
     // Query to create route from location points
     query := fmt.Sprintf(`
@@ -1633,7 +1675,7 @@ func (api *APIServer) createRouteHandler(w http.ResponseWriter, r *http.Request)
               AND timestamp <= $3
             ORDER BY timestamp ASC
         )
-        INSERT INTO routes (device_id, route_name, geom, start_time, end_time, distance_meters)
+        INSERT INTO %s (device_id, route_name, geom, start_time, end_time, distance_meters)
         SELECT 
             $1,
             $4,
@@ -1644,7 +1686,7 @@ func (api *APIServer) createRouteHandler(w http.ResponseWriter, r *http.Request)
         FROM route_points
         WHERE (SELECT COUNT(*) FROM route_points) >= 2
         RETURNING id, device_id, route_name, start_time, end_time, distance_meters, created_at
-    `, tableName)
+    `, tableName, routesTableName)
 
     var route Route
     var routeName sql.NullString
@@ -1676,12 +1718,17 @@ func (api *APIServer) createRouteHandler(w http.ResponseWriter, r *http.Request)
     json.NewEncoder(w).Encode(route)
 }
 
-// Add this function near the other route handlers (around line 1100)
 func (api *APIServer) deleteRouteHandler(w http.ResponseWriter, r *http.Request) {
     vars := mux.Vars(r)
     routeID := vars["id"]
 
-    result, err := api.db.Exec("DELETE FROM routes WHERE id = $1", routeID)
+    routesTableName := "routes"
+    if api.tablePrefix != "" {
+        routesTableName = api.tablePrefix + "_routes"
+    }
+
+    query := fmt.Sprintf("DELETE FROM %s WHERE id = $1", routesTableName)
+    result, err := api.db.Exec(query, routeID)
     if err != nil {
         log.Printf("Error deleting route: %v", err)
         http.Error(w, "Database error", http.StatusInternalServerError)

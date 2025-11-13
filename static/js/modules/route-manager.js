@@ -5,6 +5,7 @@ export class RouteManager {
     this.map = this.mapManager.map;
     this.routes = new Map();
     this.showRoutes = true;
+    this.routeLegendCollapsed = false;
     this.visibleRoutes = new Set();
     this.routeColors = ['#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#8b5cf6', '#06b6d4'];
   }
@@ -36,6 +37,7 @@ export class RouteManager {
     } catch (error) {
       console.error('Error loading routes:', error);
     }
+    this.updateRouteLegend();
   }
 
   clearAllRouteLayers() {
@@ -302,6 +304,7 @@ export class RouteManager {
       console.error('Error creating route:', error);
       alert(`Error: ${error.message}`);
     }
+    this.updateRouteLegend(); 
   }
 
   async deleteRoute(routeId) {
@@ -482,5 +485,112 @@ export class RouteManager {
       notification.style.animation = 'slideOutRight 0.3s ease-out';
       setTimeout(() => notification.remove(), 300);
     }, 3000);
+  }
+
+  toggleRouteLegend() {
+    this.routeLegendCollapsed = !this.routeLegendCollapsed;
+    const legend = document.getElementById('route-legend-panel');
+    
+    if (this.routeLegendCollapsed) {
+      legend.classList.add('collapsed');
+    } else {
+      legend.classList.remove('collapsed');
+    }
+  }
+
+  updateRouteLegend() {
+    const container = document.getElementById('route-legend-items');
+    const countElement = document.getElementById('route-count');
+
+    if (countElement) {
+      countElement.textContent = this.routes.size;
+    }
+
+    if (!container) return;
+
+    if (this.routes.size === 0) {
+      container.innerHTML = `<div style="color: #9ca3af; font-size: 12px;">${this.tracker.t('noRoutesCreated') || 'No routes created yet'}</div>`;
+      return;
+    }
+
+    container.innerHTML = '';
+
+    this.routes.forEach((route, id) => {
+      const distanceKm = (route.distance_meters / 1000).toFixed(1);
+      const isVisible = this.visibleRoutes.has(id);
+      const color = this.routeColors[id % this.routeColors.length];
+
+      const item = document.createElement('div');
+      item.className = 'route-legend-item';
+
+      item.innerHTML = `
+        <input type="checkbox" class="route-checkbox" ${isVisible ? 'checked' : ''} 
+              data-route="${id}">
+        <div class="route-icon" style="background: ${color};">🛣️</div>
+        <div class="route-info">
+          <div class="route-name">${route.route_name || 'Unnamed Route'}</div>
+          <div class="route-details">
+            <span>${distanceKm} km</span>
+            <span>${route.device_id}</span>
+          </div>
+        </div>
+      `;
+
+      const checkbox = item.querySelector('.route-checkbox');
+      checkbox.addEventListener('change', (e) => {
+        e.stopPropagation();
+        this.toggleRouteVisibility(id, checkbox.checked);
+      });
+
+      item.addEventListener('click', (e) => {
+        if (e.target !== checkbox) {
+          this.focusRoute(id);
+        }
+      });
+
+      container.appendChild(item);
+    });
+  }
+
+  toggleRouteVisibility(routeId, visible) {
+    if (visible) {
+      this.visibleRoutes.add(routeId);
+    } else {
+      this.visibleRoutes.delete(routeId);
+    }
+
+    const sourceId = `route-${routeId}`;
+    const visibility = visible && this.showRoutes ? 'visible' : 'none';
+    
+    if (this.map.getLayer(sourceId)) {
+      this.map.setLayoutProperty(sourceId, 'visibility', visibility);
+    }
+
+    this.updateRouteLegend();
+  }
+
+  centerOnRoutes() {
+    const visibleRoutes = Array.from(this.visibleRoutes);
+
+    if (visibleRoutes.length === 0) {
+      console.log('No visible routes to center on');
+      return;
+    }
+
+    const bounds = new maplibregl.LngLatBounds();
+    
+    visibleRoutes.forEach(id => {
+      const route = this.routes.get(id);
+      if (route && route.coordinates) {
+        route.coordinates.forEach(coord => {
+          bounds.extend(coord);
+        });
+      }
+    });
+
+    this.map.fitBounds(bounds, {
+      padding: 100,
+      duration: 800
+    });
   }
 }

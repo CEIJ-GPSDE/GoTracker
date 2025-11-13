@@ -11,10 +11,6 @@ on:
         description: "Cleanup from EC2_1"
         type: boolean
         default: false
-      cleanup_from_EC2_2:
-        description: "Cleanup from EC2_2"
-        type: boolean
-        default: false
       cleanup_from_EC2_3:
         description: "Cleanup from EC2_3"
         type: boolean
@@ -32,8 +28,6 @@ jobs:
         include:
           - instance: EC2_1
             cleanup: ${{ github.event.inputs.cleanup_from_EC2_1 }}
-          - instance: EC2_2
-            cleanup: ${{ github.event.inputs.cleanup_from_EC2_2 }}
           - instance: EC2_3
             cleanup: ${{ github.event.inputs.cleanup_from_EC2_3 }}
           - instance: EC2_4
