@@ -34,10 +34,44 @@
 
     <div class="dashboard">
       <div class="map-container">
-        <div class="map-overlay">
+        <!-- Connection Status - Top Center -->
+        <div class="connection-status-top" id="connection-status-top">
           <div id="connection-status" class="status disconnected">
             <div class="status-dot"></div>
             <span>Connecting...</span>
+          </div>
+        </div>
+        
+        <!-- Legends - Top Left -->
+        <div class="top-left-controls">
+          <!-- Device Legend -->
+          <div class="device-legend" id="device-legend">
+            <div class="device-legend-header" onclick="window.locationTracker.toggleDeviceLegend()">
+              <h4>
+                📱 <span id="devices-text">Devices</span>
+                <span id="device-count" style="font-size: 12px; font-weight: normal; color: #6b7280;">0</span>
+              </h4>
+              <button class="device-legend-toggle">▼</button>
+            </div>
+            <div id="legend-items"></div>
+            <button class="center-devices-btn" id="center-devices-btn" onclick="window.locationTracker.centerOnSelectedDevices()">
+              🎯 <span id="center-devices-text">Center on Devices</span>
+            </button>
+          </div>
+          
+          <!-- Geofence Legend -->
+          <div class="geofence-legend" id="geofence-legend">
+            <div class="geofence-legend-header" onclick="window.locationTracker.geofenceManager?.toggleGeofenceLegend()">
+              <h4>
+                🗺️ <span id="geofences-text">Geofences</span>
+                <span id="geofence-count" style="font-size: 12px; font-weight: normal; color: #6b7280;">0</span>
+              </h4>
+              <button class="geofence-legend-toggle">▼</button>
+            </div>
+            <div id="geofence-legend-items"></div>
+            <button class="center-geofences-btn" id="center-geofences-btn" onclick="window.locationTracker.geofenceManager?.centerOnGeofences()">
+              🎯 <span id="center-geofences-text">Center on Geofences</span>
+            </button>
           </div>
         </div>
         
@@ -80,43 +114,6 @@
         
         <div id="map"></div>
         
-        <div class="bottom-right-controls">
-          <!-- Device Legend -->
-          <div class="device-legend" id="device-legend">
-            <div class="device-legend-header" onclick="window.locationTracker.toggleDeviceLegend()">
-              <h4>
-                📱 <span id="devices-text">Devices</span>
-                <span id="device-count" style="font-size: 12px; font-weight: normal; color: #6b7280;">0</span>
-              </h4>
-              <button class="device-legend-toggle">▼</button>
-            </div>
-            <div id="legend-items"></div>
-            <button class="center-devices-btn" id="center-devices-btn" onclick="window.locationTracker.centerOnSelectedDevices()">
-              🎯 <span id="center-devices-text">Center on Devices</span>
-            </button>
-          </div>
-          
-          <!-- Geofence Legend -->
-          <div class="geofence-legend" id="geofence-legend">
-            <div class="geofence-legend-header" onclick="window.locationTracker.geofenceManager?.toggleGeofenceLegend()">
-              <h4>
-                🗺️ <span id="geofences-text">Geofences</span>
-                <span id="geofence-count" style="font-size: 12px; font-weight: normal; color: #6b7280;">0</span>
-              </h4>
-              <button class="geofence-legend-toggle">▼</button>
-            </div>
-            <div id="geofence-legend-items"></div>
-            <button class="center-geofences-btn" id="center-geofences-btn" onclick="window.locationTracker.geofenceManager?.centerOnGeofences()">
-              🎯 <span id="center-geofences-text">Center on Geofences</span>
-            </button>
-          </div>
-          
-          <button id="menu-toggle-btn-bottom" class="menu-toggle-btn-bottom">
-            <span>⚙️</span>
-            <span id="menu-text">Menu</span>
-          </button>
-        </div>
-        
         <div class="no-filter-overlay" id="no-filter-overlay">
           <h3 id="no-filter-title">⚠️ No Time Filter Applied</h3>
           <p id="no-filter-message">Please configure a time filter in History Settings to view historical data.</p>
@@ -144,6 +141,14 @@
           <span>🔴 LIVE MODE</span>
         </div>
         
+      <!-- Menu Button - Bottom Right -->
+        <div class="bottom-right-menu">
+          <button id="menu-toggle-btn-bottom" class="menu-toggle-btn-bottom">
+            <span>⚙️</span>
+            <span id="menu-text">Menu</span>
+          </button>
+        </div>
+
         <div class="route-legend" id="route-legend" style="display: none;">
           <div style="display: flex; align-items: center; gap: 8px;">
             <div style="width: 12px; height: 12px; background: #10b981; border-radius: 50%; border: 2px solid white;">
