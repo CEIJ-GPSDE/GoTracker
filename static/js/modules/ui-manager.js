@@ -225,28 +225,10 @@ export class UIManager {
     const menuBtn = document.getElementById('open-route-menu-btn');
     if (menuBtn) {
       menuBtn.addEventListener('click', () => {
-        const popup = document.getElementById('popup-menu');
-        if (popup) {
-          popup.classList.add('active');
-          
-          // Switch to routes tab
-          const tabButtons = document.querySelectorAll('.tab-button');
-          const tabContents = document.querySelectorAll('.tab-content');
-          
-          tabButtons.forEach(btn => {
-            btn.classList.remove('active');
-            if (btn.dataset.tab === 'routes') {
-              btn.classList.add('active');
-            }
-          });
-          
-          tabContents.forEach(content => {
-            content.classList.remove('active');
-            if (content.id === 'routes-tab') {
-              content.classList.add('active');
-            }
-          });
-        }
+        // ✅ CHANGE TO OPEN SLIDING PANEL WITH ROUTES TAB
+        this.tracker.slidingPanelOpen = false; // Reset state
+        this.tracker.toggleSlidingPanel();
+        this.tracker.switchPanelTab('routes');
       });
     }
   }
@@ -344,28 +326,10 @@ export class UIManager {
     const menuBtn = document.getElementById('open-geofence-menu-btn');
     if (menuBtn) {
       menuBtn.addEventListener('click', () => {
-        const popup = document.getElementById('popup-menu');
-        if (popup) {
-          popup.classList.add('active');
-          
-          // Switch to geofences tab
-          const tabButtons = document.querySelectorAll('.tab-button');
-          const tabContents = document.querySelectorAll('.tab-content');
-          
-          tabButtons.forEach(btn => {
-            btn.classList.remove('active');
-            if (btn.dataset.tab === 'geofences') {
-              btn.classList.add('active');
-            }
-          });
-          
-          tabContents.forEach(content => {
-            content.classList.remove('active');
-            if (content.id === 'geofences-tab') {
-              content.classList.add('active');
-            }
-          });
-        }
+        // ✅ CHANGE TO OPEN SLIDING PANEL WITH GEOFENCES TAB
+        this.tracker.slidingPanelOpen = false; // Reset state
+        this.tracker.toggleSlidingPanel();
+        this.tracker.switchPanelTab('geofences');
       });
     }
   }

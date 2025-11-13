@@ -277,6 +277,12 @@ export class GeofenceManager {
         this.drawGeofence(updated);
         this.updateGeofenceLegend();
         this.updateGeofenceList();
+        
+        this.updatePanelGeofenceList();
+        
+        const popups = document.querySelectorAll('.maplibregl-popup');
+        popups.forEach(popup => popup.remove());
+        
         this.showNotification(
           `${this.tracker.t('geofence')} "${geofence.name}" ${updated.active ? this.tracker.t('activated') : this.tracker.t('deactivated')}`,
           'success'
@@ -601,6 +607,9 @@ export class GeofenceManager {
         
         this.geofences.delete(geofenceId);
         this.visibleGeofences.delete(geofenceId);
+        
+        this.updatePanelGeofenceList();
+        
         this.showNotification(`✓ ${this.tracker.t('geofenceDeleted')}: "${geofence.name}"`, 'success');
         this.updateGeofenceLegend();
         this.updateGeofenceList();

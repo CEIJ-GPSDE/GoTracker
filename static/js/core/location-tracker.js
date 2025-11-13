@@ -753,6 +753,38 @@ export class LocationTracker {
       this.vehiclePanelManager.toggleVehiclePanel();
     }
   }
+
+  toggleSlidingPanel() {
+    this.slidingPanelOpen = !this.slidingPanelOpen;
+    const panel = document.getElementById('sliding-panel');
+    
+    if (this.slidingPanelOpen) {
+      panel.classList.add('open');
+    } else {
+      panel.classList.remove('open');
+    }
+  }
+  
+  switchPanelTab(tabName) {
+    this.activePanelTab = tabName;
+    
+    // Update tab buttons
+    document.querySelectorAll('.panel-tab').forEach(btn => {
+      btn.classList.remove('active');
+      if (btn.dataset.panelTab === tabName) {
+        btn.classList.add('active');
+      }
+    });
+    
+    // Update tab content
+    document.querySelectorAll('.panel-tab-content').forEach(content => {
+      content.classList.remove('active');
+      if (content.id === `${tabName}-panel-tab`) {
+        content.classList.add('active');
+      }
+    });
+  }
+
   // Proxy methods for UI manager
   updateUILanguage() { this.uiManager.updateUILanguage(); }
   updateRefreshButtonState() { this.uiManager.updateRefreshButtonState(); }
