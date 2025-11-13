@@ -433,12 +433,6 @@ export class UIManager {
     const liveModeSpan = document.querySelector('#live-mode-btn span:last-child');
     if (liveModeSpan) liveModeSpan.textContent = this.tracker.t('liveMode');
 
-    const trackBtn = document.getElementById('track-latest-btn');
-    if (trackBtn) {
-      trackBtn.querySelector('span:last-child').textContent =
-        this.tracker.isTrackingLatest ? this.tracker.t('trackLatest') : this.tracker.t('trackingOff');
-    }
-
     document.querySelector('#history-mode-btn span:last-child').textContent = this.tracker.t('historyMode');
     document.querySelector('#change-filter-btn span:last-child').textContent = this.tracker.t('changeFilter');
     document.querySelector('#live-mode-btn span:last-child').textContent = this.tracker.t('liveMode');
