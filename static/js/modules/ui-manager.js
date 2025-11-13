@@ -131,6 +131,19 @@ export class UIManager {
   }
 
   setupEventListeners() {
+    const panelHamburger = document.getElementById('panel-hamburger');
+    if (panelHamburger) {
+      panelHamburger.addEventListener('click', () => {
+        this.tracker.toggleSlidingPanel();
+      });
+    }
+
+    const panelCloseBtn = document.querySelector('.panel-close-btn');
+    if (panelCloseBtn) {
+      panelCloseBtn.addEventListener('click', () => {
+        this.tracker.toggleSlidingPanel();
+      });
+    }
     // Track Latest button
     document.getElementById('track-latest-btn').addEventListener('click', () => {
       this.tracker.userInteracted = false;
@@ -193,44 +206,6 @@ export class UIManager {
 
     // Setup filter application buttons
     this.setupFilterButtons();
-
-    // Setup geofence controls
-    this.setupGeofenceControls();
-
-    this.setupRouteControls();
-  }
-
-  setupRouteControls() {
-    // Create Route button
-    const createBtn = document.getElementById('create-route-btn');
-    if (createBtn) {
-      createBtn.addEventListener('click', () => {
-        if (this.tracker.routeManager) {
-          this.tracker.routeManager.startCreatingRoute();
-        }
-      });
-    }
-
-    // Toggle Routes button
-    const toggleBtn = document.getElementById('toggle-routes-btn');
-    if (toggleBtn) {
-      toggleBtn.addEventListener('click', () => {
-        if (this.tracker.routeManager) {
-          this.tracker.routeManager.toggleAllRoutesVisibility();
-        }
-      });
-    }
-
-    // Open Route Menu button
-    const menuBtn = document.getElementById('open-route-menu-btn');
-    if (menuBtn) {
-      menuBtn.addEventListener('click', () => {
-        // ✅ CHANGE TO OPEN SLIDING PANEL WITH ROUTES TAB
-        this.tracker.slidingPanelOpen = false; // Reset state
-        this.tracker.toggleSlidingPanel();
-        this.tracker.switchPanelTab('routes');
-      });
-    }
   }
 
   setupFilterButtons() {
@@ -297,39 +272,6 @@ export class UIManager {
         } else {
           this.startMapLocationSelection();
         }
-      });
-    }
-  }
-
-  setupGeofenceControls() {
-    // Draw Geofence button
-    const drawBtn = document.getElementById('draw-geofence-btn');
-    if (drawBtn) {
-      drawBtn.addEventListener('click', () => {
-        if (this.tracker.geofenceManager) {
-          this.tracker.geofenceManager.startDrawing();
-        }
-      });
-    }
-
-    // Toggle Geofences button
-    const toggleBtn = document.getElementById('toggle-geofences-btn');
-    if (toggleBtn) {
-      toggleBtn.addEventListener('click', () => {
-        if (this.tracker.geofenceManager) {
-          this.tracker.geofenceManager.toggleAllGeofencesVisibility();
-        }
-      });
-    }
-
-    // Open Geofence Menu button
-    const menuBtn = document.getElementById('open-geofence-menu-btn');
-    if (menuBtn) {
-      menuBtn.addEventListener('click', () => {
-        // ✅ CHANGE TO OPEN SLIDING PANEL WITH GEOFENCES TAB
-        this.tracker.slidingPanelOpen = false; // Reset state
-        this.tracker.toggleSlidingPanel();
-        this.tracker.switchPanelTab('geofences');
       });
     }
   }
@@ -489,10 +431,6 @@ export class UIManager {
       traceDotsLabel.textContent = this.tracker.t('showTraceDots');
     }
 
-    // History config popup
-    const historyConfigTitle = document.querySelector('#history-config-popup .popup-header h2');
-    if (historyConfigTitle) historyConfigTitle.textContent = this.tracker.t('historicalViewConfig');
-    
     const startTimeLabel = document.querySelector('label[for="start-time-popup"]');
     if (startTimeLabel) startTimeLabel.textContent = this.tracker.t('from');
     
