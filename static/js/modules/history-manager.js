@@ -192,7 +192,6 @@ export class HistoryManager {
       if (!timeResult.isValid) {
         this.tracker.showValidationError(timeResult.error, document.getElementById('apply-unified-filter'), timeErrorElement);
         timeValid = false;
-        // Grey out but don't lock
         this.greyOutTimeFilter();
       } else {
         this.timeFilter = {
@@ -219,7 +218,6 @@ export class HistoryManager {
       if (!locationResult.isValid) {
         this.tracker.showValidationError(locationResult.error, document.getElementById('apply-unified-filter'), locationErrorElement);
         locationValid = false;
-        // Grey out but don't lock
         this.greyOutLocationFilter();
       } else {
         this.locationFilter = { lat, lng, radius };
@@ -236,9 +234,12 @@ export class HistoryManager {
     // Clear combined error
     this.tracker.clearValidationError(document.getElementById('apply-unified-filter'), document.getElementById('combined-validation-error'));
 
-    // Activate history mode
+    // Activate history mode FIRST
     if (!this.tracker.isHistoryMode) {
       this.activateHistoryMode();
+      
+      // ✅ ADD A SMALL DELAY TO ENSURE UI IS READY
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
 
     // Load data based on enabled filters
@@ -247,7 +248,6 @@ export class HistoryManager {
     // If no results, grey out the problematic filter
     if (!hasResults) {
       if (timeEnabled && locationEnabled) {
-        // Both enabled - grey out location filter as it's more restrictive
         this.greyOutLocationFilter();
         this.showError(this.tracker.t('noResultsForFilters') || 'No results found. Try adjusting the location filter.');
       } else if (timeEnabled) {
@@ -264,7 +264,13 @@ export class HistoryManager {
     this.tracker.hideNoFilterOverlay();
 
     // Close popup and return to map
-    document.getElementById('history-config-popup').classList.remove('active');
+    const popup = document.getElementById('history-config-popup');
+    if (popup) {
+      popup.classList.remove('active');
+    }
+    
+    // ✅ UPDATE UI AFTER EVERYTHING IS READY
+    this.tracker.updateUILanguage();
   }
 
   greyOutTimeFilter() {

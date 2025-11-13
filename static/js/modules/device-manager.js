@@ -48,7 +48,15 @@ export class DeviceManager {
     const container = document.getElementById('legend-items');
     const countElement = document.getElementById('device-count');
 
-    countElement.textContent = this.devices.size;
+    // ✅ ADD NULL CHECK
+    if (countElement) {
+      countElement.textContent = this.devices.size;
+    }
+
+    if (!container) {
+      console.warn('legend-items container not found');
+      return;
+    }
 
     if (this.devices.size === 0) {
       container.innerHTML = `<div style="color: #9ca3af; font-size: 12px;">${this.tracker.t('noDevicesFound')}</div>`;

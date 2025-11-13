@@ -450,25 +450,29 @@ export class UIManager {
     const liveModeSpan = document.querySelector('#live-mode-btn span:last-child');
     if (liveModeSpan) liveModeSpan.textContent = this.tracker.t('liveMode');
 
-    document.querySelector('#history-mode-btn span:last-child').textContent = this.tracker.t('historyMode');
-    document.querySelector('#change-filter-btn span:last-child').textContent = this.tracker.t('changeFilter');
-    document.querySelector('#live-mode-btn span:last-child').textContent = this.tracker.t('liveMode');
-    
     const menuTextBottom = document.querySelector('#menu-toggle-btn-bottom span:last-child');
     if (menuTextBottom) {
       menuTextBottom.textContent = this.tracker.t('menu');
     }
 
     const modeIndicator = document.getElementById('mode-indicator');
-    if (this.tracker.isHistoryMode) {
-      modeIndicator.innerHTML = `<div class="mode-indicator-dot"></div><span>${this.tracker.t('historyModeBadge')}</span>`;
-    } else {
-      modeIndicator.innerHTML = `<div class="mode-indicator-dot"></div><span>${this.tracker.t('liveModeBadge')}</span>`;
+    if (modeIndicator) {
+      if (this.tracker.isHistoryMode) {
+        modeIndicator.innerHTML = `<div class="mode-indicator-dot"></div><span>${this.tracker.t('historyModeBadge')}</span>`;
+      } else {
+        modeIndicator.innerHTML = `<div class="mode-indicator-dot"></div><span>${this.tracker.t('liveModeBadge')}</span>`;
+      }
     }
 
-    document.querySelector('#popup-menu .popup-header h2').textContent = this.tracker.t('controlsAndInfo');
-    document.querySelector('[data-tab="controls"]').textContent = this.tracker.t('controls');
-    document.querySelector('[data-tab="locations"]').textContent = this.tracker.t('locations');
+    // Popup menu elements
+    const popupHeader = document.querySelector('#popup-menu .popup-header h2');
+    if (popupHeader) popupHeader.textContent = this.tracker.t('controlsAndInfo');
+    
+    const controlsTab = document.querySelector('[data-tab="controls"]');
+    if (controlsTab) controlsTab.textContent = this.tracker.t('controls');
+    
+    const locationsTab = document.querySelector('[data-tab="locations"]');
+    if (locationsTab) locationsTab.textContent = this.tracker.t('locations');
 
     const historyLimitLabel = document.querySelector('label[for="history-limit"]');
     if (historyLimitLabel) {
@@ -485,12 +489,17 @@ export class UIManager {
       traceDotsLabel.textContent = this.tracker.t('showTraceDots');
     }
 
-    document.querySelector('#history-config-popup .popup-header h2').textContent = this.tracker.t('historicalViewConfig');
-    document.querySelector('label[for="start-time-popup"]').textContent = this.tracker.t('from');
-    document.querySelector('label[for="end-time-popup"]').textContent = this.tracker.t('to');
-    document.getElementById('apply-time-filter-popup').textContent = this.tracker.t('applyTimeFilter');
-    document.getElementById('clear-time-filter-popup').textContent = this.tracker.t('clearFilter');
+    // History config popup
+    const historyConfigTitle = document.querySelector('#history-config-popup .popup-header h2');
+    if (historyConfigTitle) historyConfigTitle.textContent = this.tracker.t('historicalViewConfig');
+    
+    const startTimeLabel = document.querySelector('label[for="start-time-popup"]');
+    if (startTimeLabel) startTimeLabel.textContent = this.tracker.t('from');
+    
+    const endTimeLabel = document.querySelector('label[for="end-time-popup"]');
+    if (endTimeLabel) endTimeLabel.textContent = this.tracker.t('to');
 
+    // Filter overlays
     const noFilterTitle = document.getElementById('no-filter-title');
     const noFilterMessage = document.getElementById('no-filter-message');
     const noFilterBtnText = document.getElementById('no-filter-btn-text');
@@ -511,11 +520,13 @@ export class UIManager {
     if (emptyResultsAdjustBtn) emptyResultsAdjustBtn.textContent = this.tracker.t('adjustFilters');
     if (emptyResultsDismissBtn) emptyResultsDismissBtn.textContent = this.tracker.t('dismiss');
 
+    // Route legend
     const legendStart = document.getElementById('legend-start');
     const legendEnd = document.getElementById('legend-end');
     if (legendStart) legendStart.textContent = this.tracker.t('legendStart');
     if (legendEnd) legendEnd.textContent = this.tracker.t('legendEnd');
 
+    // Center buttons
     const devicesText = document.getElementById('devices-text');
     if (devicesText) {
       devicesText.textContent = this.tracker.t('devices');
@@ -526,25 +537,25 @@ export class UIManager {
       centerDevicesText.textContent = this.tracker.t('centerOnDevices');
     }
 
+    // Filter tabs
     const timeFilterTabBtn = document.querySelector('#time-filter-tab-label');
     const locationFilterTabBtn = document.querySelector('#location-filter-tab-label');
     if (timeFilterTabBtn) timeFilterTabBtn.textContent = this.tracker.t('timeFilterTabLabel');
     if (locationFilterTabBtn) locationFilterTabBtn.textContent = this.tracker.t('locationFilterTabLabel');
 
+    // Location filter labels
     const locationLatLabel = document.getElementById('location-lat-label');
     const locationLngLabel = document.getElementById('location-lng-label');
     const locationRadiusLabel = document.getElementById('location-radius-label');
-    const applyLocationBtn = document.getElementById('apply-location-filter');
-    const clearLocationBtn = document.getElementById('clear-location-filter');
 
     if (locationLatLabel) locationLatLabel.textContent = this.tracker.t('latitude');
     if (locationLngLabel) locationLngLabel.textContent = this.tracker.t('longitude');
     if (locationRadiusLabel) locationRadiusLabel.textContent = this.tracker.t('radiusKm');
-    if (applyLocationBtn) applyLocationBtn.textContent = this.tracker.t('applyLocationFilter');
-    if (clearLocationBtn) clearLocationBtn.textContent = this.tracker.t('clearFilter');
 
     const selectOnMapText = document.getElementById('select-on-map-text');
     if (selectOnMapText) selectOnMapText.textContent = '🗺 ' + this.tracker.t('selectOnMap');
+
+    // Geofence elements
     const geofenceManagementTitle = document.getElementById('geofence-management-title');
     if (geofenceManagementTitle) geofenceManagementTitle.textContent = this.tracker.t('geofenceManagement');
 
@@ -590,31 +601,26 @@ export class UIManager {
     const locationFilterSectionLabel = document.getElementById('location-filter-section-label');
     if (locationFilterSectionLabel) locationFilterSectionLabel.textContent = this.tracker.t('locationFilterTabLabel');
 
-    const startTimeLabel = document.getElementById('start-time-label');
-    if (startTimeLabel) startTimeLabel.textContent = this.tracker.t('from');
+    const startTimeLabel2 = document.getElementById('start-time-label');
+    if (startTimeLabel2) startTimeLabel2.textContent = this.tracker.t('from');
 
-    const endTimeLabel = document.getElementById('end-time-label');
-    if (endTimeLabel) endTimeLabel.textContent = this.tracker.t('to');
+    const endTimeLabel2 = document.getElementById('end-time-label');
+    if (endTimeLabel2) endTimeLabel2.textContent = this.tracker.t('to');
 
     const applyFilterText = document.getElementById('apply-filter-text');
     if (applyFilterText) applyFilterText.textContent = this.tracker.t('applyFilter') || 'Apply Filter';
 
     const clearFilterText = document.getElementById('clear-filter-text');
-    if (clearFilterText) clearFilterText.textContent = this.tracker.t('clearAllFilters') || 'Clear All'; 
+    if (clearFilterText) clearFilterText.textContent = this.tracker.t('clearAllFilters') || 'Clear All';
 
-    // Update geofence list to reflect language changes
-    if (this.tracker.geofenceManager) {
-      this.tracker.geofenceManager.updateGeofenceList();
-    }
-
-    // Geofence legend translations
+    // Geofence legend
     const geofencesText = document.getElementById('geofences-text');
     if (geofencesText) geofencesText.textContent = this.tracker.t('geofences');
 
     const centerGeofencesText = document.getElementById('center-geofences-text');
     if (centerGeofencesText) centerGeofencesText.textContent = this.tracker.t('centerGeofences');
 
-    // Update geofence button titles
+    // Geofence buttons
     const drawBtn = document.getElementById('draw-geofence-btn');
     if (drawBtn) drawBtn.title = this.tracker.t('drawNewGeofence');
 
@@ -627,31 +633,18 @@ export class UIManager {
     const menuBtn = document.getElementById('open-geofence-menu-btn');
     if (menuBtn) menuBtn.title = this.tracker.t('geofenceManagement');
 
-    // Update geofence legend
-    if (this.tracker.geofenceManager) {
-      this.tracker.geofenceManager.updateGeofenceLegend();
-    }
-
-    this.tracker.updateConnectionStatus(
-      this.tracker.wsManager.isConnected() ? this.tracker.t('connected') : this.tracker.t('connecting'),
-      this.tracker.wsManager.isConnected() ? 'connected' : 'disconnected'
-    );
-    this.tracker.updateTimeFilterIndicator();
-    this.tracker.displayLocations();
-    this.tracker.deviceManager.updateDeviceLegend();
-
-    // Update vehicle panel translations
+    // ✅ ADD NULL CHECK FOR PANEL ELEMENTS
     const vehiclesPanelTitle = document.getElementById('vehicles-panel-title');
     if (vehiclesPanelTitle) {
       vehiclesPanelTitle.textContent = this.tracker.t('vehiclesPanel');
     }
 
-    // Update vehicle panel content
-    if (this.tracker.vehiclePanelManager) {
-      this.tracker.vehiclePanelManager.updateVehiclePanel();
+    const panelTitle = document.getElementById('panel-title');
+    if (panelTitle) {
+      panelTitle.textContent = this.tracker.t('vehiclesPanel');
     }
 
-    // Update route management translations
+    // Route management translations
     const routeManagementTitle = document.getElementById('route-management-title');
     if (routeManagementTitle) routeManagementTitle.textContent = this.tracker.t('routeManagement');
 
@@ -679,14 +672,12 @@ export class UIManager {
     const noRoutesMsg = document.getElementById('no-routes-msg');
     if (noRoutesMsg) noRoutesMsg.textContent = this.tracker.t('noRoutesCreated');
 
-    // Update route legend
     const routesLegendText = document.getElementById('routes-legend-text');
     if (routesLegendText) routesLegendText.textContent = this.tracker.t('routes');
 
     const centerRoutesText = document.getElementById('center-routes-text');
     if (centerRoutesText) centerRoutesText.textContent = this.tracker.t('centerOnRoutes');
 
-    // Update route button titles
     const createRouteBtn = document.getElementById('create-route-btn');
     if (createRouteBtn) createRouteBtn.title = this.tracker.t('createRouteFromHistory');
 
@@ -699,7 +690,27 @@ export class UIManager {
     const routeMenuBtn = document.getElementById('open-route-menu-btn');
     if (routeMenuBtn) routeMenuBtn.title = this.tracker.t('routeManagement');
 
-    // Update route legend
+    // Update connection status
+    this.tracker.updateConnectionStatus(
+      this.tracker.wsManager.isConnected() ? this.tracker.t('connected') : this.tracker.t('connecting'),
+      this.tracker.wsManager.isConnected() ? 'connected' : 'disconnected'
+    );
+
+    // Update components
+    this.tracker.updateTimeFilterIndicator();
+    this.tracker.displayLocations();
+    this.tracker.deviceManager.updateDeviceLegend();
+
+    // Update panels
+    if (this.tracker.vehiclePanelManager) {
+      this.tracker.vehiclePanelManager.updateVehiclePanel();
+    }
+
+    if (this.tracker.geofenceManager) {
+      this.tracker.geofenceManager.updateGeofenceLegend();
+      this.tracker.geofenceManager.updateGeofenceList();
+    }
+
     if (this.tracker.routeManager) {
       this.tracker.routeManager.updateRouteLegend();
       this.tracker.routeManager.updateRouteList();
