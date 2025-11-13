@@ -307,14 +307,20 @@ export class MapManager {
         el = document.createElement('div');
         el.className = 'pulse-marker';
         el.style.backgroundColor = deviceColor;
+        el.style.width = '20px';
+        el.style.height = '20px';
+        el.style.borderRadius = '50%';
+        el.style.border = '2px solid white';
+        el.style.boxShadow = '0 0 10px rgba(0,0,0,0.3)';
       }
 
       marker = new maplibregl.Marker({
         element: el || undefined,
-        color: isLatest ? undefined : deviceColor
+        color: isLatest ? undefined : deviceColor,
+        anchor: 'center'
       })
         .setLngLat([location.longitude, location.latitude])
-        .setPopup(new maplibregl.Popup().setHTML(popupContent))
+        .setPopup(new maplibregl.Popup({ offset: 25 }).setHTML(popupContent))
         .addTo(this.map);
 
       this.markers.set(deviceId, marker);
@@ -324,10 +330,18 @@ export class MapManager {
       }
     } else {
       marker.setLngLat([location.longitude, location.latitude]);
-      marker.setPopup(new maplibregl.Popup().setHTML(popupContent));
+      marker.setPopup(new maplibregl.Popup({ offset: 25 }).setHTML(popupContent));
 
       const el = marker.getElement();
-      if (isLatest) {
+      if (isLatest && !el.classList.contains('pulse-marker')) {
+        el.className = 'pulse-marker';
+        el.style.backgroundColor = deviceColor;
+        el.style.width = '20px';
+        el.style.height = '20px';
+        el.style.borderRadius = '50%';
+        el.style.border = '2px solid white';
+        el.style.boxShadow = '0 0 10px rgba(0,0,0,0.3)';
+      } else if (isLatest) {
         el.style.backgroundColor = deviceColor;
       }
     }
@@ -379,6 +393,92 @@ export class MapManager {
     this.map.once('moveend', () => {
       setTimeout(() => { this.tracker.suppressUserInteraction = false; }, 50);
     });
+  }
+
+  centerOnSelectedDevices() {
+    // Get only visible/selected devices
+    const visibleDevices = Array.from(this.tracker.selectedDevices).filter(deviceId => {
+      const deviceInfo = this.tracker.devices.get(deviceId);
+      return deviceInfo && deviceInfo.visible;
+    });
+
+    if (visibleDevices.length === 0) {
+      console.log('No visible devices to center on');
+      this.showNotification(this.tracker.t('noDevicesFound'), 'info');
+      return;
+    }
+
+    let locationsToConsider;
+    
+    // Get locations based on current mode
+    if (this.tracker.isHistoryMode) {
+      locationsToConsider = this.tracker.filteredLocations.filter(loc => 
+        visibleDevices.includes(loc.device_id)
+      );
+    } else {
+      locationsToConsider = this.tracker.locations.filter(loc => 
+        visibleDevices.includes(loc.device_id)
+      );
+    }
+
+    if (locationsToConsider.length === 0) {
+      console.log('No locations found for visible devices');
+      this.showNotification(this.tracker.t('noLocationsFound'), 'info');
+      return;
+    }
+
+    // If only one location, just center on it
+    if (locationsToConsider.length === 1) {
+      this.centerMapOnLocation(locationsToConsider[0]);
+      return;
+    }
+
+    // Multiple locations - fit bounds to show all
+    const bounds = new maplibregl.LngLatBounds();
+    locationsToConsider.forEach(loc => {
+      bounds.extend([loc.longitude, loc.latitude]);
+    });
+
+    this.tracker.suppressUserInteraction = true;
+    this.map.fitBounds(bounds, {
+      padding: 100,
+      maxZoom: 15,
+      duration: 800
+    });
+
+    this.map.once('moveend', () => {
+      setTimeout(() => { this.tracker.suppressUserInteraction = false; }, 50);
+    });
+
+    console.log(`Centered map on ${locationsToConsider.length} locations from ${visibleDevices.length} devices`);
+  }
+
+  showNotification(message, type = 'info') {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `map-notification ${type}`;
+    notification.textContent = message;
+    notification.style.cssText = `
+      position: fixed;
+      top: 100px;
+      right: 20px;
+      background: ${type === 'error' ? '#ef4444' : type === 'success' ? '#10b981' : '#3b82f6'};
+      color: white;
+      padding: 12px 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      z-index: 10000;
+      font-size: 14px;
+      max-width: 300px;
+      animation: slideInRight 0.3s ease-out;
+    `;
+    
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+      notification.style.animation = 'slideOutRight 0.3s ease-out';
+      setTimeout(() => notification.remove(), 300);
+    }, 3000);
   }
 
   fitMapToLocations(locations) {

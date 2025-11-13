@@ -45,51 +45,23 @@ export class DeviceManager {
   }
 
   updateDeviceLegend() {
-    const container = document.getElementById('legend-items');
-    const countElement = document.getElementById('device-count');
+    this.updatePanelDeviceList();
+  }
 
-    countElement.textContent = this.devices.size;
-
-    if (this.devices.size === 0) {
-      container.innerHTML = `<div style="color: #9ca3af; font-size: 12px;">${this.tracker.t('noDevicesFound')}</div>`;
-      return;
+  updatePanelDeviceList() {
+    // The panel is updated by vehiclePanelManager, so we just trigger a refresh
+    if (this.tracker.vehiclePanelManager) {
+      this.tracker.vehiclePanelManager.updateVehiclePanel();
     }
-
-    container.innerHTML = '';
-
-    this.devices.forEach((info, deviceId) => {
-      const item = document.createElement('div');
-      item.className = `legend-item ${!info.visible ? 'disabled' : ''}`;
-
-      item.innerHTML = `
-        <input type="checkbox" class="legend-checkbox" ${info.visible ? 'checked' : ''} 
-              data-device="${deviceId}">
-        <div class="legend-color" style="background-color: ${info.color}"></div>
-        <div class="legend-info">
-          <div class="legend-device-name">${deviceId}</div>
-          <div class="legend-stats">${this.tracker.t('locationsCount').replace('{0}', info.count)}</div>
-        </div>
-      `;
-
-      const checkbox = item.querySelector('.legend-checkbox');
-      checkbox.addEventListener('change', (e) => {
-        e.stopPropagation();
-        this.toggleDeviceVisibility(deviceId, checkbox.checked);
-      });
-
-      item.addEventListener('click', (e) => {
-        if (e.target !== checkbox) {
-          checkbox.checked = !checkbox.checked;
-          this.toggleDeviceVisibility(deviceId, checkbox.checked);
-        }
-      });
-
-      container.appendChild(item);
-    });
   }
 
   updateDeviceFilterList() {
     const container = document.getElementById('device-filter-list');
+    
+    // Check if element exists (it may not be in current UI)
+    if (!container) {
+      return; // Element doesn't exist, skip update
+    }
 
     if (this.devices.size === 0) {
       container.innerHTML = `<div style="color: #9ca3af; padding: 10px;">${this.tracker.t('noDevicesFound')}</div>`;
@@ -136,10 +108,8 @@ export class DeviceManager {
         this.selectedDevices.add(deviceId);
       } else {
         this.selectedDevices.delete(deviceId);
-        
         // 🆕 CLEAR TRACE MARKERS for this device
         this.clearDeviceTraceMarkers(deviceId);
-        
         // 🆕 CLEAR ROUTE LINE for this device
         this.clearDeviceRoute(deviceId);
       }
@@ -152,7 +122,6 @@ export class DeviceManager {
       }
 
       this.updateDeviceLegend();
-      this.updateDeviceFilterList();
 
       // 🆕 REGENERATE visualizations when selecting back
       if (visible && !wasVisible) {

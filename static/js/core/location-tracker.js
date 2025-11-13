@@ -1,3 +1,4 @@
+// static/js/core/location-tracker.js - UPDATED VERSION
 import { CONFIG, getApiConfig } from './config.js';
 import { TranslationManager } from './translations.js';
 import { MapManager } from '../modules/map-manager.js';
@@ -5,6 +6,10 @@ import { WebSocketManager } from '../modules/websocket-manager.js';
 import { HistoryManager } from '../modules/history-manager.js';
 import { DeviceManager } from '../modules/device-manager.js';
 import { UIManager } from '../modules/ui-manager.js';
+import { GeofenceManager } from '../modules/geofence-manager.js';
+import { ClusteringManager } from '../modules/clustering-manager.js';
+import { RouteManager } from '../modules/route-manager.js';
+import { VehiclePanelManager } from '../modules/vehicle-panel-manager.js';
 
 export class LocationTracker {
   constructor() {
@@ -18,6 +23,13 @@ export class LocationTracker {
     this.historyManager = new HistoryManager(this);
     this.deviceManager = new DeviceManager(this);
     this.uiManager = new UIManager(this);
+    this.geofenceManager = null; // Initialized after map loads
+    this.clusteringManager = null; // Initialized after map loads
+    this.routeManager = null; // Initialized after map loads
+    this.vehiclePanelManager = null; // Initialized after map loads
+    this.useMarkerClustering = false; // Toggle for clustering
+    this.slidingPanelOpen = false; // Panel starts closed
+    this.activePanelTab = 'vehicles'; // Default tab
 
     // State variables
     this.locations = [];
@@ -35,6 +47,7 @@ export class LocationTracker {
     this.isSelectingLocationOnMap = false;
     this.mapSelectionHandler = null;
     this.deviceLegendCollapsed = false;
+    this.useMarkerClustering = false; // Toggle for clustering
     
     // Selection state
     this.selectedLocationIndex = -1;
@@ -73,13 +86,46 @@ export class LocationTracker {
   async initializeApp() {
     try {
       this.mapManager.initialize();
+      
+      // Initialize geofence and clustering managers after map loads
+      this.mapManager.map.on('load', () => {
+        this.geofenceManager = new GeofenceManager(this);
+        this.geofenceManager.initialize();
+        
+        this.clusteringManager = new ClusteringManager(this.mapManager);
+        this.clusteringManager.initialize();
+        
+        // AGREGAR ESTAS LÍNEAS:
+        this.vehiclePanelManager = new VehiclePanelManager(this);
+        this.vehiclePanelManager.initialize();
+        
+        this.routeManager = new RouteManager(this);
+        this.routeManager.initialize();
+        // Setup map event handlers for geofence drawing
+        this.mapManager.map.on('click', (e) => {
+          this.geofenceManager.handleMapClick(e);
+        });
+        
+        this.mapManager.map.on('dblclick', (e) => {
+          this.geofenceManager.handleMapDoubleClick(e);
+        });
+        
+        // Setup keyboard handler for finishing drawing
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' && this.geofenceManager.drawingMode) {
+            this.geofenceManager.finishDrawing();
+          } else if (e.key === 'Escape' && this.geofenceManager.drawingMode) {
+            this.geofenceManager.cancelDrawing();
+          }
+        });
+      });
+      
       this.uiManager.setupEventListeners();
       this.uiManager.setupPopupMenu();
       this.uiManager.setupOverlayEventListeners();
       await this.deviceManager.loadDevices();
       await this.loadInitialData();
       
-      // Setup visibility handler before connecting WebSocket
       this.setupVisibilityHandler();
       
       this.wsManager.connect();
@@ -126,50 +172,8 @@ export class LocationTracker {
     }
   }
 
-  // NEW: Toggle device legend collapse/expand
-  toggleDeviceLegend() {
-    const legend = document.getElementById('device-legend');
-    this.deviceLegendCollapsed = !this.deviceLegendCollapsed;
-    
-    if (this.deviceLegendCollapsed) {
-      legend.classList.add('collapsed');
-    } else {
-      legend.classList.remove('collapsed');
-    }
-  }
-
-  // NEW: Center on currently selected/visible devices
   centerOnSelectedDevices() {
-    // Get visible devices with location data
-    const visibleDevices = Array.from(this.selectedDevices).filter(deviceId => {
-      const deviceInfo = this.devices.get(deviceId);
-      return deviceInfo && deviceInfo.visible;
-    });
-
-    if (visibleDevices.length === 0) {
-      console.log('No visible devices to center on');
-      return;
-    }
-
-    // Get locations to consider based on mode
-    let locationsToConsider;
-    if (this.isHistoryMode) {
-      locationsToConsider = this.filteredLocations.filter(loc => 
-        visibleDevices.includes(loc.device_id)
-      );
-    } else {
-      locationsToConsider = this.locations.filter(loc => 
-        visibleDevices.includes(loc.device_id)
-      );
-    }
-
-    if (locationsToConsider.length === 0) {
-      console.log('No locations found for visible devices');
-      return;
-    }
-
-    // Fit map to these locations
-    this.mapManager.fitMapToLocations(locationsToConsider);
+    this.mapManager.centerOnSelectedDevices();
   }
 
   async loadInitialData() {
@@ -193,9 +197,14 @@ export class LocationTracker {
         this.updateRouteForDevice();
 
         if (this.locations.length > 0) {
-          this.mapManager.updateMapMarker(this.locations[0], true);
-          if (this.isTrackingLatest) {
-            this.mapManager.centerMapOnLatestLocation();
+          // Check if we should use clustering
+          if (this.clusteringManager && this.clusteringManager.shouldUseClustering(this.locations.length)) {
+            this.enableClustering();
+          } else {
+            this.mapManager.updateMapMarker(this.locations[0], true);
+            if (this.isTrackingLatest) {
+              this.mapManager.centerMapOnLatestLocation();
+            }
           }
         }
       } else {
@@ -207,6 +216,33 @@ export class LocationTracker {
     }
   }
 
+  enableClustering() {
+    this.useMarkerClustering = true;
+    this.mapManager.clearAllMarkers();
+    
+    if (this.clusteringManager) {
+      this.clusteringManager.toggleClustering(true);
+      this.clusteringManager.updateClusteredLocations(this.locations, this.devices);
+    }
+    
+    console.log('Clustering enabled for', this.locations.length, 'locations');
+  }
+
+  disableClustering() {
+    this.useMarkerClustering = false;
+    
+    if (this.clusteringManager) {
+      this.clusteringManager.toggleClustering(false);
+    }
+    
+    // Restore individual markers
+    this.locations.forEach(loc => {
+      this.mapManager.updateMapMarker(loc, false);
+    });
+    
+    console.log('Clustering disabled');
+  }
+
   handleLocationUpdate(location) {
     console.log('Received location update:', location);
 
@@ -215,6 +251,10 @@ export class LocationTracker {
       return;
     }
     this.applyLocationUpdate(location);
+    
+    if (this.vehiclePanelManager) {
+      this.vehiclePanelManager.updateVehiclePanel();
+    }
   }
 
   applyLocationUpdate(location) {
@@ -242,11 +282,19 @@ export class LocationTracker {
     }
 
     this.deviceManager.updateDeviceLegend();
+    
+    // Update clustering if enabled
+    if (this.useMarkerClustering && this.clusteringManager) {
+      this.clusteringManager.updateClusteredLocations(this.locations, this.devices);
+    }
+    
     this.filterAndDisplayLocations();
     this.updateStatistics();
 
     if (this.selectedDevices.has(location.device_id)) {
-      this.mapManager.updateMapMarker(location, !this.isHistoryMode);
+      if (!this.useMarkerClustering) {
+        this.mapManager.updateMapMarker(location, !this.isHistoryMode);
+      }
       this.deviceManager.updateDeviceRoute(location.device_id);
 
       if (this.isTrackingLatest && !this.userInteracted) {
@@ -641,7 +689,6 @@ export class LocationTracker {
   }
   
   setupVisibilityHandler() {
-    // Handle page visibility changes
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden && !this.wsManager.isConnected()) {
         console.log('Page became visible, reconnecting WebSocket...');
@@ -650,7 +697,6 @@ export class LocationTracker {
       }
     });
 
-    // Handle page focus
     window.addEventListener('focus', () => {
       if (!this.wsManager.isConnected()) {
         console.log('Window focused, reconnecting WebSocket...');
@@ -659,9 +705,45 @@ export class LocationTracker {
       }
     });
 
-    // Handle beforeunload to clean up properly
     window.addEventListener('beforeunload', () => {
       this.wsManager.disconnect();
+    });
+  }
+  // Proxy method for vehicle panel
+  toggleVehiclePanel() {
+    if (this.vehiclePanelManager) {
+      this.vehiclePanelManager.toggleVehiclePanel();
+    }
+  }
+
+  toggleSlidingPanel() {
+    this.slidingPanelOpen = !this.slidingPanelOpen;
+    const panel = document.getElementById('sliding-panel');
+    
+    if (this.slidingPanelOpen) {
+      panel.classList.add('open');
+    } else {
+      panel.classList.remove('open');
+    }
+  }
+  
+  switchPanelTab(tabName) {
+    this.activePanelTab = tabName;
+    
+    // Update tab buttons
+    document.querySelectorAll('.panel-tab').forEach(btn => {
+      btn.classList.remove('active');
+      if (btn.dataset.panelTab === tabName) {
+        btn.classList.add('active');
+      }
+    });
+    
+    // Update tab content
+    document.querySelectorAll('.panel-tab-content').forEach(content => {
+      content.classList.remove('active');
+      if (content.id === `${tabName}-panel-tab`) {
+        content.classList.add('active');
+      }
     });
   }
 

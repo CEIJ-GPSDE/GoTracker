@@ -14,10 +14,6 @@ on:
         description: "Deploy to EC2_1"
         type: boolean
         default: false
-      deploy_to_EC2_2:
-        description: "Deploy to EC2_2"
-        type: boolean
-        default: false
       deploy_to_EC2_3:
         description: "Deploy to EC2_3"
         type: boolean
@@ -32,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        instance: [EC2_1, EC2_2, EC2_3, EC2_4]
+        instance: [EC2_1, EC2_3, EC2_4]
       fail-fast: false
     steps:
       - name: Validate inputs for workflow_dispatch
@@ -68,16 +64,6 @@ jobs:
                 else
                   echo "deploy=false" >> $GITHUB_OUTPUT
                   echo "Skipping ${{ matrix.instance }} for dev/cesar push"
-                fi
-                ;;
-              "dev/Barrios")
-                if [ "${{ matrix.instance }}" = "EC2_2" ]; then
-                  echo "deploy=true" >> $GITHUB_OUTPUT
-                  echo "branch=dev/Barrios" >> $GITHUB_OUTPUT
-                  echo "Deploying dev/Barrios to EC2_2 (triggered by push)"
-                else
-                  echo "deploy=false" >> $GITHUB_OUTPUT
-                  echo "Skipping ${{ matrix.instance }} for dev/Barrios push"
                 fi
                 ;;
               "dev/uribe")

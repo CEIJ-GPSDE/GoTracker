@@ -11,10 +11,6 @@ on:
         description: "Deploy to EC2_1"
         type: boolean
         default: false
-      deploy_to_EC2_2:
-        description: "Deploy to EC2_2"
-        type: boolean
-        default: false
       deploy_to_EC2_3:
         description: "Deploy to EC2_3"
         type: boolean
@@ -32,8 +28,6 @@ jobs:
         include:
           - instance: EC2_1
             deploy: ${{ github.event.inputs.deploy_to_EC2_1 }}
-          - instance: EC2_2
-            deploy: ${{ github.event.inputs.deploy_to_EC2_2 }}
           - instance: EC2_3
             deploy: ${{ github.event.inputs.deploy_to_EC2_3 }}
           - instance: EC2_4
