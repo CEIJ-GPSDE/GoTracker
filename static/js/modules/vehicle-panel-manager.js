@@ -7,22 +7,35 @@ export class VehiclePanelManager {
 
   initialize() {
     this.updateVehiclePanel();
+    this.setupPanelTabs();
     // Update panel every 5 seconds
     setInterval(() => this.updateVehiclePanel(), 5000);
   }
 
+  setupPanelTabs() {
+    document.querySelectorAll('.panel-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.tracker.switchPanelTab(btn.dataset.panelTab);
+        
+        // Update content based on tab
+        if (btn.dataset.panelTab === 'vehicles') {
+          this.updateVehiclePanel();
+        } else if (btn.dataset.panelTab === 'geofences') {
+          if (this.tracker.geofenceManager) {
+            this.tracker.geofenceManager.updatePanelGeofenceList();
+          }
+        } else if (btn.dataset.panelTab === 'routes') {
+          if (this.tracker.routeManager) {
+            this.tracker.routeManager.updatePanelRouteList();
+          }
+        }
+      });
+    });
+  }
+
   toggleVehiclePanel() {
-    this.panelCollapsed = !this.panelCollapsed;
-    const panel = document.getElementById('vehicle-panel');
-    const icon = document.getElementById('panel-toggle-icon');
-    
-    if (this.panelCollapsed) {
-      panel.classList.add('collapsed');
-      icon.textContent = '▶';
-    } else {
-      panel.classList.remove('collapsed');
-      icon.textContent = '◀';
-    }
+    // Deprecated - now uses unified sliding panel
+    this.tracker.toggleSlidingPanel();
   }
 
   updateVehiclePanel() {

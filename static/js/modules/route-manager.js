@@ -441,6 +441,62 @@ export class RouteManager {
     }).join('');
 
     container.innerHTML = items;
+    
+    // Also update panel list
+    this.updatePanelRouteList();
+  }
+
+  updatePanelRouteList() {
+    const container = document.getElementById('route-panel-items');
+    if (!container) return;
+
+    // Update stats
+    const totalElement = document.getElementById('panel-total-routes-count');
+    if (totalElement) {
+      totalElement.textContent = this.routes.size;
+    }
+
+    let totalDistance = 0;
+    this.routes.forEach(route => {
+      totalDistance += route.distance_meters || 0;
+    });
+
+    const distanceElement = document.getElementById('panel-total-distance-count');
+    if (distanceElement) {
+      distanceElement.textContent = `${(totalDistance / 1000).toFixed(1)} km`;
+    }
+
+    if (this.routes.size === 0) {
+      container.innerHTML = `
+        <div style="color: #9ca3af; font-size: 12px; text-align: center; padding: 20px;">
+          <span>${this.tracker.t('noRoutesCreated')}</span>
+        </div>
+      `;
+      return;
+    }
+
+    const items = Array.from(this.routes.values()).map(route => {
+      const distanceKm = (route.distance_meters / 1000).toFixed(1);
+      const color = this.routeColors[route.id % this.routeColors.length];
+      
+      return `
+        <div class="route-list-item" onclick="window.locationTracker.routeManager.focusRoute(${route.id})" style="border-left-color: ${color};">
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+            <div style="width: 12px; height: 12px; border-radius: 3px; background: ${color}; flex-shrink: 0;"></div>
+            <div style="flex: 1;">
+              <h5 style="margin: 0; font-size: 13px; font-weight: 600; color: #374151;">
+                ${route.route_name || 'Unnamed Route'}
+              </h5>
+            </div>
+          </div>
+          <div style="font-size: 11px; color: #6b7280;">
+            ${distanceKm} km • ${route.device_id}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    container.innerHTML = items;
   }
 
   updateRouteStats() {

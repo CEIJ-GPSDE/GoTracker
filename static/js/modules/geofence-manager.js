@@ -819,6 +819,71 @@ export class GeofenceManager {
     }).join('');
 
     container.innerHTML = items;
+    
+    // Also update panel list
+    this.updatePanelGeofenceList();
+  }
+
+  updatePanelGeofenceList() {
+    const container = document.getElementById('geofence-panel-items');
+    if (!container) return;
+
+    // Update stats
+    const totalElement = document.getElementById('panel-total-geofences-count');
+    if (totalElement) {
+      totalElement.textContent = this.geofences.size;
+    }
+
+    const activeCount = Array.from(this.geofences.values()).filter(gf => gf.active).length;
+    const activeElement = document.getElementById('panel-active-geofences-count');
+    if (activeElement) {
+      activeElement.textContent = activeCount;
+    }
+
+    const devicesInsideCount = this.devicesInsideGeofences.size;
+    const devicesElement = document.getElementById('panel-devices-inside-count');
+    if (devicesElement) {
+      devicesElement.textContent = devicesInsideCount;
+    }
+
+    if (this.geofences.size === 0) {
+      container.innerHTML = `
+        <div style="color: #9ca3af; font-size: 12px; text-align: center; padding: 20px;">
+          <span>${this.tracker.t('noGeofencesCreated')}</span>
+        </div>
+      `;
+      return;
+    }
+
+    const items = Array.from(this.geofences.values()).map(gf => {
+      const devicesInside = this.getDevicesInGeofence(gf.id);
+      const color = gf.active ? '#667eea' : '#9ca3af';
+      
+      return `
+        <div class="geofence-list-item" onclick="window.locationTracker.geofenceManager.focusGeofence(${gf.id})">
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+            <div style="width: 12px; height: 12px; border-radius: 3px; background: ${color}; flex-shrink: 0;"></div>
+            <div style="flex: 1;">
+              <h5 style="margin: 0; font-size: 13px; font-weight: 600; color: #374151;">
+                ${gf.name}
+              </h5>
+            </div>
+            <span style="font-size: 10px; color: ${gf.active ? '#10b981' : '#ef4444'}; font-weight: 600;">
+              ${gf.active ? '✓' : '✗'}
+            </span>
+          </div>
+          <div style="font-size: 11px; color: #6b7280;">
+            ${devicesInside.length} device${devicesInside.length !== 1 ? 's' : ''} inside
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    container.innerHTML = items;
+  }
+
+  toggleGeofenceVisibility() {
+    this.toggleAllGeofencesVisibility();
   }
 
   focusGeofence(geofenceId) {

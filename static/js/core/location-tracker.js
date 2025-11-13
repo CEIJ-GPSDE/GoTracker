@@ -27,6 +27,10 @@ export class LocationTracker {
     this.clusteringManager = null; // Initialized after map loads
     this.routeManager = null; // Initialized after map loads
     this.vehiclePanelManager = null; // Initialized after map loads
+    this.deviceLegendCollapsed = false;
+    this.useMarkerClustering = false; // Toggle for clustering
+    this.slidingPanelOpen = false; // Panel starts closed
+    this.activePanelTab = 'vehicles'; // Default tab
 
     // State variables
     this.locations = [];

@@ -42,54 +42,6 @@
           </div>
         </div>
         
-        <!-- Legends - Top Left -->
-        <div class="top-left-controls">
-          <!-- Device Legend -->
-          <div class="device-legend" id="device-legend">
-            <div class="device-legend-header" onclick="window.locationTracker.toggleDeviceLegend()">
-              <h4>
-                📱 <span id="devices-text">Devices</span>
-                <span id="device-count" style="font-size: 12px; font-weight: normal; color: #6b7280;">0</span>
-              </h4>
-              <button class="device-legend-toggle">▼</button>
-            </div>
-            <div id="legend-items"></div>
-            <button class="center-devices-btn" id="center-devices-btn" onclick="window.locationTracker.centerOnSelectedDevices()">
-              🎯 <span id="center-devices-text">Center on Devices</span>
-            </button>
-          </div>
-          
-          <!-- Geofence Legend -->
-          <div class="geofence-legend" id="geofence-legend">
-            <div class="geofence-legend-header" onclick="window.locationTracker.geofenceManager?.toggleGeofenceLegend()">
-              <h4>
-                🗺️ <span id="geofences-text">Geofences</span>
-                <span id="geofence-count" style="font-size: 12px; font-weight: normal; color: #6b7280;">0</span>
-              </h4>
-              <button class="geofence-legend-toggle">▼</button>
-            </div>
-            <div id="geofence-legend-items"></div>
-            <button class="center-geofences-btn" id="center-geofences-btn" onclick="window.locationTracker.geofenceManager?.centerOnGeofences()">
-              🎯 <span id="center-geofences-text">Center on Geofences</span>
-            </button>
-          </div>
-
-          <!-- Route Legend -->
-          <div class="route-legend-panel" id="route-legend-panel">
-            <div class="route-legend-header" onclick="window.locationTracker.routeManager?.toggleRouteLegend()">
-              <h4>
-                🛣️ <span id="routes-legend-text">Routes</span>
-                <span id="route-count" style="font-size: 12px; font-weight: normal; color: #6b7280;">0</span>
-              </h4>
-              <button class="route-legend-toggle">▼</button>
-            </div>
-            <div id="route-legend-items"></div>
-            <button class="center-routes-btn" id="center-routes-btn" onclick="window.locationTracker.routeManager?.centerOnRoutes()">
-              🎯 <span id="center-routes-text">Center on Routes</span>
-            </button>
-          </div>
-        </div>
-        
         <div class="time-filter-indicator" id="time-filter-indicator">
           <div id="time-filter-text">-</div>
         </div>
@@ -481,18 +433,103 @@
       </div>
     </div>
   </div>
-  <!-- Vehicle Info Panel - Sidebar -->
-  <div class="vehicle-panel" id="vehicle-panel">
-    <div class="vehicle-panel-header">
-      <h3>🚗 <span id="vehicles-panel-title">Vehicles</span></h3>
-      <button class="panel-toggle-btn" onclick="window.locationTracker.toggleVehiclePanel()">
-        <span id="panel-toggle-icon">◀</span>
-      </button>
-    </div>
-    <div class="vehicle-panel-body">
-      <div id="vehicle-list-panel">
-        <div class="loading">
-          <div class="spinner"></div>Loading vehicles...
+  <!-- Unified Sliding Panel - Left Side -->
+  <div class="sliding-panel" id="sliding-panel">
+    <!-- Hamburger Toggle Button -->
+    <button class="panel-hamburger" id="panel-hamburger" onclick="window.locationTracker.toggleSlidingPanel()">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+    
+    <div class="panel-content">
+      <div class="panel-header">
+        <h3>📍 <span id="panel-title">Navigation</span></h3>
+        <button class="panel-close-btn" onclick="window.locationTracker.toggleSlidingPanel()">×</button>
+      </div>
+      
+      <div class="panel-tabs">
+        <button class="panel-tab active" data-panel-tab="vehicles">
+          🚗 <span id="vehicles-tab-title">Vehicles</span>
+        </button>
+        <button class="panel-tab" data-panel-tab="geofences">
+          🗺️ <span id="geofences-tab-title">Geofences</span>
+        </button>
+        <button class="panel-tab" data-panel-tab="routes">
+          🛣️ <span id="routes-tab-title">Routes</span>
+        </button>
+      </div>
+      
+      <div class="panel-body">
+        <!-- Vehicles Tab -->
+        <div class="panel-tab-content active" id="vehicles-panel-tab">
+          <div id="vehicle-list-panel">
+            <div class="loading">
+              <div class="spinner"></div>Loading vehicles...
+            </div>
+          </div>
+        </div>
+        
+        <!-- Geofences Tab -->
+        <div class="panel-tab-content" id="geofences-panel-tab">
+          <div class="panel-section-actions">
+            <button class="panel-action-btn" onclick="window.locationTracker.geofenceManager?.startDrawing()">
+              🖊️ <span id="draw-geofence-panel-text">Draw New</span>
+            </button>
+            <button class="panel-action-btn secondary" onclick="window.locationTracker.geofenceManager?.toggleGeofenceVisibility()">
+              👁️ <span id="toggle-geofence-panel-text">Toggle</span>
+            </button>
+          </div>
+          
+          <div class="panel-stats">
+            <div class="stat-box">
+              <span class="stat-label" id="panel-total-geofences-label">Total:</span>
+              <span class="stat-value" id="panel-total-geofences-count">0</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-label" id="panel-active-geofences-label">Active:</span>
+              <span class="stat-value" id="panel-active-geofences-count">0</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-label" id="panel-devices-inside-label">Devices:</span>
+              <span class="stat-value" id="panel-devices-inside-count">0</span>
+            </div>
+          </div>
+          
+          <div id="geofence-panel-items">
+            <div style="color: #9ca3af; font-size: 12px; text-align: center; padding: 20px;">
+              <span id="no-geofences-panel-msg">No geofences created yet</span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Routes Tab -->
+        <div class="panel-tab-content" id="routes-panel-tab">
+          <div class="panel-section-actions">
+            <button class="panel-action-btn" onclick="window.locationTracker.routeManager?.startCreatingRoute()">
+              📍 <span id="create-route-panel-text">Create Route</span>
+            </button>
+            <button class="panel-action-btn secondary" onclick="window.locationTracker.routeManager?.toggleAllRoutesVisibility()">
+              👁️ <span id="toggle-route-panel-text">Toggle</span>
+            </button>
+          </div>
+          
+          <div class="panel-stats">
+            <div class="stat-box">
+              <span class="stat-label" id="panel-total-routes-label">Total:</span>
+              <span class="stat-value" id="panel-total-routes-count">0</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-label" id="panel-total-distance-label">Distance:</span>
+              <span class="stat-value" id="panel-total-distance-count">0 km</span>
+            </div>
+          </div>
+          
+          <div id="route-panel-items">
+            <div style="color: #9ca3af; font-size: 12px; text-align: center; padding: 20px;">
+              <span id="no-routes-panel-msg">No routes created yet</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
