@@ -611,6 +611,7 @@ func (api *APIServer) Run(ctx context.Context) {
 	// Route routes
 	r.HandleFunc("/api/routes", api.getRoutesHandler).Methods("GET")
 	r.HandleFunc("/api/routes", api.createRouteHandler).Methods("POST")
+	r.HandleFunc("/api/routes/{id}", api.deleteRouteHandler).Methods("DELETE")
 
 	// Static file serving (MUST be last)
 	r.PathPrefix("/").Handler(http.FileServer(http.Dir("./static/")))
@@ -1673,6 +1674,27 @@ func (api *APIServer) createRouteHandler(w http.ResponseWriter, r *http.Request)
     w.Header().Set("Content-Type", "application/json")
     w.WriteHeader(http.StatusCreated)
     json.NewEncoder(w).Encode(route)
+}
+
+// Add this function near the other route handlers (around line 1100)
+func (api *APIServer) deleteRouteHandler(w http.ResponseWriter, r *http.Request) {
+    vars := mux.Vars(r)
+    routeID := vars["id"]
+
+    result, err := api.db.Exec("DELETE FROM routes WHERE id = $1", routeID)
+    if err != nil {
+        log.Printf("Error deleting route: %v", err)
+        http.Error(w, "Database error", http.StatusInternalServerError)
+        return
+    }
+
+    rowsAffected, _ := result.RowsAffected()
+    if rowsAffected == 0 {
+        http.Error(w, "Route not found", http.StatusNotFound)
+        return
+    }
+
+    w.WriteHeader(http.StatusNoContent)
 }
 
 // Distance calculation between two points

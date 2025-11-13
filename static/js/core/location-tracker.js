@@ -8,6 +8,7 @@ import { DeviceManager } from '../modules/device-manager.js';
 import { UIManager } from '../modules/ui-manager.js';
 import { GeofenceManager } from '../modules/geofence-manager.js';
 import { ClusteringManager } from '../modules/clustering-manager.js';
+import { RouteManager } from '../modules/route-manager.js';
 
 export class LocationTracker {
   constructor() {
@@ -23,6 +24,7 @@ export class LocationTracker {
     this.uiManager = new UIManager(this);
     this.geofenceManager = null; // Initialized after map loads
     this.clusteringManager = null; // Initialized after map loads
+    this.routeManager = null; // Initialized after map loads
 
     // State variables
     this.locations = [];

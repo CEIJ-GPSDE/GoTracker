@@ -413,7 +413,25 @@ export class UIManager {
   }
 
   updateUILanguage() {
-    document.querySelector('.header p').textContent = this.tracker.t('subtitle');
+    const headerP = document.querySelector('.header p');
+    if (headerP) headerP.textContent = this.tracker.t('subtitle');
+
+    const trackBtn = document.getElementById('track-latest-btn');
+    if (trackBtn) {
+      const trackSpan = trackBtn.querySelector('span:last-child');
+      if (trackSpan) {
+        trackSpan.textContent = this.tracker.isTrackingLatest ? this.tracker.t('trackLatest') : this.tracker.t('trackingOff');
+      }
+    }
+
+    const historyModeSpan = document.querySelector('#history-mode-btn span:last-child');
+    if (historyModeSpan) historyModeSpan.textContent = this.tracker.t('historyMode');
+    
+    const changeFilterSpan = document.querySelector('#change-filter-btn span:last-child');
+    if (changeFilterSpan) changeFilterSpan.textContent = this.tracker.t('changeFilter');
+    
+    const liveModeSpan = document.querySelector('#live-mode-btn span:last-child');
+    if (liveModeSpan) liveModeSpan.textContent = this.tracker.t('liveMode');
 
     const trackBtn = document.getElementById('track-latest-btn');
     if (trackBtn) {
