@@ -133,6 +133,11 @@ export const TRANSLATIONS = {
     centerGeofences: "Center on Geofences",
     hideGeofences: "Hide Geofences",
     showGeofences: "Show Geofences",
+    filterConfiguration: "Filter Configuration",
+    selectAtLeastOneFilter: "Please enable at least one filter",
+    fixErrorsBeforeApplying: "Please fix validation errors. Filters with errors are now locked.",
+    clearAllFilters: "Clear All",
+    applyFilter: "Apply Filter",
     geofenceStatus: "Status"
   },
   es: {
@@ -269,6 +274,11 @@ export const TRANSLATIONS = {
     centerGeofences: "Centrar en Geocercas",
     hideGeofences: "Ocultar Geocercas",
     showGeofences: "Mostrar Geocercas", 
+    filterConfiguration: "Configuración de Filtro",
+    selectAtLeastOneFilter: "Por favor habilite al menos un filtro",
+    fixErrorsBeforeApplying: "Por favor corrija los errores de validación. Los filtros con errores están ahora bloqueados.",
+    clearAllFilters: "Limpiar Todo",
+    applyFilter: "Aplicar Filtro", 
     geofenceStatus: "Estado"
   }
 };

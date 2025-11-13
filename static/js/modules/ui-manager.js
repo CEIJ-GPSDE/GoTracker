@@ -199,6 +199,28 @@ export class UIManager {
   }
 
   setupFilterButtons() {
+    // Enable/disable time filter
+    const timeCheckbox = document.getElementById('enable-time-filter');
+    const timeContent = document.getElementById('time-filter-content');
+    
+    if (timeCheckbox) {
+      timeCheckbox.addEventListener('change', (e) => {
+        this.tracker.historyManager.timeFilterEnabled = e.target.checked;
+        timeContent.style.display = e.target.checked ? 'block' : 'none';
+      });
+    }
+
+    // Enable/disable location filter
+    const locationCheckbox = document.getElementById('enable-location-filter');
+    const locationContent = document.getElementById('location-filter-content');
+    
+    if (locationCheckbox) {
+      locationCheckbox.addEventListener('change', (e) => {
+        this.tracker.historyManager.locationFilterEnabled = e.target.checked;
+        locationContent.style.display = e.target.checked ? 'block' : 'none';
+      });
+    }
+
     // Time filter quick ranges
     document.querySelectorAll('.quick-range-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -211,35 +233,19 @@ export class UIManager {
       });
     });
 
-    // Apply time filter
-    const applyTimeBtn = document.getElementById('apply-time-filter-popup');
-    if (applyTimeBtn) {
-      applyTimeBtn.addEventListener('click', () => {
-        this.tracker.historyManager.applyTimeFilterFromPopup();
+    // Apply unified filter
+    const applyBtn = document.getElementById('apply-unified-filter');
+    if (applyBtn) {
+      applyBtn.addEventListener('click', () => {
+        this.tracker.historyManager.applyUnifiedFilter();
       });
     }
 
-    // Clear time filter
-    const clearTimeBtn = document.getElementById('clear-time-filter-popup');
-    if (clearTimeBtn) {
-      clearTimeBtn.addEventListener('click', () => {
-        this.tracker.historyManager.clearTimeFilter();
-      });
-    }
-
-    // Apply location filter
-    const applyLocationBtn = document.getElementById('apply-location-filter');
-    if (applyLocationBtn) {
-      applyLocationBtn.addEventListener('click', () => {
-        this.tracker.historyManager.applyLocationFilterFromPopup();
-      });
-    }
-
-    // Clear location filter
-    const clearLocationBtn = document.getElementById('clear-location-filter');
-    if (clearLocationBtn) {
-      clearLocationBtn.addEventListener('click', () => {
-        this.tracker.historyManager.clearLocationFilter();
+    // Clear all filters
+    const clearBtn = document.getElementById('clear-unified-filter');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        this.tracker.historyManager.clearAllFilters();
       });
     }
 
@@ -542,6 +548,30 @@ export class UIManager {
 
     const noGeofencesMsg = document.getElementById('no-geofences-msg');
     if (noGeofencesMsg) noGeofencesMsg.textContent = this.tracker.t('noGeofencesCreated');
+
+    const historyConfigTitle = document.getElementById('history-config-title');
+    if (historyConfigTitle) historyConfigTitle.textContent = this.tracker.t('historicalViewConfig');
+
+    const unifiedFilterTitle = document.getElementById('unified-filter-title');
+    if (unifiedFilterTitle) unifiedFilterTitle.textContent = this.tracker.t('filterConfiguration') || 'Filter Configuration';
+
+    const timeFilterSectionLabel = document.getElementById('time-filter-section-label');
+    if (timeFilterSectionLabel) timeFilterSectionLabel.textContent = this.tracker.t('timeFilterTabLabel');
+
+    const locationFilterSectionLabel = document.getElementById('location-filter-section-label');
+    if (locationFilterSectionLabel) locationFilterSectionLabel.textContent = this.tracker.t('locationFilterTabLabel');
+
+    const startTimeLabel = document.getElementById('start-time-label');
+    if (startTimeLabel) startTimeLabel.textContent = this.tracker.t('from');
+
+    const endTimeLabel = document.getElementById('end-time-label');
+    if (endTimeLabel) endTimeLabel.textContent = this.tracker.t('to');
+
+    const applyFilterText = document.getElementById('apply-filter-text');
+    if (applyFilterText) applyFilterText.textContent = this.tracker.t('applyFilter') || 'Apply Filter';
+
+    const clearFilterText = document.getElementById('clear-filter-text');
+    if (clearFilterText) clearFilterText.textContent = this.tracker.t('clearAllFilters') || 'Clear All'; 
 
     // Update geofence list to reflect language changes
     if (this.tracker.geofenceManager) {
