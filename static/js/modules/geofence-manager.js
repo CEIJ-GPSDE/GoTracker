@@ -211,6 +211,7 @@ export class GeofenceManager {
     this.map.on('click', `${sourceId}-fill`, (e) => {
       this.showGeofencePopup(geofence, e.lngLat);
     });
+  }
 
   toggleAllGeofencesVisibility() {
     // Toggle the global flag
