@@ -257,6 +257,19 @@ body {
   background: linear-gradient(135deg, #dc2626, #b91c1c);
 }
 
+.route-list-item.dimmed,
+.geofence-list-item.dimmed {
+  opacity: 0.5;
+  background: #f3f4f6;
+}
+
+.route-visibility-checkbox,
+.geofence-checkbox {
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+}
+
 /* ========== MODE INDICATOR (Bottom Center) ========== */
 .mode-indicator {
   position: absolute;

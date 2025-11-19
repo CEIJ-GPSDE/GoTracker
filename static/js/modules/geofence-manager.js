@@ -45,6 +45,28 @@ export class GeofenceManager {
 
     // Update stats periodically
     setInterval(() => this.updateGeofenceStats(), 5000);
+    
+    this.currentPopup = null;
+  
+    // ADD: Close popup on ESC key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.currentPopup) {
+        this.currentPopup.remove();
+        this.currentPopup = null;
+      }
+    });
+    
+    // ADD: Close popup when clicking map background
+    this.map.on('click', (e) => {
+      // Check if click was on map background (not on a layer)
+      const features = this.map.queryRenderedFeatures(e.point);
+      const isGeofenceClick = features.some(f => f.source && f.source.startsWith('geofence-'));
+      
+      if (!isGeofenceClick && this.currentPopup) {
+        this.currentPopup.remove();
+        this.currentPopup = null;
+      }
+    });
   }
 
   async loadGeofences() {
@@ -173,6 +195,11 @@ export class GeofenceManager {
   }
 
   showGeofencePopup(geofence, lngLat) {
+    // CLOSE any existing popup first
+    if (this.currentPopup) {
+      this.currentPopup.remove();
+    }
+    
     const devicesInside = this.getDevicesInGeofence(geofence.id);
     const devicesList = devicesInside.length > 0 
       ? devicesInside.map(d => `<li style="margin: 2px 0;">${d}</li>`).join('') 
@@ -180,7 +207,7 @@ export class GeofenceManager {
 
     const areaKm2 = this.calculateGeofenceArea(geofence.coordinates);
 
-    new maplibregl.Popup({
+    this.currentPopup = new maplibregl.Popup({
       maxWidth: '300px',
       closeButton: true,
       closeOnClick: false
@@ -189,7 +216,7 @@ export class GeofenceManager {
       .setHTML(`
         <div style="font-family: system-ui; min-width: 250px; max-width: 300px;">
           <h4 style="margin: 0 0 10px 0; color: #667eea; word-wrap: break-word;">
-            📍 ${geofence.name}
+            🗺️ ${geofence.name}
           </h4>
           <div style="font-size: 12px; color: #6b7280; margin-bottom: 8px; word-wrap: break-word;">
             ${geofence.description || this.tracker.t('noDescription') || 'No description'}
@@ -200,7 +227,7 @@ export class GeofenceManager {
           <div style="font-size: 11px; margin-bottom: 8px;">
             <strong>${this.tracker.t('geofenceStatus')}:</strong> 
             <span style="color: ${geofence.active ? '#10b981' : '#ef4444'};">
-              ${geofence.active ? '✓ ' + this.tracker.t('activeGeofences') : '✗ ' + this.tracker.t('inactive')}
+              ${geofence.active ? '✔ ' + this.tracker.t('activeGeofences') : '✗ ' + this.tracker.t('inactive')}
             </span>
           </div>
           <div style="font-size: 11px; margin-bottom: 10px;">
@@ -224,6 +251,11 @@ export class GeofenceManager {
         </div>
       `)
       .addTo(this.map);
+    
+    // ADD: Track when popup is closed
+    this.currentPopup.on('close', () => {
+      this.currentPopup = null;
+    });
   }
 
   calculateGeofenceArea(coordinates) {
@@ -311,6 +343,7 @@ export class GeofenceManager {
     }
 
     this.updateGeofenceLegend();
+    this.updatePanelGeofenceList();
   }
 
   toggleAllGeofencesVisibility() {
@@ -412,7 +445,7 @@ export class GeofenceManager {
           <div class="geofence-name">${geofence.name}</div>
           <div class="geofence-details">
             <span>${devicesInside.length} 📱</span>
-            <span>${geofence.active ? '✓' : '✗'}</span>
+            <span>${geofence.active ? '✔' : '✗'}</span>
           </div>
         </div>
       `;

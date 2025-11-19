@@ -293,7 +293,7 @@ export class LocationTracker {
 
     if (this.selectedDevices.has(location.device_id)) {
       if (!this.useMarkerClustering) {
-        this.mapManager.updateMapMarker(location, !this.isHistoryMode);
+        this.mapManager.updateMapMarker(location, true);
       }
       this.deviceManager.updateDeviceRoute(location.device_id);
 

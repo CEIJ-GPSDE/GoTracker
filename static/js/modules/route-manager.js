@@ -478,10 +478,16 @@ export class RouteManager {
     const items = Array.from(this.routes.values()).map(route => {
       const distanceKm = (route.distance_meters / 1000).toFixed(1);
       const color = this.routeColors[route.id % this.routeColors.length];
+      const isVisible = this.visibleRoutes.has(route.id);
       
       return `
-        <div class="route-list-item" onclick="window.locationTracker.routeManager.focusRoute(${route.id})" style="border-left-color: ${color};">
+        <div class="route-list-item ${isVisible ? '' : 'dimmed'}" onclick="window.locationTracker.routeManager.focusRoute(${route.id})" style="border-left-color: ${color};">
           <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+            <input type="checkbox" 
+                  class="route-visibility-checkbox" 
+                  ${isVisible ? 'checked' : ''} 
+                  onclick="event.stopPropagation(); window.locationTracker.routeManager.toggleRouteVisibility(${route.id}, this.checked)"
+                  title="${isVisible ? 'Hide route' : 'Show route'}">
             <div style="width: 12px; height: 12px; border-radius: 3px; background: ${color}; flex-shrink: 0;"></div>
             <div style="flex: 1;">
               <h5 style="margin: 0; font-size: 13px; font-weight: 600; color: #374151;">
