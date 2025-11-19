@@ -83,7 +83,6 @@ export class GeofenceManager {
       });
     };
       console.log('Run window.debugGeofences() to see geofence state');
-    }
   }
 
   async loadGeofences() {
