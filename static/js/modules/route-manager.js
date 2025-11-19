@@ -11,6 +11,28 @@ export class RouteManager {
   }
 
   initialize() {
+    // ADD: Track current popup
+    this.currentPopup = null;
+    
+    // ADD: Close popup on ESC key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.currentPopup) {
+        this.currentPopup.remove();
+        this.currentPopup = null;
+      }
+    });
+    
+    // ADD: Close popup when clicking map background
+    this.map.on('click', (e) => {
+      const features = this.map.queryRenderedFeatures(e.point);
+      const isRouteClick = features.some(f => f.source && f.source.startsWith('route-'));
+      
+      if (!isRouteClick && this.currentPopup) {
+        this.currentPopup.remove();
+        this.currentPopup = null;
+      }
+    });
+    
     this.loadRoutes();
   }
 
@@ -116,10 +138,15 @@ export class RouteManager {
   }
 
   showRoutePopup(route, lngLat, color) {
+    // CLOSE any existing popup first
+    if (this.currentPopup) {
+      this.currentPopup.remove();
+    }
+    
     const distanceKm = (route.distance_meters / 1000).toFixed(2);
     const duration = this.calculateDuration(route.start_time, route.end_time);
 
-    new maplibregl.Popup({
+    this.currentPopup = new maplibregl.Popup({
       maxWidth: '300px',
       closeButton: true,
       closeOnClick: false
@@ -158,6 +185,11 @@ export class RouteManager {
         </div>
       `)
       .addTo(this.map);
+    
+    // Track when popup is closed
+    this.currentPopup.on('close', () => {
+      this.currentPopup = null;
+    });
   }
 
   calculateDuration(startTime, endTime) {

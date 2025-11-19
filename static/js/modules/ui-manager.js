@@ -12,12 +12,13 @@ export class UIManager {
     const popupClose = document.getElementById('popup-close');
     const historyConfigPopup = document.getElementById('history-config-popup');
     const historyConfigClose = document.getElementById('history-config-close');
-    const tabButtons = document.querySelectorAll('.tab-button');
-    const tabContents = document.querySelectorAll('.tab-content');
 
-    menuToggleBottom.addEventListener('click', () => {
-      popupMenu.classList.add('active');
-    });
+    // Menu toggle
+    if (menuToggleBottom) {
+      menuToggleBottom.addEventListener('click', () => {
+        popupMenu.classList.add('active');
+      });
+    }
 
     const closeMenu = () => {
       popupMenu.classList.remove('active');
@@ -27,51 +28,80 @@ export class UIManager {
       historyConfigPopup.classList.remove('active');
     };
 
-    popupClose.addEventListener('click', closeMenu);
-    historyConfigClose.addEventListener('click', closeHistoryConfig);
+    if (popupClose) popupClose.addEventListener('click', closeMenu);
+    if (historyConfigClose) historyConfigClose.addEventListener('click', closeHistoryConfig);
 
-    popupMenu.querySelector('.popup-content').addEventListener('click', (e) => {
-      e.stopPropagation();
-    });
+    // Prevent clicks inside popup from closing it
+    if (popupMenu) {
+      popupMenu.querySelector('.popup-content').addEventListener('click', (e) => {
+        e.stopPropagation();
+      });
+      
+      popupMenu.addEventListener('click', (e) => {
+        if (e.target === popupMenu) {
+          closeMenu();
+        }
+      });
+    }
 
-    historyConfigPopup.querySelector('.popup-content').addEventListener('click', (e) => {
-      e.stopPropagation();
-    });
+    if (historyConfigPopup) {
+      historyConfigPopup.querySelector('.popup-content').addEventListener('click', (e) => {
+        e.stopPropagation();
+      });
+      
+      historyConfigPopup.addEventListener('click', (e) => {
+        if (e.target === historyConfigPopup) {
+          closeHistoryConfig();
+        }
+      });
+    }
 
-    popupMenu.addEventListener('click', (e) => {
-      if (e.target === popupMenu) {
-        closeMenu();
-      }
-    });
+    // FIX: Tab switching functionality
+    const tabButtons = document.querySelectorAll('#popup-menu .tab-button');
+    const tabContents = document.querySelectorAll('#popup-menu .tab-content');
 
-    historyConfigPopup.addEventListener('click', (e) => {
-      if (e.target === historyConfigPopup) {
-        closeHistoryConfig();
-      }
-    });
+    console.log('Found tab buttons:', tabButtons.length);
+    console.log('Found tab contents:', tabContents.length);
 
     tabButtons.forEach(button => {
-      button.addEventListener('click', () => {
+      button.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
         const tabId = button.dataset.tab;
+        console.log('Tab clicked:', tabId);
 
+        // Remove active from all buttons
         tabButtons.forEach(btn => btn.classList.remove('active'));
+        
+        // Add active to clicked button
         button.classList.add('active');
 
+        // Hide all tab contents
         tabContents.forEach(content => {
           content.classList.remove('active');
-          if (content.id === `${tabId}-tab`) {
-            content.classList.add('active');
-          }
+          content.style.display = 'none';
         });
+        
+        // Show selected tab content
+        const selectedContent = document.getElementById(`${tabId}-tab`);
+        if (selectedContent) {
+          selectedContent.classList.add('active');
+          selectedContent.style.display = 'block';
+          console.log('Showing tab:', tabId);
+        } else {
+          console.error('Tab content not found:', `${tabId}-tab`);
+        }
       });
     });
 
+    // ESC key handler
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        if (popupMenu.classList.contains('active')) {
+        if (popupMenu && popupMenu.classList.contains('active')) {
           closeMenu();
         }
-        if (historyConfigPopup.classList.contains('active')) {
+        if (historyConfigPopup && historyConfigPopup.classList.contains('active')) {
           closeHistoryConfig();
         }
       }

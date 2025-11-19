@@ -347,6 +347,27 @@ export class MapManager {
     }
   }
 
+  // NEW METHOD: Update markers for all selected devices with their latest locations
+  updateAllDeviceMarkers() {
+    // Get the latest location for each selected device
+    const latestByDevice = new Map();
+    
+    this.tracker.locations.forEach(loc => {
+      if (this.tracker.selectedDevices.has(loc.device_id)) {
+        if (!latestByDevice.has(loc.device_id)) {
+          latestByDevice.set(loc.device_id, loc);
+        }
+      }
+    });
+    
+    // Update marker for each device
+    latestByDevice.forEach((location, deviceId) => {
+      this.updateMapMarker(location, true);
+    });
+    
+    console.log(`Updated markers for ${latestByDevice.size} devices`);
+  }
+
   centerMapOnLocation(location) {
     this.tracker.userInteracted = false;
     this.tracker.suppressUserInteraction = true;

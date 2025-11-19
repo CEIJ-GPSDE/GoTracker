@@ -118,7 +118,7 @@ export class GeofenceManager {
 
     const sourceId = `geofence-${geofence.id}`;
     
-    // Remove existing layers if present
+    // FIX: Always remove and recreate layers to ensure state updates
     if (this.map.getLayer(`${sourceId}-fill`)) {
       this.map.removeLayer(`${sourceId}-fill`);
     }
@@ -180,12 +180,16 @@ export class GeofenceManager {
       }
     });
 
-    // Add click handler
+    // Re-add click handler
+    this.map.off('click', `${sourceId}-fill`); // Remove old handler
     this.map.on('click', `${sourceId}-fill`, (e) => {
       this.showGeofencePopup(geofence, e.lngLat);
     });
 
-    // Change cursor on hover
+    // Re-add hover handlers
+    this.map.off('mouseenter', `${sourceId}-fill`);
+    this.map.off('mouseleave', `${sourceId}-fill`);
+    
     this.map.on('mouseenter', `${sourceId}-fill`, () => {
       this.map.getCanvas().style.cursor = 'pointer';
     });
@@ -900,10 +904,16 @@ export class GeofenceManager {
     const items = Array.from(this.geofences.values()).map(gf => {
       const devicesInside = this.getDevicesInGeofence(gf.id);
       const color = gf.active ? '#667eea' : '#9ca3af';
+      const isVisible = this.visibleGeofences.has(gf.id);
       
       return `
-        <div class="geofence-list-item" onclick="window.locationTracker.geofenceManager.focusGeofence(${gf.id})">
+        <div class="geofence-list-item ${!isVisible ? 'dimmed' : ''}" onclick="window.locationTracker.geofenceManager.focusGeofence(${gf.id})">
           <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+            <input type="checkbox" 
+                  class="geofence-visibility-checkbox" 
+                  ${isVisible ? 'checked' : ''} 
+                  onclick="event.stopPropagation(); window.locationTracker.geofenceManager.toggleGeofenceVisibility(${gf.id}, this.checked)"
+                  title="${isVisible ? 'Hide geofence' : 'Show geofence'}">
             <div style="width: 12px; height: 12px; border-radius: 3px; background: ${color}; flex-shrink: 0;"></div>
             <div style="flex: 1;">
               <h5 style="margin: 0; font-size: 13px; font-weight: 600; color: #374151;">
@@ -911,7 +921,7 @@ export class GeofenceManager {
               </h5>
             </div>
             <span style="font-size: 10px; color: ${gf.active ? '#10b981' : '#ef4444'}; font-weight: 600;">
-              ${gf.active ? '✓' : '✗'}
+              ${gf.active ? '✔' : '✗'}
             </span>
           </div>
           <div style="font-size: 11px; color: #6b7280;">

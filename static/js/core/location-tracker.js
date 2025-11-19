@@ -178,7 +178,7 @@ export class LocationTracker {
 
   async loadInitialData() {
     try {
-      const limit = this.isHistoryMode ? this.historyLimit : 1;
+      const limit = this.isHistoryMode ? this.historyLimit : 1000; // Load more in live mode
       const response = await fetch(`${this.config.apiBaseUrl}/api/locations/history?limit=${limit}`);
       if (response.ok) {
         const locations = await response.json();
@@ -186,10 +186,11 @@ export class LocationTracker {
         if (this.isHistoryMode) {
           this.locations = locations || [];
         } else {
-          this.initialDbLocation = locations.length > 0 ? locations[0] : null;
+          // FIX: In live mode, keep all recent locations for each device
+          this.locations = locations || [];
           this.liveLocations = [];
           this.hasReceivedLiveUpdate = false;
-          this.locations = this.initialDbLocation ? [this.initialDbLocation] : [];
+          this.initialDbLocation = locations.length > 0 ? locations[0] : null;
         }
 
         this.displayLocations();
@@ -201,9 +202,11 @@ export class LocationTracker {
           if (this.clusteringManager && this.clusteringManager.shouldUseClustering(this.locations.length)) {
             this.enableClustering();
           } else {
-            this.mapManager.updateMapMarker(this.locations[0], true);
+            // FIX: Update markers for ALL selected devices, not just the first one
+            this.mapManager.updateAllDeviceMarkers();
+            
             if (this.isTrackingLatest) {
-              this.mapManager.centerMapOnLatestLocation();
+              this.mapManager.centerMapOnDevices(); // Center on all devices
             }
           }
         }
