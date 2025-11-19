@@ -67,6 +67,23 @@ export class GeofenceManager {
         this.currentPopup = null;
       }
     });
+    window.debugGeofences = () => {
+      console.log('=== Geofence Debug Info ===');
+      console.log('showGeofences (global):', this.showGeofences);
+      console.log('visibleGeofences (individual):', Array.from(this.visibleGeofences));
+      this.geofences.forEach((gf, id) => {
+        const sourceId = `geofence-${id}`;
+        const fillLayer = this.map.getLayer(`${sourceId}-fill`);
+        const visibility = fillLayer ? this.map.getLayoutProperty(`${sourceId}-fill`, 'visibility') : 'N/A';
+        console.log(`Geofence ${id} (${gf.name}):`, {
+          active: gf.active,
+          individuallyVisible: this.visibleGeofences.has(id),
+          layerVisibility: visibility
+        });
+      });
+    };
+      console.log('Run window.debugGeofences() to see geofence state');
+    }
   }
 
   async loadGeofences() {
@@ -118,7 +135,7 @@ export class GeofenceManager {
 
     const sourceId = `geofence-${geofence.id}`;
     
-    // FIX: Always remove and recreate layers to ensure state updates
+    // Remove existing layers if present
     if (this.map.getLayer(`${sourceId}-fill`)) {
       this.map.removeLayer(`${sourceId}-fill`);
     }
@@ -136,7 +153,8 @@ export class GeofenceManager {
         type: 'Feature',
         properties: {
           id: geofence.id,
-          name: geofence.name
+          name: geofence.name,
+          active: geofence.active
         },
         geometry: {
           type: 'Polygon',
@@ -145,11 +163,16 @@ export class GeofenceManager {
       }
     });
 
-    const isVisible = this.visibleGeofences.has(geofence.id) && this.showGeofences;
+    // FIX: Check BOTH individual visibility AND global showGeofences flag
+    const isIndividuallyVisible = this.visibleGeofences.has(geofence.id);
+    const isVisible = isIndividuallyVisible && this.showGeofences;
+    
+    console.log(`Drawing geofence ${geofence.id}: individually=${isIndividuallyVisible}, global=${this.showGeofences}, final=${isVisible}`);
     
     // Visual distinction: active = blue/purple, inactive = gray with dashed outline
     const fillColor = geofence.active ? '#667eea' : '#9ca3af';
     const outlineColor = geofence.active ? '#667eea' : '#6b7280';
+    const fillOpacity = geofence.active ? 0.2 : 0.1;
 
     // Add fill layer
     this.map.addLayer({
@@ -161,7 +184,7 @@ export class GeofenceManager {
       },
       paint: {
         'fill-color': fillColor,
-        'fill-opacity': geofence.active ? 0.2 : 0.1
+        'fill-opacity': fillOpacity
       }
     });
 
@@ -176,187 +199,34 @@ export class GeofenceManager {
       paint: {
         'line-color': outlineColor,
         'line-width': 2,
-        'line-dasharray': geofence.active ? [1, 0] : [2, 2] // Dashed for inactive
+        'line-dasharray': geofence.active ? [1, 0] : [2, 2] // Solid for active, dashed for inactive
       }
     });
 
-    // Re-add click handler
-    this.map.off('click', `${sourceId}-fill`); // Remove old handler
+    // Remove old handlers before adding new ones
+    this.map.off('click', `${sourceId}-fill`);
+    this.map.off('mouseenter', `${sourceId}-fill`);
+    this.map.off('mouseleave', `${sourceId}-fill`);
+    
+    // Add click handler
     this.map.on('click', `${sourceId}-fill`, (e) => {
       this.showGeofencePopup(geofence, e.lngLat);
     });
 
-    // Re-add hover handlers
-    this.map.off('mouseenter', `${sourceId}-fill`);
-    this.map.off('mouseleave', `${sourceId}-fill`);
-    
-    this.map.on('mouseenter', `${sourceId}-fill`, () => {
-      this.map.getCanvas().style.cursor = 'pointer';
-    });
-    this.map.on('mouseleave', `${sourceId}-fill`, () => {
-      this.map.getCanvas().style.cursor = '';
-    });
-  }
-
-  showGeofencePopup(geofence, lngLat) {
-    // CLOSE any existing popup first
-    if (this.currentPopup) {
-      this.currentPopup.remove();
-    }
-    
-    const devicesInside = this.getDevicesInGeofence(geofence.id);
-    const devicesList = devicesInside.length > 0 
-      ? devicesInside.map(d => `<li style="margin: 2px 0;">${d}</li>`).join('') 
-      : `<li style="color: #9ca3af;">${this.tracker.t('noDevicesFound')}</li>`;
-
-    const areaKm2 = this.calculateGeofenceArea(geofence.coordinates);
-
-    this.currentPopup = new maplibregl.Popup({
-      maxWidth: '300px',
-      closeButton: true,
-      closeOnClick: false
-    })
-      .setLngLat(lngLat)
-      .setHTML(`
-        <div style="font-family: system-ui; min-width: 250px; max-width: 300px;">
-          <h4 style="margin: 0 0 10px 0; color: #667eea; word-wrap: break-word;">
-            🗺️ ${geofence.name}
-          </h4>
-          <div style="font-size: 12px; color: #6b7280; margin-bottom: 8px; word-wrap: break-word;">
-            ${geofence.description || this.tracker.t('noDescription') || 'No description'}
-          </div>
-          <div style="font-size: 11px; color: #9ca3af; margin-bottom: 8px;">
-            ${this.tracker.t('geofenceArea')}: ${areaKm2.toFixed(2)} ${this.tracker.t('geofenceAreaKm')}
-          </div>
-          <div style="font-size: 11px; margin-bottom: 8px;">
-            <strong>${this.tracker.t('geofenceStatus')}:</strong> 
-            <span style="color: ${geofence.active ? '#10b981' : '#ef4444'};">
-              ${geofence.active ? '✔ ' + this.tracker.t('activeGeofences') : '✗ ' + this.tracker.t('inactive')}
-            </span>
-          </div>
-          <div style="font-size: 11px; margin-bottom: 10px;">
-            <strong>${this.tracker.t('devicesInside')} (${devicesInside.length}):</strong>
-            <ul style="margin: 5px 0; padding-left: 20px; max-height: 80px; overflow-y: auto;">
-              ${devicesList}
-            </ul>
-          </div>
-          <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
-            <button 
-              onclick="window.locationTracker.geofenceManager.toggleGeofenceActive(${geofence.id})" 
-              style="width: 100%; padding: 8px 12px; background: ${geofence.active ? '#f59e0b' : '#10b981'}; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500;">
-              ${geofence.active ? this.tracker.t('deactivateGeofence') : this.tracker.t('activateGeofence')}
-            </button>
-            <button 
-              onclick="window.locationTracker.geofenceManager.deleteGeofence(${geofence.id})" 
-              style="width: 100%; padding: 8px 12px; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500;">
-              🗑️ ${this.tracker.t('deleteGeofence')}
-            </button>
-          </div>
-        </div>
-      `)
-      .addTo(this.map);
-    
-    // ADD: Track when popup is closed
-    this.currentPopup.on('close', () => {
-      this.currentPopup = null;
-    });
-  }
-
-  calculateGeofenceArea(coordinates) {
-    // Validate coordinates
-    if (!coordinates || !Array.isArray(coordinates) || coordinates.length < 3) {
-      return 0;
-    }
-
-    let area = 0;
-    const n = coordinates.length - 1;
-    
-    for (let i = 0; i < n; i++) {
-      const j = (i + 1) % n;
-      if (!coordinates[i] || !coordinates[j] || 
-          coordinates[i].length < 2 || coordinates[j].length < 2) {
-        continue;
-      }
-      area += coordinates[i][0] * coordinates[j][1];
-      area -= coordinates[j][0] * coordinates[i][1];
-    }
-    
-    area = Math.abs(area) / 2;
-    const kmPerDegree = 111.32;
-    return area * kmPerDegree * kmPerDegree;
-  }
-
-  getDevicesInGeofence(geofenceId) {
-    const devices = [];
-    this.devicesInsideGeofences.forEach((geofences, deviceId) => {
-      if (geofences.has(geofenceId)) {
-        devices.push(deviceId);
-      }
-    });
-    return devices;
-  }
-
-  async toggleGeofenceActive(geofenceId) {
-    const geofence = this.geofences.get(geofenceId);
-    if (!geofence) return;
-
-    try {
-      const response = await fetch(`${this.tracker.config.apiBaseUrl}/api/geofences/${geofenceId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ active: !geofence.active })
-      });
-
-      if (response.ok) {
-        const updated = await response.json();
-        this.geofences.set(geofenceId, updated);
-        this.drawGeofence(updated);
-        this.updateGeofenceLegend();
-        this.updateGeofenceList();
-        
-        this.updatePanelGeofenceList();
-        
-        const popups = document.querySelectorAll('.maplibregl-popup');
-        popups.forEach(popup => popup.remove());
-        
-        this.showNotification(
-          `${this.tracker.t('geofence')} "${geofence.name}" ${updated.active ? this.tracker.t('activated') : this.tracker.t('deactivated')}`,
-          'success'
-        );
-      }
-    } catch (error) {
-      console.error('Error toggling geofence:', error);
-    }
-  }
-
-  toggleGeofenceVisibility(geofenceId, visible) {
-    if (visible) {
-      this.visibleGeofences.add(geofenceId);
-    } else {
-      this.visibleGeofences.delete(geofenceId);
-    }
-
-    const sourceId = `geofence-${geofenceId}`;
-    const visibility = visible && this.showGeofences ? 'visible' : 'none';
-    
-    if (this.map.getLayer(`${sourceId}-fill`)) {
-      this.map.setLayoutProperty(`${sourceId}-fill`, 'visibility', visibility);
-    }
-    if (this.map.getLayer(`${sourceId}-outline`)) {
-      this.map.setLayoutProperty(`${sourceId}-outline`, 'visibility', visibility);
-    }
-
-    this.updateGeofenceLegend();
-    this.updatePanelGeofenceList();
-  }
-
   toggleAllGeofencesVisibility() {
+    // Toggle the global flag
     this.showGeofences = !this.showGeofences;
     
+    console.log(`Toggling ALL geofences to ${this.showGeofences ? 'visible' : 'hidden'}`);
+    
+    // Update visibility for ALL geofences based on both flags
     this.geofences.forEach((gf, id) => {
       const sourceId = `geofence-${id}`;
-      const isVisible = this.visibleGeofences.has(id) && this.showGeofences;
-      const visibility = isVisible ? 'visible' : 'none';
+      
+      // Respect BOTH individual visibility preference AND global flag
+      const isIndividuallyVisible = this.visibleGeofences.has(id);
+      const shouldBeVisible = isIndividuallyVisible && this.showGeofences;
+      const visibility = shouldBeVisible ? 'visible' : 'none';
       
       if (this.map.getLayer(`${sourceId}-fill`)) {
         this.map.setLayoutProperty(`${sourceId}-fill`, 'visibility', visibility);
@@ -366,6 +236,7 @@ export class GeofenceManager {
       }
     });
     
+    // Update button state
     const btn = document.getElementById('toggle-geofences-btn');
     if (btn) {
       btn.classList.toggle('active', !this.showGeofences);
@@ -457,7 +328,9 @@ export class GeofenceManager {
       const checkbox = item.querySelector('.geofence-checkbox');
       checkbox.addEventListener('change', (e) => {
         e.stopPropagation();
-        this.toggleGeofenceVisibility(id, checkbox.checked);
+        console.log(`Checkbox changed for geofence ${id}: ${checkbox.checked}`);
+        // FIX: Explicitly pass the geofence ID, not rely on closure
+        window.locationTracker.geofenceManager.toggleGeofenceVisibility(id, checkbox.checked);
       });
 
       item.addEventListener('click', (e) => {
@@ -932,10 +805,6 @@ export class GeofenceManager {
     }).join('');
 
     container.innerHTML = items;
-  }
-
-  toggleGeofenceVisibility() {
-    this.toggleAllGeofencesVisibility();
   }
 
   focusGeofence(geofenceId) {

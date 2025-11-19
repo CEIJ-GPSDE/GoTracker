@@ -178,7 +178,7 @@ export class LocationTracker {
 
   async loadInitialData() {
     try {
-      const limit = this.isHistoryMode ? this.historyLimit : 1000; // Load more in live mode
+      const limit = this.isHistoryMode ? this.historyLimit : 1; // Load more in live mode
       const response = await fetch(`${this.config.apiBaseUrl}/api/locations/history?limit=${limit}`);
       if (response.ok) {
         const locations = await response.json();
