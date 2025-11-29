@@ -429,6 +429,7 @@ export class GeofenceManager {
           `${this.tracker.t('geofence')} "${geofence.name}" ${updated.active ? this.tracker.t('activated') : this.tracker.t('deactivated')}`,
           'success'
         );
+        this.loadGeofences();
         console.log(`Geofence ${geofenceId} toggled to ${updated.active ? 'active' : 'inactive'}`);
       }
     } catch (error) {
@@ -461,6 +462,7 @@ export class GeofenceManager {
     // Update UI
     this.updateGeofenceLegend();
     this.updatePanelGeofenceList();
+    this.loadGeofences();
   }
 
   toggleAllGeofencesVisibility() {
