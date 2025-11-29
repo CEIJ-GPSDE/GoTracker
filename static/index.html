@@ -41,11 +41,11 @@
             <span>Connecting...</span>
           </div>
         </div>
-        
+
         <div class="time-filter-indicator" id="time-filter-indicator">
           <div id="time-filter-text">-</div>
         </div>
-        
+
         <div class="map-controls">
           <button id="track-latest-btn" class="track-btn enabled">
             <div class="track-icon"></div>
@@ -66,9 +66,9 @@
             <span>Live Mode</span>
           </button>
         </div>
-        
+
         <div id="map"></div>
-        
+
         <div class="no-filter-overlay" id="no-filter-overlay">
           <h3 id="no-filter-title">⚠️ No Time Filter Applied</h3>
           <p id="no-filter-message">Please configure a time filter in History Settings to view historical data.</p>
@@ -90,12 +90,12 @@
             <span id="empty-results-dismiss-btn">Dismiss</span>
           </button>
         </div>
-        
+
         <div class="mode-indicator live-mode" id="mode-indicator">
           <div class="mode-indicator-dot"></div>
           <span>🔴 LIVE MODE</span>
         </div>
-        
+
       <!-- Menu Button - Bottom Right -->
         <div class="bottom-right-menu">
           <button id="menu-toggle-btn-bottom" class="menu-toggle-btn-bottom">
@@ -133,7 +133,7 @@
           <button class="tab-button active" data-tab="controls">⚙️ Controls</button>
           <button class="tab-button" data-tab="locations">📍 Locations</button>
           <button class="tab-button" data-tab="geofences">🗺️ Geofences</button>
-          <button class="tab-button" data-tab="routes">🛣️ Routes</button> 
+          <button class="tab-button" data-tab="routes">🛣️ Routes</button>
         </div>
 
         <!-- Controls Tab -->
@@ -145,7 +145,7 @@
                 <input type="number" id="history-limit" value="50" min="10" max="500">
               </div>
               <button class="btn" id="refresh-data-btn" onclick="locationTracker.refreshData()">Refresh Data</button>
-              
+
               <div class="control-item">
                 <label style="display:flex; align-items:center; gap:6px; cursor:pointer; width:100%;">
                   <input type="checkbox" id="toggle-trace-dots" checked>
@@ -180,12 +180,15 @@
           <div class="card">
             <div class="card-body">
               <h4 style="margin-bottom: 15px; color: #374151;">🗺️ <span id="geofence-management-title">Geofence Management</span></h4>
-              
+
               <!-- Actions -->
               <div class="button-group" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
                 <button class="btn" onclick="window.locationTracker.geofenceManager?.startDrawing()">
                   🖊️ <span id="draw-geofence-btn-text">Draw New Geofence</span>
                 </button>
+               <button class="btn secondary" onclick="window.locationTracker.geofenceManager?. createGeofenceFromRoute()" style="margin-bottom: 10px;">
+                🛣️ <span id="create-from-route-btn-text">Create from Route</span>
+              </button>
                 <button class="btn secondary" onclick="window.locationTracker.geofenceManager?.loadGeofences()">
                   🔄 <span id="reload-geofences-btn-text">Reload Geofences</span>
                 </button>
@@ -239,7 +242,7 @@
           <div class="card">
             <div class="card-body">
               <h4 style="margin-bottom: 15px; color: #374151;">🛣️ <span id="route-management-title">route management</span></h4>
-              
+
               <!-- actions -->
               <div class="button-group" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
                 <button class="btn" onclick="window.locationTracker.routeManager?.startcreatingroute()">
@@ -320,14 +323,14 @@
         <button class="popup-close" id="history-config-close">×</button>
       </div>
       <div class="popup-body">
-        
+
         <!-- Unified Filter Card -->
         <div class="card">
           <div class="card-body">
             <h4 style="margin-bottom: 15px; color: #374151;">
               🔍 <span id="unified-filter-title">Filter Configuration</span>
             </h4>
-            
+
             <!-- Time Filter Section -->
             <div class="filter-section" id="time-filter-section">
               <h5 style="margin: 0 0 10px 0; color: #374151; font-size: 14px; display: flex; align-items: center; gap: 8px;">
@@ -336,7 +339,7 @@
                   ⏱️ <span id="time-filter-section-label">Time Filter</span>
                 </label>
               </h5>
-              
+
               <div class="filter-content" id="time-filter-content" style="display: none; margin-left: 28px;">
                 <div class="quick-ranges" style="margin-bottom: 10px;">
                   <button class="quick-range-btn" data-hours="1">1h</button>
@@ -367,7 +370,7 @@
                   📍 <span id="location-filter-section-label">Location Filter</span>
                 </label>
               </h5>
-              
+
               <div class="filter-content" id="location-filter-content" style="display: none; margin-left: 28px;">
                 <div class="control-group">
                   <label for="location-lat-input" id="location-lat-label">Latitude:</label>
@@ -402,7 +405,7 @@
             </div>
           </div>
         </div>
-        
+
       </div>
     </div>
   </div>
@@ -414,13 +417,13 @@
       <span></span>
       <span></span>
     </button>
-    
+
     <div class="panel-content">
       <div class="panel-header">
         <h3>📍 <span id="panel-title">Navigation</span></h3>
         <button class="panel-close-btn">×</button>
       </div>
-      
+
       <div class="panel-tabs">
         <button class="panel-tab active" data-panel-tab="vehicles">
           🚗 <span id="vehicles-tab-title">Vehicles</span>
@@ -432,7 +435,7 @@
           🛣️ <span id="routes-tab-title">Routes</span>
         </button>
       </div>
-      
+
       <div class="panel-body">
         <!-- Vehicles Tab -->
         <div class="panel-tab-content active" id="vehicles-panel-tab">
@@ -442,7 +445,7 @@
             </div>
           </div>
         </div>
-        
+
         <!-- Geofences Tab -->
         <div class="panel-tab-content" id="geofences-panel-tab">
           <div class="panel-section-actions">
@@ -456,7 +459,7 @@
               🔄 <span id="reload-geofence-panel-text">Reload</span>
             </button>
           </div>
-          
+
           <div class="panel-stats">
             <div class="stat-box">
               <span class="stat-label" id="panel-total-geofences-label">Total:</span>
@@ -471,14 +474,14 @@
               <span class="stat-value" id="panel-devices-inside-count">0</span>
             </div>
           </div>
-          
+
           <div id="geofence-panel-items">
             <div style="color: #9ca3af; font-size: 12px; text-align: center; padding: 20px;">
               <span id="no-geofences-panel-msg">No geofences created yet</span>
             </div>
           </div>
         </div>
-        
+
         <!-- Routes Tab -->
         <div class="panel-tab-content" id="routes-panel-tab">
           <div class="panel-section-actions">
@@ -492,7 +495,7 @@
               🔄 <span id="reload-route-panel-text">Reload</span>
             </button>
           </div>
-          
+
           <div class="panel-stats">
             <div class="stat-box">
               <span class="stat-label" id="panel-total-routes-label">Total:</span>
@@ -503,7 +506,7 @@
               <span class="stat-value" id="panel-total-distance-count">0 km</span>
             </div>
           </div>
-          
+
           <div id="route-panel-items">
             <div style="color: #9ca3af; font-size: 12px; text-align: center; padding: 20px;">
               <span id="no-routes-panel-msg">No routes created yet</span>

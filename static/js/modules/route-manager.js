@@ -13,7 +13,7 @@ export class RouteManager {
   initialize() {
     // ADD: Track current popup
     this.currentPopup = null;
-    
+
     // ADD: Close popup on ESC key
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && this.currentPopup) {
@@ -21,18 +21,18 @@ export class RouteManager {
         this.currentPopup = null;
       }
     });
-    
+
     // ADD: Close popup when clicking map background
     this.map.on('click', (e) => {
       const features = this.map.queryRenderedFeatures(e.point);
       const isRouteClick = features.some(f => f.source && f.source.startsWith('route-'));
-      
+
       if (!isRouteClick && this.currentPopup) {
         this.currentPopup.remove();
         this.currentPopup = null;
       }
     });
-    
+
     this.loadRoutes();
   }
 
@@ -42,16 +42,16 @@ export class RouteManager {
       if (response.ok) {
         const routes = await response.json();
         this.routes.clear();
-        
+
         // Clear existing route layers
         this.clearAllRouteLayers();
-        
+
         routes.forEach(route => {
           this.routes.set(route.id, route);
           this.visibleRoutes.add(route.id);
           this.drawRoute(route);
         });
-        
+
         console.log(`Loaded ${routes.length} routes`);
         this.updateRouteList();
         this.updateRouteStats();
@@ -79,7 +79,7 @@ export class RouteManager {
 
     const sourceId = `route-${route.id}`;
     const color = this.routeColors[route.id % this.routeColors.length];
-    
+
     // Remove existing layer if present
     if (this.map.getLayer(sourceId)) {
       this.map.removeLayer(sourceId);
@@ -142,7 +142,7 @@ export class RouteManager {
     if (this.currentPopup) {
       this.currentPopup.remove();
     }
-    
+
     const distanceKm = (route.distance_meters / 1000).toFixed(2);
     const duration = this.calculateDuration(route.start_time, route.end_time);
 
@@ -171,13 +171,13 @@ export class RouteManager {
             <strong>End:</strong> ${new Date(route.end_time).toLocaleString()}
           </div>
           <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
-            <button 
-              onclick="window.locationTracker.routeManager.focusRoute(${route.id})" 
+            <button
+              onclick="window.locationTracker.routeManager.focusRoute(${route.id})"
               style="width: 100%; padding: 8px 12px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500;">
               🎯 Center on Route
             </button>
-            <button 
-              onclick="window.locationTracker.routeManager.deleteRoute(${route.id})" 
+            <button
+              onclick="window.locationTracker.routeManager.deleteRoute(${route.id})"
               style="width: 100%; padding: 8px 12px; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500;">
               🗑️ Delete Route
             </button>
@@ -185,7 +185,7 @@ export class RouteManager {
         </div>
       `)
       .addTo(this.map);
-    
+
     // Track when popup is closed
     this.currentPopup.on('close', () => {
       this.currentPopup = null;
@@ -197,7 +197,7 @@ export class RouteManager {
     const end = new Date(endTime);
     const diffMs = end - start;
     const diffMins = Math.floor(diffMs / 60000);
-    
+
     if (diffMins < 60) {
       return `${diffMins}m`;
     }
@@ -210,56 +210,74 @@ export class RouteManager {
     // Open history mode configuration to select time range and device
     const popup = document.createElement('div');
     popup.className = 'popup-menu active';
-    popup.id = 'route-creation-popup';
+    popup. id = 'route-creation-popup';
     popup.style.zIndex = '10001';
-    
+
     popup.innerHTML = `
       <div class="popup-content" style="max-width: 500px;">
         <div class="popup-header">
-          <h2>➕ Create Route from History</h2>
+          <h2>➕ Create Route</h2>
           <button class="popup-close" onclick="document.getElementById('route-creation-popup').remove()">×</button>
         </div>
         <div class="popup-body" style="padding: 30px;">
-          <div class="card">
-            <div class="card-body">
-              <div class="control-group">
-                <label for="route-device-select">Select Device:</label>
-                <select id="route-device-select" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px;">
-                  <option value="">Select a device...</option>
-                </select>
-              </div>
-              
-              <div class="control-group">
-                <label for="route-name-input">Route Name:</label>
-                <input type="text" id="route-name-input" placeholder="My Route" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px;">
-              </div>
-              
-              <div class="control-group">
-                <label for="route-start-time">Start Time:</label>
-                <input type="datetime-local" id="route-start-time" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px;">
-              </div>
-              
-              <div class="control-group">
-                <label for="route-end-time">End Time:</label>
-                <input type="datetime-local" id="route-end-time" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px;">
-              </div>
-              
-              <div style="display: flex; gap: 10px; margin-top: 20px;">
-                <button class="btn" onclick="window.locationTracker.routeManager.createRoute()" style="flex: 1;">
-                  Create Route
-                </button>
-                <button class="btn secondary" onclick="document.getElementById('route-creation-popup').remove()" style="flex: 1;">
-                  Cancel
-                </button>
-              </div>
-            </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+            <button class="btn" onclick="window. locationTracker.routeManager. showHistoryRouteForm()" style="padding: 40px 20px; display: flex; flex-direction: column; align-items: center; gap: 10px;">
+              <span style="font-size: 32px;">📅</span>
+              <span>From History</span>
+            </button>
+            <button class="btn secondary" onclick="window.locationTracker.routeManager.startManualRouteDrawing()" style="padding: 40px 20px; display: flex; flex-direction: column; align-items: center; gap: 10px;">
+              <span style="font-size: 32px;">✏️</span>
+              <span>Draw Manually</span>
+            </button>
           </div>
         </div>
       </div>
     `;
-    
+
     document.body.appendChild(popup);
-    
+  }
+
+  showHistoryRouteForm() {
+    const popup = document.getElementById('route-creation-popup');
+    if (!popup) return;
+
+    popup.querySelector('.popup-body').innerHTML = `
+      <div class="card">
+        <div class="card-body">
+          <div class="control-group">
+            <label for="route-device-select">Select Device:</label>
+            <select id="route-device-select" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px;">
+              <option value="">Select a device...</option>
+            </select>
+          </div>
+
+          <div class="control-group">
+            <label for="route-name-input">Route Name:</label>
+            <input type="text" id="route-name-input" placeholder="My Route" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px;">
+          </div>
+
+          <div class="control-group">
+            <label for="route-start-time">Start Time:</label>
+            <input type="datetime-local" id="route-start-time" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px;">
+          </div>
+
+          <div class="control-group">
+            <label for="route-end-time">End Time:</label>
+            <input type="datetime-local" id="route-end-time" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px;">
+          </div>
+
+          <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <button class="btn" onclick="window.locationTracker.routeManager.createRoute()" style="flex: 1;">
+              Create Route
+            </button>
+            <button class="btn secondary" onclick="document.getElementById('route-creation-popup').remove()" style="flex: 1;">
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
     // Populate device dropdown
     const select = document.getElementById('route-device-select');
     this.tracker.devices.forEach((info, deviceId) => {
@@ -268,12 +286,275 @@ export class RouteManager {
       option.textContent = deviceId;
       select.appendChild(option);
     });
-    
+
     // Set default times (last 24 hours)
     const now = new Date();
     const yesterday = new Date(now - 24 * 60 * 60 * 1000);
     document.getElementById('route-start-time').value = this.formatDateTimeLocal(yesterday);
-    document.getElementById('route-end-time').value = this.formatDateTimeLocal(now);
+    document. getElementById('route-end-time'). value = this.formatDateTimeLocal(now);
+  }
+
+  startManualRouteDrawing() {
+    const popup = document.createElement('div');
+    popup.className = 'popup-menu active';
+    popup.id = 'manual-route-popup';
+    popup.style.zIndex = '10001';
+
+    popup.innerHTML = `
+      <div class="popup-content" style="max-width: 500px;">
+        <div class="popup-header">
+          <h2>✏️ Draw Route Manually</h2>
+          <button class="popup-close" onclick="window.locationTracker.routeManager.cancelManualRoute()">×</button>
+        </div>
+        <div class="popup-body" style="padding: 30px;">
+          <div class="card">
+            <div class="card-body">
+              <div class="control-group">
+                <label for="manual-route-name">Route Name:</label>
+                <input type="text" id="manual-route-name" placeholder="My Custom Route" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px;">
+              </div>
+
+              <div class="control-group">
+                <label for="manual-route-device">Associate with Device:</label>
+                <select id="manual-route-device" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px;">
+                  <option value="">No device (manual route)</option>
+                </select>
+              </div>
+
+              <div style="background: #f0f9ff; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #3b82f6;">
+                <p style="margin: 0; font-size: 13px; color: #1e40af;">
+                  <strong>Instructions:</strong><br>
+                  Click on the map to add points to your route. <br>
+                  Double-click or press Enter to finish. <br>
+                  Press Escape to cancel.
+                </p>
+              </div>
+
+              <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button class="btn" onclick="window.locationTracker. routeManager.startDrawingOnMap()" style="flex: 1;">
+                  🖊️ Start Drawing
+                </button>
+                <button class="btn secondary" onclick="window.locationTracker.routeManager.cancelManualRoute()" style="flex: 1;">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document. body.appendChild(popup);
+
+    // Populate device dropdown
+    const select = document.getElementById('manual-route-device');
+    this.tracker.devices.forEach((info, deviceId) => {
+      const option = document.createElement('option');
+      option.value = deviceId;
+      option.textContent = deviceId;
+      select.appendChild(option);
+    });
+  }
+
+  startDrawingOnMap() {
+    this.manualDrawingMode = true;
+    this.manualRoutePoints = [];
+    this.manualRouteMarkers = [];
+
+    // Hide the popup but keep data
+    const popup = document.getElementById('manual-route-popup');
+    if (popup) {
+      popup.style.display = 'none';
+    }
+
+    this.map.getCanvas().style.cursor = 'crosshair';
+
+    this.showNotification('Click on map to add route points.  Double-click to finish. ', 'info');
+
+    // Setup click handler
+    this.manualRouteClickHandler = (e) => {
+      this.addManualRoutePoint(e. lngLat);
+    };
+
+    this.manualRouteDoubleClickHandler = (e) => {
+      e.preventDefault();
+      this.finishManualRoute();
+    };
+
+    this.map.on('click', this.manualRouteClickHandler);
+    this.map.on('dblclick', this.manualRouteDoubleClickHandler);
+
+    // Setup keyboard handlers
+    this.manualRouteKeyHandler = (e) => {
+      if (e.key === 'Enter' && this.manualDrawingMode) {
+        this. finishManualRoute();
+      } else if (e.key === 'Escape' && this.manualDrawingMode) {
+        this.cancelManualRoute();
+      }
+    };
+
+    document.addEventListener('keydown', this. manualRouteKeyHandler);
+  }
+
+  addManualRoutePoint(lngLat) {
+    const point = [lngLat.lng, lngLat.lat];
+    this.manualRoutePoints. push(point);
+
+    // Add marker
+    const marker = new maplibregl.Marker({ color: '#f59e0b' })
+      . setLngLat(point)
+      .addTo(this. map);
+    this.manualRouteMarkers. push(marker);
+
+    // Update temp line
+    this.updateManualRouteLine();
+
+    this.showNotification(
+      `${this.manualRoutePoints.length} point${this.manualRoutePoints. length !== 1 ? 's' : ''} added`,
+      'info',
+      2000
+    );
+  }
+
+  updateManualRouteLine() {
+    const sourceId = 'manual-route-temp';
+
+    if (! this.map.getSource(sourceId)) {
+      this.map.addSource(sourceId, {
+        type: 'geojson',
+        data: {
+          type: 'Feature',
+          geometry: {
+            type: 'LineString',
+            coordinates: []
+          }
+        }
+      });
+
+      this.map.addLayer({
+        id: 'manual-route-temp-line',
+        type: 'line',
+        source: sourceId,
+        paint: {
+          'line-color': '#f59e0b',
+          'line-width': 3,
+          'line-dasharray': [2, 2]
+        }
+      });
+    }
+
+    this.map.getSource(sourceId).setData({
+      type: 'Feature',
+      geometry: {
+        type: 'LineString',
+        coordinates: this.manualRoutePoints
+      }
+    });
+  }
+
+  async finishManualRoute() {
+    if (this.manualRoutePoints.length < 2) {
+      this.showNotification('Need at least 2 points to create a route', 'error');
+      return;
+    }
+
+    const routeName = document.getElementById('manual-route-name')?.value || 'Manual Route';
+    const deviceId = document.getElementById('manual-route-device')?.value || 'manual';
+
+    // Calculate distance
+    let distance = 0;
+    for (let i = 0; i < this.manualRoutePoints.length - 1; i++) {
+      const p1 = this.manualRoutePoints[i];
+      const p2 = this.manualRoutePoints[i + 1];
+      distance += this.calculatePointDistance(p1, p2);
+    }
+
+    // Create route object locally
+    const newRoute = {
+      id: Date.now(), // Temporary ID
+      device_id: deviceId,
+      route_name: routeName,
+      coordinates: this.manualRoutePoints,
+      start_time: new Date().toISOString(),
+      end_time: new Date().toISOString(),
+      distance_meters: distance,
+      created_at: new Date().toISOString()
+    };
+
+    // Store locally (since this is manual, not from DB)
+    this.routes.set(newRoute.id, newRoute);
+    this.visibleRoutes.add(newRoute.id);
+    this.drawRoute(newRoute);
+
+    this.cleanupManualDrawing();
+    this.updateRouteList();
+    this.updateRouteStats();
+
+    this.showNotification(`✓ Manual route "${routeName}" created`, 'success');
+    this. focusRoute(newRoute.id);
+  }
+
+  calculatePointDistance(p1, p2) {
+    const R = 6371000; // Earth radius in meters
+    const lat1 = p1[1] * Math.PI / 180;
+    const lat2 = p2[1] * Math.PI / 180;
+    const dLat = (p2[1] - p1[1]) * Math.PI / 180;
+    const dLng = (p2[0] - p1[0]) * Math. PI / 180;
+
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1) * Math.cos(lat2) *
+              Math.sin(dLng / 2) * Math. sin(dLng / 2);
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+
+  cancelManualRoute() {
+    this.cleanupManualDrawing();
+    this.showNotification('Manual route drawing cancelled', 'info');
+  }
+
+  cleanupManualDrawing() {
+    this.manualDrawingMode = false;
+    this.manualRoutePoints = [];
+
+    // Remove markers
+    if (this.manualRouteMarkers) {
+      this.manualRouteMarkers.forEach(m => m.remove());
+      this.manualRouteMarkers = [];
+    }
+
+    // Remove temp line
+    if (this.map.getLayer('manual-route-temp-line')) {
+      this.map. removeLayer('manual-route-temp-line');
+    }
+    if (this.map.getSource('manual-route-temp')) {
+      this.map.removeSource('manual-route-temp');
+    }
+
+    // Remove event handlers
+    if (this.manualRouteClickHandler) {
+      this.map.off('click', this.manualRouteClickHandler);
+      this.manualRouteClickHandler = null;
+    }
+
+    if (this.manualRouteDoubleClickHandler) {
+      this.map.off('dblclick', this.manualRouteDoubleClickHandler);
+      this.manualRouteDoubleClickHandler = null;
+    }
+
+    if (this.manualRouteKeyHandler) {
+      document.removeEventListener('keydown', this. manualRouteKeyHandler);
+      this.manualRouteKeyHandler = null;
+    }
+
+    this.map.getCanvas().style. cursor = '';
+
+    // Remove popup
+    const popup = document. getElementById('manual-route-popup');
+    if (popup) {
+      popup.remove();
+    }
   }
 
   formatDateTimeLocal(date) {
@@ -290,31 +571,31 @@ export class RouteManager {
     const routeName = document.getElementById('route-name-input').value;
     const startTime = document.getElementById('route-start-time').value;
     const endTime = document.getElementById('route-end-time').value;
-    
+
     if (!deviceId) {
       alert('Please select a device');
       return;
     }
-    
+
     if (!startTime || !endTime) {
       alert('Please select start and end times');
       return;
     }
-    
+
     const routeData = {
       device_id: deviceId,
       route_name: routeName || `Route ${new Date().toLocaleString()}`,
       start_time: new Date(startTime).toISOString(),
       end_time: new Date(endTime).toISOString()
     };
-    
+
     try {
       const response = await fetch(`${this.tracker.config.apiBaseUrl}/api/routes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(routeData)
       });
-      
+
       if (response.ok) {
         const newRoute = await response.json();
         this.routes.set(newRoute.id, newRoute);
@@ -322,10 +603,10 @@ export class RouteManager {
         this.drawRoute(newRoute);
         this.updateRouteList();
         this.updateRouteStats();
-        
+
         document.getElementById('route-creation-popup').remove();
         this.showNotification(`✓ Route "${routeData.route_name}" created successfully`, 'success');
-        
+
         // Focus on the new route
         setTimeout(() => this.focusRoute(newRoute.id), 500);
       } else {
@@ -336,22 +617,22 @@ export class RouteManager {
       console.error('Error creating route:', error);
       alert(`Error: ${error.message}`);
     }
-    this.updateRouteLegend(); 
+    this.updateRouteLegend();
   }
 
   async deleteRoute(routeId) {
     const route = this.routes.get(routeId);
     if (!route) return;
-    
+
     if (!confirm(`Are you sure you want to delete route "${route.route_name || 'Unnamed'}"?`)) {
       return;
     }
-    
+
     try {
       const response = await fetch(`${this.tracker.config.apiBaseUrl}/api/routes/${routeId}`, {
         method: 'DELETE'
       });
-      
+
       if (response.ok || response.status === 204) {
         const sourceId = `route-${routeId}`;
         if (this.map.getLayer(sourceId)) {
@@ -360,12 +641,12 @@ export class RouteManager {
         if (this.map.getSource(sourceId)) {
           this.map.removeSource(sourceId);
         }
-        
+
         this.routes.delete(routeId);
         this.visibleRoutes.delete(routeId);
         this.updateRouteList();
         this.updateRouteStats();
-        
+
         this.showNotification(`✓ Route deleted`, 'success');
       } else {
         alert('Failed to delete route');
@@ -385,7 +666,7 @@ export class RouteManager {
 
     const sourceId = `route-${routeId}`;
     const visibility = visible && this.showRoutes ? 'visible' : 'none';
-    
+
     if (this.map.getLayer(sourceId)) {
       this.map.setLayoutProperty(sourceId, 'visibility', visibility);
     }
@@ -393,17 +674,17 @@ export class RouteManager {
 
   toggleAllRoutesVisibility() {
     this.showRoutes = !this.showRoutes;
-    
+
     this.routes.forEach((route, id) => {
       const sourceId = `route-${id}`;
       const isVisible = this.visibleRoutes.has(id) && this.showRoutes;
       const visibility = isVisible ? 'visible' : 'none';
-      
+
       if (this.map.getLayer(sourceId)) {
         this.map.setLayoutProperty(sourceId, 'visibility', visibility);
       }
     });
-    
+
     this.showNotification(
       this.showRoutes ? 'Routes visible' : 'Routes hidden',
       'info'
@@ -441,9 +722,9 @@ export class RouteManager {
     const items = Array.from(this.routes.values()).map(route => {
       const distanceKm = (route.distance_meters / 1000).toFixed(2);
       const color = this.routeColors[route.id % this.routeColors.length];
-      
+
       return `
-        <div class="route-list-item" style="padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 10px; background: #f9fafb; cursor: pointer; transition: all 0.2s; border-left: 4px solid ${color};" 
+        <div class="route-list-item" style="padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 10px; background: #f9fafb; cursor: pointer; transition: all 0.2s; border-left: 4px solid ${color};"
              onclick="window.locationTracker.routeManager.focusRoute(${route.id})">
           <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
             <div style="flex: 1;">
@@ -455,7 +736,7 @@ export class RouteManager {
               </p>
             </div>
           </div>
-          
+
           <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 11px; color: #6b7280;">
             <div>
               <strong>Distance:</strong> ${distanceKm} km
@@ -464,7 +745,7 @@ export class RouteManager {
               <strong>Duration:</strong> ${this.calculateDuration(route.start_time, route.end_time)}
             </div>
           </div>
-          
+
           <div style="margin-top: 8px; font-size: 10px; color: #9ca3af;">
             ${new Date(route.start_time).toLocaleDateString()}
           </div>
@@ -473,7 +754,7 @@ export class RouteManager {
     }).join('');
 
     container.innerHTML = items;
-    
+
     // Also update panel list
     this.updatePanelRouteList();
   }
@@ -495,7 +776,7 @@ export class RouteManager {
 
     const distanceElement = document.getElementById('panel-total-distance-count');
     if (distanceElement) {
-      distanceElement.textContent = `${(totalDistance / 1000).toFixed(1)} km`;
+      distanceElement. textContent = `${(totalDistance / 1000).toFixed(1)} km`;
     }
 
     if (this.routes.size === 0) {
@@ -507,32 +788,32 @@ export class RouteManager {
       return;
     }
 
-    const items = Array.from(this.routes.values()).map(route => {
+    const items = Array.from(this.routes.values()). map(route => {
       const distanceKm = (route.distance_meters / 1000).toFixed(1);
       const color = this.routeColors[route.id % this.routeColors.length];
-      const isVisible = this.visibleRoutes.has(route.id);
-      
+      const isVisible = this.visibleRoutes. has(route.id);
+
       return `
-        <div class="route-list-item ${isVisible ? '' : 'dimmed'}" onclick="window.locationTracker.routeManager.focusRoute(${route.id})" style="border-left-color: ${color};">
+        <div class="route-list-item ${isVisible ? '' : 'dimmed'}" style="border-left-color: ${color};">
           <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-            <input type="checkbox" 
-                  class="route-visibility-checkbox" 
-                  ${isVisible ? 'checked' : ''} 
-                  onclick="event.stopPropagation(); window.locationTracker.routeManager.toggleRouteVisibility(${route.id}, this.checked)"
+            <input type="checkbox"
+                  class="route-visibility-checkbox"
+                  ${isVisible ? 'checked' : ''}
+                  onclick="event.stopPropagation(); window.locationTracker.routeManager.toggleRouteIndividualVisibility(${route.id}, this.checked)"
                   title="${isVisible ? 'Hide route' : 'Show route'}">
             <div style="width: 12px; height: 12px; border-radius: 3px; background: ${color}; flex-shrink: 0;"></div>
-            <div style="flex: 1;">
+            <div style="flex: 1;" onclick="window.locationTracker.routeManager.focusRoute(${route.id})">
               <h5 style="margin: 0; font-size: 13px; font-weight: 600; color: #374151;">
                 ${route.route_name || 'Unnamed Route'}
               </h5>
             </div>
           </div>
-          <div style="font-size: 11px; color: #6b7280;">
+          <div style="font-size: 11px; color: #6b7280; cursor: pointer;" onclick="window.locationTracker. routeManager.focusRoute(${route.id})">
             ${distanceKm} km • ${route.device_id}
           </div>
         </div>
       `;
-    }).join('');
+    }). join('');
 
     container.innerHTML = items;
   }
@@ -572,9 +853,9 @@ export class RouteManager {
       max-width: 400px;
       animation: slideInRight 0.3s ease-out;
     `;
-    
+
     document.body.appendChild(notification);
-    
+
     setTimeout(() => {
       notification.style.animation = 'slideOutRight 0.3s ease-out';
       setTimeout(() => notification.remove(), 300);
@@ -584,7 +865,7 @@ export class RouteManager {
   toggleRouteLegend() {
     this.routeLegendCollapsed = !this.routeLegendCollapsed;
     const legend = document.getElementById('route-legend-panel');
-    
+
     if (this.routeLegendCollapsed) {
       legend.classList.add('collapsed');
     } else {
@@ -618,7 +899,7 @@ export class RouteManager {
       item.className = 'route-legend-item';
 
       item.innerHTML = `
-        <input type="checkbox" class="route-checkbox" ${isVisible ? 'checked' : ''} 
+        <input type="checkbox" class="route-checkbox" ${isVisible ? 'checked' : ''}
               data-route="${id}">
         <div class="route-icon" style="background: ${color};">🛣️</div>
         <div class="route-info">
@@ -646,6 +927,30 @@ export class RouteManager {
     });
   }
 
+  toggleRouteIndividualVisibility(routeId, visible) {
+    console.log(`Toggling route ${routeId} visibility to ${visible}`);
+
+    if (visible) {
+      this.visibleRoutes.add(routeId);
+    } else {
+      this.visibleRoutes.delete(routeId);
+    }
+
+    const sourceId = `route-${routeId}`;
+    const shouldBeVisible = visible && this.showRoutes;
+    const visibility = shouldBeVisible ? 'visible' : 'none';
+
+    console.log(`Setting ${sourceId} visibility to ${visibility}`);
+
+    if (this.map. getLayer(sourceId)) {
+      this.map.setLayoutProperty(sourceId, 'visibility', visibility);
+    }
+
+    // Update UI
+    this.updateRouteLegend();
+    this.updatePanelRouteList();
+  }
+
   toggleRouteVisibility(routeId, visible) {
     if (visible) {
       this.visibleRoutes.add(routeId);
@@ -655,7 +960,7 @@ export class RouteManager {
 
     const sourceId = `route-${routeId}`;
     const visibility = visible && this.showRoutes ? 'visible' : 'none';
-    
+
     if (this.map.getLayer(sourceId)) {
       this.map.setLayoutProperty(sourceId, 'visibility', visibility);
     }
@@ -672,7 +977,7 @@ export class RouteManager {
     }
 
     const bounds = new maplibregl.LngLatBounds();
-    
+
     visibleRoutes.forEach(id => {
       const route = this.routes.get(id);
       if (route && route.coordinates) {
