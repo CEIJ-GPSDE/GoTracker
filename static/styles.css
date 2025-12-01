@@ -630,6 +630,22 @@ body {
   color: #374151;
 }
 
+#locations-panel-tab #location-list .location-item {
+  padding: 10px;
+  font-size: 12px;
+  border-bottom: 1px solid #eee;
+}
+
+#locations-panel-tab #location-list .location-item .device-id {
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+
+#locations-panel-tab #location-list .location-item .coordinates {
+  color: #666;
+  font-family: monospace;
+}
+
 /* ========== VEHICLE ITEMS ========== */
 .vehicle-item {
   background: #f9fafb;

@@ -20,6 +20,9 @@ export class VehiclePanelManager {
         // Update content based on tab
         if (btn.dataset.panelTab === 'vehicles') {
           this.updateVehiclePanel();
+        } else if (btn.dataset.panelTab === 'locations') {
+          // Refresh locations list when tab is opened
+          this.tracker.filterAndDisplayLocations();
         } else if (btn.dataset.panelTab === 'geofences') {
           if (this.tracker.geofenceManager) {
             this.tracker.geofenceManager.updatePanelGeofenceList();
@@ -177,33 +180,19 @@ export class VehiclePanelManager {
   }
 
   showVehicleHistory(deviceId) {
-    // Switch to device in legend
+    // Switch to device in legend/visibility
     const deviceInfo = this.tracker.devices.get(deviceId);
     if (deviceInfo && !deviceInfo.visible) {
       this.tracker.deviceManager.toggleDeviceVisibility(deviceId, true);
     }
 
-    // Open main menu and switch to locations tab
-    const popup = document.getElementById('popup-menu');
-    if (popup) {
-      popup.classList.add('active');
-
-      const tabButtons = document.querySelectorAll('.tab-button');
-      const tabContents = document.querySelectorAll('.tab-content');
-
-      tabButtons.forEach(btn => {
-        btn.classList.remove('active');
-        if (btn.dataset.tab === 'locations') {
-          btn.classList.add('active');
-        }
-      });
-
-      tabContents.forEach(content => {
-        content.classList.remove('active');
-        if (content.id === 'locations-tab') {
-          content.classList.add('active');
-        }
-      });
+    // ✅ FIX: Open sliding panel and switch to locations tab instead of old popup
+    const panel = document.getElementById('sliding-panel');
+    if (panel) {
+      if (!this.tracker.slidingPanelOpen) {
+        this.tracker.toggleSlidingPanel();
+      }
+      this.tracker.switchPanelTab('locations');
     }
   }
 }

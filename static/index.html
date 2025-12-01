@@ -237,6 +237,9 @@
         <button class="panel-tab active" data-panel-tab="vehicles">
           🚗 <span id="vehicles-tab-title">Vehicles</span>
         </button>
+        <button class="panel-tab" data-panel-tab="locations">
+          📍 <span id="locations-tab-title">Locations</span>
+        </button>
         <button class="panel-tab" data-panel-tab="geofences">
           🗺️ <span id="geofences-tab-title">Geofences</span>
         </button>
@@ -256,6 +259,16 @@
             <div class="loading">
               <div class="spinner"></div>Loading vehicles...
             </div>
+          </div>
+        </div>
+
+        <!-- ✅ ADDED LOCATIONS CONTENT CONTAINER -->
+        <div class="panel-tab-content" id="locations-panel-tab">
+          <div id="location-list">
+             <!-- LocationTracker will populate this, fixing the null error -->
+             <div class="loading">
+               <div class="spinner"></div>Loading locations...
+             </div>
           </div>
         </div>
 

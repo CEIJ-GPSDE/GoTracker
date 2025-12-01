@@ -400,6 +400,10 @@ export class UIManager {
     const controlsTab = document.querySelector('[data-tab="controls"]');
     if (controlsTab) controlsTab.textContent = this.tracker.t('controls');
 
+    // Update the new Locations tab title in sliding panel
+    const locationsTabTitle = document.getElementById('locations-tab-title');
+    if (locationsTabTitle) locationsTabTitle.textContent = this.tracker.t('locations');
+
     const locationsTab = document.querySelector('[data-tab="locations"]');
     if (locationsTab) locationsTab.textContent = this.tracker.t('locations');
 
