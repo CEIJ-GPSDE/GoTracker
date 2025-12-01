@@ -221,12 +221,12 @@ export class GeofenceManager {
     // FIX: Check BOTH individual visibility AND global showGeofences flag
     const isIndividuallyVisible = this.visibleGeofences.has(geofence.id);
     const isVisible = isIndividuallyVisible && this.showGeofences;
+    const baseColor = geofence.color || '#667eea';
 
     console.log(`Drawing geofence ${geofence.id}: individually=${isIndividuallyVisible}, global=${this.showGeofences}, final=${isVisible}`);
 
-    // Visual distinction: active = blue/purple, inactive = gray with dashed outline
-    const fillColor = geofence.active ? '#667eea' : '#9ca3af';
-    const outlineColor = geofence.active ? '#667eea' : '#6b7280';
+    const fillColor = geofence.active ? 'baseColor' : '#9ca3af';
+    const outlineColor = geofence.active ? 'baseColor' : '#6b7280';
     const fillOpacity = geofence.active ? 0.2 : 0.1;
 
     // Add fill layer
@@ -721,15 +721,17 @@ export class GeofenceManager {
     }
 
     const description = prompt(this.tracker.t('enterDescription'), '');
-
-    // ✅ CHANGED: Use convex hull for final coordinates
+    const linkDevice = prompt("Link to specific Device ID? (Leave empty for all)", "");
+    const colorInput = prompt("Color (hex code e.g. #ff0000) or leave empty for default:", "#667eea");
     const hullPoints = this.calculateConvexHull([...this.drawingPoints]);
     const coordinates = [... hullPoints, hullPoints[0]]; // Close the polygon
 
     const geofenceData = {
       name: name,
       description: description || `${this.tracker.t('created')} ${new Date().toLocaleString()}`,
-      coordinates: coordinates
+      coordinates: coordinates,
+      linked_device_id: linkDevice, // Send to backend
+      color: colorInput             // Send to backend
     };
 
     try {
@@ -993,6 +995,10 @@ export class GeofenceManager {
 
       if (response.ok) {
         const result = await response.json();
+        const applicableGeofences = result.geofences.filter(gf => {
+          // If no device linked, it applies to all. If linked, must match.
+          return !gf.linked_device_id || gf.linked_device_id === location.device_id;
+        });
         const currentGeofences = new Set(result.geofences.map(gf => gf.id));
 
         // Get previous state

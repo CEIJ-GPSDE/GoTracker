@@ -17,14 +17,15 @@ export class MapManager {
       style: mapStyle,
       center: defaultCenter,
       zoom: defaultZoom,
-      attributionControl: true
+      attributionControl: true,
+      localIdeographFontFamily: "'Arial', 'Helvetica', sans-serif"
     });
 
     this.map.addControl(new maplibregl.NavigationControl(), 'bottom-left');
     this.map.addControl(new maplibregl.FullscreenControl(), 'bottom-left');
 
     this.setupMapEvents();
-    
+
     this.map.on('load', () => {
       this.initializeRouteLine();
       console.log('Map loaded successfully');
@@ -351,7 +352,7 @@ export class MapManager {
   updateAllDeviceMarkers() {
     // Get the latest location for each selected device
     const latestByDevice = new Map();
-    
+
     this.tracker.locations.forEach(loc => {
       if (this.tracker.selectedDevices.has(loc.device_id)) {
         if (!latestByDevice.has(loc.device_id)) {
@@ -359,12 +360,12 @@ export class MapManager {
         }
       }
     });
-    
+
     // Update marker for each device
     latestByDevice.forEach((location, deviceId) => {
       this.updateMapMarker(location, true);
     });
-    
+
     console.log(`Updated markers for ${latestByDevice.size} devices`);
   }
 
@@ -430,14 +431,14 @@ export class MapManager {
     }
 
     let locationsToConsider;
-    
+
     // Get locations based on current mode
     if (this.tracker.isHistoryMode) {
-      locationsToConsider = this.tracker.filteredLocations.filter(loc => 
+      locationsToConsider = this.tracker.filteredLocations.filter(loc =>
         visibleDevices.includes(loc.device_id)
       );
     } else {
-      locationsToConsider = this.tracker.locations.filter(loc => 
+      locationsToConsider = this.tracker.locations.filter(loc =>
         visibleDevices.includes(loc.device_id)
       );
     }
@@ -493,9 +494,9 @@ export class MapManager {
       max-width: 300px;
       animation: slideInRight 0.3s ease-out;
     `;
-    
+
     document.body.appendChild(notification);
-    
+
     setTimeout(() => {
       notification.style.animation = 'slideOutRight 0.3s ease-out';
       setTimeout(() => notification.remove(), 300);
