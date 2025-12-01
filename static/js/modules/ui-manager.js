@@ -7,48 +7,21 @@ export class UIManager {
   }
 
   setupPopupMenu() {
-    const menuToggleBottom = document.getElementById('menu-toggle-btn-bottom');
-    const popupMenu = document.getElementById('popup-menu');
-    const popupClose = document.getElementById('popup-close');
+    // Cleaned up setupPopupMenu - removed bottom-right menu logic
     const historyConfigPopup = document.getElementById('history-config-popup');
     const historyConfigClose = document.getElementById('history-config-close');
 
-    // Menu toggle
-    if (menuToggleBottom) {
-      menuToggleBottom.addEventListener('click', () => {
-        popupMenu.classList.add('active');
-      });
-    }
-
-    const closeMenu = () => {
-      popupMenu.classList.remove('active');
-    };
-
     const closeHistoryConfig = () => {
-      historyConfigPopup.classList.remove('active');
+      if(historyConfigPopup) historyConfigPopup.classList.remove('active');
     };
 
-    if (popupClose) popupClose.addEventListener('click', closeMenu);
     if (historyConfigClose) historyConfigClose.addEventListener('click', closeHistoryConfig);
-
-    // Prevent clicks inside popup from closing it
-    if (popupMenu) {
-      popupMenu.querySelector('.popup-content').addEventListener('click', (e) => {
-        e.stopPropagation();
-      });
-      
-      popupMenu.addEventListener('click', (e) => {
-        if (e.target === popupMenu) {
-          closeMenu();
-        }
-      });
-    }
 
     if (historyConfigPopup) {
       historyConfigPopup.querySelector('.popup-content').addEventListener('click', (e) => {
         e.stopPropagation();
       });
-      
+
       historyConfigPopup.addEventListener('click', (e) => {
         if (e.target === historyConfigPopup) {
           closeHistoryConfig();
@@ -56,51 +29,9 @@ export class UIManager {
       });
     }
 
-    // FIX: Tab switching functionality
-    const tabButtons = document.querySelectorAll('#popup-menu .tab-button');
-    const tabContents = document.querySelectorAll('#popup-menu .tab-content');
-
-    console.log('Found tab buttons:', tabButtons.length);
-    console.log('Found tab contents:', tabContents.length);
-
-    tabButtons.forEach(button => {
-      button.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        const tabId = button.dataset.tab;
-        console.log('Tab clicked:', tabId);
-
-        // Remove active from all buttons
-        tabButtons.forEach(btn => btn.classList.remove('active'));
-        
-        // Add active to clicked button
-        button.classList.add('active');
-
-        // Hide all tab contents
-        tabContents.forEach(content => {
-          content.classList.remove('active');
-          content.style.display = 'none';
-        });
-        
-        // Show selected tab content
-        const selectedContent = document.getElementById(`${tabId}-tab`);
-        if (selectedContent) {
-          selectedContent.classList.add('active');
-          selectedContent.style.display = 'block';
-          console.log('Showing tab:', tabId);
-        } else {
-          console.error('Tab content not found:', `${tabId}-tab`);
-        }
-      });
-    });
-
     // ESC key handler
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        if (popupMenu && popupMenu.classList.contains('active')) {
-          closeMenu();
-        }
         if (historyConfigPopup && historyConfigPopup.classList.contains('active')) {
           closeHistoryConfig();
         }
@@ -242,7 +173,7 @@ export class UIManager {
     // Enable/disable time filter
     const timeCheckbox = document.getElementById('enable-time-filter');
     const timeContent = document.getElementById('time-filter-content');
-    
+
     if (timeCheckbox) {
       timeCheckbox.addEventListener('change', (e) => {
         this.tracker.historyManager.timeFilterEnabled = e.target.checked;
@@ -253,7 +184,7 @@ export class UIManager {
     // Enable/disable location filter
     const locationCheckbox = document.getElementById('enable-location-filter');
     const locationContent = document.getElementById('location-filter-content');
-    
+
     if (locationCheckbox) {
       locationCheckbox.addEventListener('change', (e) => {
         this.tracker.historyManager.locationFilterEnabled = e.target.checked;
@@ -266,7 +197,7 @@ export class UIManager {
       btn.addEventListener('click', () => {
         const hours = parseInt(btn.dataset.hours);
         this.tracker.historyManager.setQuickTimeRange(hours);
-        
+
         // Update active state
         document.querySelectorAll('.quick-range-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
@@ -295,7 +226,7 @@ export class UIManager {
       selectOnMapBtn.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        
+
         if (this.tracker.isSelectingLocationOnMap) {
           this.endMapLocationSelection();
           this.reopenHistoryConfigPopup();
@@ -310,31 +241,31 @@ export class UIManager {
     this.tracker.isSelectingLocationOnMap = true;
     const selectBtn = document.getElementById('select-on-map-btn');
     const historyConfigPopup = document.getElementById('history-config-popup');
-    
+
     const activeTab = document.querySelector('#history-config-popup .tab-button.active');
     if (activeTab) {
       this.tracker.historyManager.lastActiveConfigTab = activeTab.dataset.tab;
     }
-    
+
     if (historyConfigPopup) {
       historyConfigPopup.classList.remove('active');
     }
-    
+
     selectBtn.textContent = '✖ ' + this.tracker.t('cancelSelection');
     selectBtn.classList.add('secondary');
-    
+
     const mapContainer = document.getElementById('map');
     mapContainer.style.cursor = 'crosshair';
 
     this.tracker.mapSelectionHandler = (e) => {
       const {lng, lat} = e.lngLat;
-      
+
       document.getElementById('location-lat-input').value = lat.toFixed(6);
       document.getElementById('location-lng-input').value = lng.toFixed(6);
-      
+
       this.endMapLocationSelection();
       this.reopenHistoryConfigPopup();
-      
+
       console.log(this.tracker.t('locationSelected'), `Lat: ${lat.toFixed(6)}, Lng: ${lng.toFixed(6)}`);
     };
 
@@ -352,12 +283,12 @@ export class UIManager {
     this.tracker.isSelectingLocationOnMap = false;
     const selectBtn = document.getElementById('select-on-map-btn');
     const mapContainer = document.getElementById('map');
-    
+
     selectBtn.textContent = '🗺 ' + this.tracker.t('selectOnMap');
     selectBtn.classList.remove('secondary');
-    
+
     mapContainer.style.cursor = '';
-    
+
     if (this.tracker.mapSelectionHandler) {
       this.tracker.mapManager.map.off('click', this.tracker.mapSelectionHandler);
       this.tracker.mapSelectionHandler = null;
@@ -369,21 +300,21 @@ export class UIManager {
   reopenHistoryConfigPopup() {
     const historyConfigPopup = document.getElementById('history-config-popup');
     const lastTab = this.tracker.historyManager.lastActiveConfigTab || 'location-filter';
-    
+
     if (historyConfigPopup) {
       historyConfigPopup.classList.add('active');
     }
-    
+
     const tabButtons = document.querySelectorAll('#history-config-popup .tab-button');
     const tabContents = document.querySelectorAll('#history-config-popup .tab-content');
-    
+
     tabButtons.forEach(btn => {
       btn.classList.remove('active');
       if (btn.dataset.tab === lastTab) {
         btn.classList.add('active');
       }
     });
-    
+
     tabContents.forEach(content => {
       content.classList.remove('active');
       if (content.id === `${lastTab}-tab`) {
@@ -401,6 +332,27 @@ export class UIManager {
     document.getElementById('start-time-popup').value = formatDateTimeLocal(startTime);
   }
 
+  closeAllMenus() {
+    // Close Main Popup Menu
+    const popupMenu = document.getElementById('popup-menu');
+    if (popupMenu) {
+      popupMenu.classList.remove('active');
+    }
+
+    // Close Sliding Panel
+    const slidingPanel = document.getElementById('sliding-panel');
+    if (slidingPanel) {
+      slidingPanel.classList.remove('open');
+      this.tracker.slidingPanelOpen = false;
+    }
+
+    // Close History Config if open
+    const historyConfig = document.getElementById('history-config-popup');
+    if (historyConfig) {
+      historyConfig.classList.remove('active');
+    }
+  }
+
   updateUILanguage() {
     const headerP = document.querySelector('.header p');
     if (headerP) headerP.textContent = this.tracker.t('subtitle');
@@ -415,10 +367,10 @@ export class UIManager {
 
     const historyModeSpan = document.querySelector('#history-mode-btn span:last-child');
     if (historyModeSpan) historyModeSpan.textContent = this.tracker.t('historyMode');
-    
+
     const changeFilterSpan = document.querySelector('#change-filter-btn span:last-child');
     if (changeFilterSpan) changeFilterSpan.textContent = this.tracker.t('changeFilter');
-    
+
     const liveModeSpan = document.querySelector('#live-mode-btn span:last-child');
     if (liveModeSpan) liveModeSpan.textContent = this.tracker.t('liveMode');
 
@@ -436,13 +388,18 @@ export class UIManager {
       }
     }
 
+    const settingsTabTitle = document.getElementById('settings-tab-title');
+    if (settingsTabTitle) {
+      settingsTabTitle.textContent = this.tracker.t('settingsPanel');
+    }
+
     // Popup menu elements
     const popupHeader = document.querySelector('#popup-menu .popup-header h2');
     if (popupHeader) popupHeader.textContent = this.tracker.t('controlsAndInfo');
-    
+
     const controlsTab = document.querySelector('[data-tab="controls"]');
     if (controlsTab) controlsTab.textContent = this.tracker.t('controls');
-    
+
     const locationsTab = document.querySelector('[data-tab="locations"]');
     if (locationsTab) locationsTab.textContent = this.tracker.t('locations');
 
@@ -463,7 +420,7 @@ export class UIManager {
 
     const startTimeLabel = document.querySelector('label[for="start-time-popup"]');
     if (startTimeLabel) startTimeLabel.textContent = this.tracker.t('from');
-    
+
     const endTimeLabel = document.querySelector('label[for="end-time-popup"]');
     if (endTimeLabel) endTimeLabel.textContent = this.tracker.t('to');
 

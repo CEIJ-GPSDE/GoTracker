@@ -208,6 +208,9 @@ export class RouteManager {
 
   startCreatingRoute() {
     // Open history mode configuration to select time range and device
+    if (this.tracker.uiManager) {
+      this.tracker.uiManager.closeAllMenus();
+    }
     const popup = document.createElement('div');
     popup.className = 'popup-menu active';
     popup. id = 'route-creation-popup';
@@ -357,6 +360,9 @@ export class RouteManager {
   }
 
   startDrawingOnMap() {
+    if (this.tracker.uiManager) {
+      this.tracker.uiManager.closeAllMenus();
+    }
     this.manualDrawingMode = true;
     this.manualRoutePoints = [];
     this.manualRouteMarkers = [];

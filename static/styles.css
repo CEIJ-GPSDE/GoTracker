@@ -206,6 +206,12 @@ body {
   }
 }
 
+.geofence-notification,
+.map-notification {
+  z-index: 11000 !important;
+}
+
+
 /* ========== GEOFENCE & ROUTE CONTROLS ========== */
 .geofence-controls-row,
 .route-controls-row {
@@ -524,7 +530,7 @@ body {
 /* Panel Actions */
 .panel-section-actions {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 8px;
   margin-bottom: 15px;
 }
@@ -535,7 +541,7 @@ body {
   color: white;
   border: none;
   border-radius: 8px;
-  font-size: 12px; 
+  font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
@@ -774,6 +780,11 @@ body {
 .route-list-item {
   border-left: 4px solid #f59e0b;
 }
+.geofence-notification,
+.map-notification {
+  z-index: 11000 !important;
+}
+
 
 /* ========== POPUP MENUS ========== */
 .popup-menu {
@@ -793,6 +804,12 @@ body {
 
 .popup-menu.active {
   display: flex;
+}
+
+.popup-menu.active[id="route-creation-popup"],
+.popup-menu.active[id="manual-route-popup"],
+.popup-menu.active[id="geofence-from-route-popup"] {
+  z-index: 10005 !important; /* Higher than main menu */
 }
 
 .popup-content {
@@ -1147,5 +1164,4 @@ body {
   .header {
     margin-bottom: 10px;
   }
-
-  .header h1 {
+}

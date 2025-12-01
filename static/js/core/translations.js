@@ -166,7 +166,13 @@ export const TRANSLATIONS = {
     hideRoutes: "Hide Routes",
     showRoutes: "Show Routes",
     reloadGeofences: "Reload Geofences",
-    reloadRoutes: "Reload Routes", 
+    reloadRoutes: "Reload Routes",
+    routeManagement: "Route Management",
+    createRouteFromHistory: "Create Route", // CHANGED FROM "Create Route from History"
+    reloadRoutes: "Reload Routes",
+    vehiclesPanel: "Vehicles",
+    settingsPanel: "Settings", // NEW
+    online: "Online",
     geofenceStatus: "Status"
   },
   es: {
@@ -302,12 +308,12 @@ export const TRANSLATIONS = {
     geofences: "Geocercas",
     centerGeofences: "Centrar en Geocercas",
     hideGeofences: "Ocultar Geocercas",
-    showGeofences: "Mostrar Geocercas", 
+    showGeofences: "Mostrar Geocercas",
     filterConfiguration: "Configuración de Filtro",
     selectAtLeastOneFilter: "Por favor habilite al menos un filtro",
     fixErrorsBeforeApplying: "Por favor corrija los errores de validación. Los filtros con errores están ahora bloqueados.",
     clearAllFilters: "Limpiar Todo",
-    applyFilter: "Aplicar Filtro", 
+    applyFilter: "Aplicar Filtro",
     fixValidationErrors: "Por favor corrija los errores de validación para aplicar el filtro.",
     noResultsForFilters: "No se encontraron resultados. Intente ajustar el filtro de ubicación.",
     noResultsForTimeFilter: "No se encontraron resultados para este rango de tiempo.",
@@ -337,6 +343,12 @@ export const TRANSLATIONS = {
     showRoutes: "Mostrar Rutas",
     reloadGeofences: "Recargar Geocercas",
     reloadRoutes: "Recargar Rutas",
+    routeManagement: "Gestión de Rutas",
+    createRouteFromHistory: "Crear Ruta", // CHANGED FROM "Crear Ruta desde Historial"
+    reloadRoutes: "Recargar Rutas",
+    vehiclesPanel: "Vehículos",
+    settingsPanel: "Ajustes", // NEW
+    online: "En línea",
     geofenceStatus: "Estado"
   }
 };

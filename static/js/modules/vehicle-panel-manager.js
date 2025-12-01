@@ -16,7 +16,7 @@ export class VehiclePanelManager {
     document.querySelectorAll('.panel-tab').forEach(btn => {
       btn.addEventListener('click', () => {
         this.tracker.switchPanelTab(btn.dataset.panelTab);
-        
+
         // Update content based on tab
         if (btn.dataset.panelTab === 'vehicles') {
           this.updateVehiclePanel();
@@ -40,12 +40,12 @@ export class VehiclePanelManager {
 
   updateVehiclePanel() {
     const container = document.getElementById('vehicle-list-panel');
-    
+
     if (!container) {
       console.debug('Vehicle list panel not found - skipping update');
       return;
     }
-    
+
     if (this.tracker.devices.size === 0) {
       container.innerHTML = `
         <div style="text-align: center; padding: 40px 20px; color: #9ca3af;">
@@ -57,11 +57,11 @@ export class VehiclePanelManager {
     }
 
     const vehiclesByStatus = new Map();
-    
+
     this.tracker.devices.forEach((info, deviceId) => {
       const latestLocation = this.getLatestLocationForDevice(deviceId);
       const isOnline = latestLocation && this.isVehicleOnline(latestLocation.timestamp);
-      
+
       vehiclesByStatus.set(deviceId, {
         info,
         location: latestLocation,
@@ -79,15 +79,15 @@ export class VehiclePanelManager {
     container.innerHTML = sortedVehicles.map(([deviceId, data]) => {
       const { info, location, online } = data;
       const isActive = deviceId === this.activeVehicleId;
-      
+
       // ✅ ADD VISIBILITY TOGGLE CHECKBOX
       return `
-        <div class="vehicle-item ${isActive ? 'active' : ''} ${!info.visible ? 'dimmed' : ''}" 
+        <div class="vehicle-item ${isActive ? 'active' : ''} ${!info.visible ? 'dimmed' : ''}"
             onclick="window.locationTracker.vehiclePanelManager.selectVehicle('${deviceId}')">
           <div class="vehicle-item-header">
-            <input type="checkbox" 
-                  class="vehicle-visibility-checkbox" 
-                  ${info.visible ? 'checked' : ''} 
+            <input type="checkbox"
+                  class="vehicle-visibility-checkbox"
+                  ${info.visible ? 'checked' : ''}
                   onclick="event.stopPropagation(); window.locationTracker.deviceManager.toggleDeviceVisibility('${deviceId}', this.checked)"
                   title="${info.visible ? 'Hide device' : 'Show device'}">
             <div class="vehicle-color-indicator" style="background: ${info.color};"></div>
@@ -96,7 +96,7 @@ export class VehiclePanelManager {
               ${online ? '● Online' : '○ Offline'}
             </div>
           </div>
-          
+
           ${location ? `
             <div class="vehicle-item-details">
               <div><strong>${this.tracker.t('coordinates')}:</strong></div>
@@ -108,7 +108,7 @@ export class VehiclePanelManager {
                 ${this.formatTimestamp(location.timestamp)}
               </div>
             </div>
-            
+
             <div class="vehicle-item-actions">
               <button class="vehicle-action-btn" onclick="event.stopPropagation(); window.locationTracker.vehiclePanelManager.centerOnVehicle('${deviceId}')">
                 🎯 ${this.tracker.t('centerOnMap') || 'Center'}
@@ -128,10 +128,10 @@ export class VehiclePanelManager {
   }
 
   getLatestLocationForDevice(deviceId) {
-    const locations = this.tracker.isHistoryMode 
-      ? this.tracker.filteredLocations 
+    const locations = this.tracker.isHistoryMode
+      ? this.tracker.filteredLocations
       : this.tracker.locations;
-    
+
     return locations.find(loc => loc.device_id === deviceId);
   }
 
@@ -147,13 +147,13 @@ export class VehiclePanelManager {
     const now = new Date();
     const diffMs = now - date;
     const diffMins = Math.floor(diffMs / 60000);
-    
+
     if (diffMins < 1) return this.tracker.t('justNow') || 'Just now';
     if (diffMins < 60) return `${diffMins} ${this.tracker.t('minutesAgo') || 'min ago'}`;
-    
+
     const diffHours = Math.floor(diffMins / 60);
     if (diffHours < 24) return `${diffHours} ${this.tracker.t('hoursAgo') || 'hours ago'}`;
-    
+
     return date.toLocaleString();
   }
 
@@ -167,7 +167,7 @@ export class VehiclePanelManager {
     const location = this.getLatestLocationForDevice(deviceId);
     if (location) {
       this.tracker.mapManager.centerMapOnLocation(location);
-      
+
       // Open marker popup
       const marker = this.tracker.mapManager.markers.get(deviceId);
       if (marker) {
@@ -182,22 +182,22 @@ export class VehiclePanelManager {
     if (deviceInfo && !deviceInfo.visible) {
       this.tracker.deviceManager.toggleDeviceVisibility(deviceId, true);
     }
-    
+
     // Open main menu and switch to locations tab
     const popup = document.getElementById('popup-menu');
     if (popup) {
       popup.classList.add('active');
-      
+
       const tabButtons = document.querySelectorAll('.tab-button');
       const tabContents = document.querySelectorAll('.tab-content');
-      
+
       tabButtons.forEach(btn => {
         btn.classList.remove('active');
         if (btn.dataset.tab === 'locations') {
           btn.classList.add('active');
         }
       });
-      
+
       tabContents.forEach(content => {
         content.classList.remove('active');
         if (content.id === 'locations-tab') {

@@ -447,11 +447,12 @@ export class GeofenceManager {
     }
 
     const sourceId = `geofence-${geofenceId}`;
-    // FIX: Only change visibility for THIS specific geofence
     // Check both individual visibility AND global showGeofences flag
     const shouldBeVisible = visible && this.showGeofences;
     const visibility = shouldBeVisible ? 'visible' : 'none';
+
     console.log(`Setting ${sourceId} visibility to ${visibility}`);
+
     if (this.map.getLayer(`${sourceId}-fill`)) {
       this.map.setLayoutProperty(`${sourceId}-fill`, 'visibility', visibility);
     }
@@ -459,10 +460,9 @@ export class GeofenceManager {
       this.map.setLayoutProperty(`${sourceId}-outline`, 'visibility', visibility);
     }
 
-    // Update UI
+    // Update UI checkboxes without reloading data
     this.updateGeofenceLegend();
     this.updatePanelGeofenceList();
-    this.loadGeofences();
   }
 
   toggleAllGeofencesVisibility() {
@@ -599,6 +599,11 @@ export class GeofenceManager {
     if (this.drawingMode) {
       this.cancelDrawing();
       return;
+    }
+
+    // Close all open menus so the user is immediately on the map
+    if (this.tracker.uiManager) {
+      this.tracker.uiManager.closeAllMenus();
     }
 
     this.drawingMode = true;

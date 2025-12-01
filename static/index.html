@@ -47,6 +47,7 @@
         </div>
 
         <div class="map-controls">
+          <!-- ... track buttons ... -->
           <button id="track-latest-btn" class="track-btn enabled">
             <div class="track-icon"></div>
             <span>Track Latest</span>
@@ -69,7 +70,9 @@
 
         <div id="map"></div>
 
+        <!-- ... overlays ... -->
         <div class="no-filter-overlay" id="no-filter-overlay">
+          <!-- ... content ... -->
           <h3 id="no-filter-title">⚠️ No Time Filter Applied</h3>
           <p id="no-filter-message">Please configure a time filter in History Settings to view historical data.</p>
           <button class="btn" id="no-filter-open-settings-btn">
@@ -81,6 +84,7 @@
         </div>
 
         <div class="no-results-overlay" id="no-results-overlay" style="border-color: #ef4444; z-index: 10600;">
+          <!-- ... content ... -->
           <h3 id="empty-results-title">⚠️ No Results Found</h3>
           <p id="empty-results-message">No location data matches your filter criteria. Try adjusting the parameters.</p>
           <button class="btn" id="empty-results-adjust-btn-element">
@@ -96,15 +100,10 @@
           <span>🔴 LIVE MODE</span>
         </div>
 
-      <!-- Menu Button - Bottom Right -->
-        <div class="bottom-right-menu">
-          <button id="menu-toggle-btn-bottom" class="menu-toggle-btn-bottom">
-            <span>⚙️</span>
-            <span id="menu-text">Menu</span>
-          </button>
-        </div>
+        <!-- REMOVED: Bottom Right Menu Button -->
 
         <div class="route-legend" id="route-legend" style="display: none;">
+          <!-- ... content ... -->
           <div style="display: flex; align-items: center; gap: 8px;">
             <div style="width: 12px; height: 12px; background: #10b981; border-radius: 50%; border: 2px solid white;">
             </div>
@@ -121,202 +120,11 @@
     </div>
   </div>
 
-  <!-- Main Menu Popup -->
-  <div class="popup-menu" id="popup-menu">
-    <div class="popup-content">
-      <div class="popup-header">
-        <h2>Controls & Information</h2>
-        <button class="popup-close" id="popup-close">×</button>
-      </div>
-      <div class="popup-body">
-        <div class="menu-tabs">
-          <button class="tab-button active" data-tab="controls">⚙️ Controls</button>
-          <button class="tab-button" data-tab="locations">📍 Locations</button>
-          <button class="tab-button" data-tab="geofences">🗺️ Geofences</button>
-          <button class="tab-button" data-tab="routes">🛣️ Routes</button>
-        </div>
+  <!-- REMOVED: Main Menu Popup -->
 
-        <!-- Controls Tab -->
-        <div class="tab-content active" id="controls-tab">
-          <div class="card">
-            <div class="card-body">
-              <div class="control-group">
-                <label for="history-limit">History Limit:</label>
-                <input type="number" id="history-limit" value="50" min="10" max="500">
-              </div>
-              <button class="btn" id="refresh-data-btn" onclick="locationTracker.refreshData()">Refresh Data</button>
-
-              <div class="control-item">
-                <label style="display:flex; align-items:center; gap:6px; cursor:pointer; width:100%;">
-                  <input type="checkbox" id="toggle-trace-dots" checked>
-                  <span id="trace-dots-label">Show trace dots</span>
-                </label>
-              </div>
-              <div class="control-item">
-                <label style="display:flex; align-items:center; gap:6px; cursor:pointer; width:100%;">
-                  <input type="checkbox" id="toggle-clustering">
-                  <span>Use marker clustering (>100 points)</span>
-                </label>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Locations Tab -->
-        <div class="tab-content" id="locations-tab">
-          <div class="card">
-            <div class="card-body">
-              <div class="location-list" id="location-list">
-                <div class="loading">
-                  <div class="spinner"></div>Loading locations...
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Geofences Tab -->
-        <div class="tab-content" id="geofences-tab">
-          <div class="card">
-            <div class="card-body">
-              <h4 style="margin-bottom: 15px; color: #374151;">🗺️ <span id="geofence-management-title">Geofence Management</span></h4>
-
-              <!-- Actions -->
-              <div class="button-group" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
-                <button class="btn" onclick="window.locationTracker.geofenceManager?.startDrawing()">
-                  🖊️ <span id="draw-geofence-btn-text">Draw New Geofence</span>
-                </button>
-               <button class="btn secondary" onclick="window.locationTracker.geofenceManager?.createGeofenceFromRoute()" style="margin-bottom: 10px;">
-                🛣️ <span id="create-from-route-btn-text">Create from Route</span>
-              </button>
-                <button class="btn secondary" onclick="window.locationTracker.geofenceManager?.loadGeofences()">
-                  🔄 <span id="reload-geofences-btn-text">Reload Geofences</span>
-                </button>
-                <button class="btn secondary" onclick="window.locationTracker.geofenceManager?.toggleGeofenceVisibility()">
-                  👁️ <span id="toggle-visibility-btn-text">Toggle Visibility</span>
-                </button>
-              </div>
-
-              <!-- Statistics -->
-              <div class="geofence-stats" style="background: #f9fafb; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                <h5 style="margin: 0 0 10px 0; color: #374151; font-size: 13px;">
-                  📊 <span id="geofence-stats-title">Statistics</span>
-                </h5>
-                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
-                  <div class="stat-item" style="padding: 8px; background: white; border-radius: 6px;">
-                    <span class="stat-label" style="font-size: 11px;" id="total-geofences-label">Total Geofences:</span>
-                    <span class="stat-value" id="total-geofences-count" style="font-size: 16px;">0</span>
-                  </div>
-                  <div class="stat-item" style="padding: 8px; background: white; border-radius: 6px;">
-                    <span class="stat-label" style="font-size: 11px;" id="active-geofences-label">Active:</span>
-                    <span class="stat-value" id="active-geofences-count" style="font-size: 16px;">0</span>
-                  </div>
-                  <div class="stat-item" style="padding: 8px; background: white; border-radius: 6px;">
-                    <span class="stat-label" style="font-size: 11px;" id="devices-inside-label">Devices Inside:</span>
-                    <span class="stat-value" id="devices-inside-count" style="font-size: 16px;">0</span>
-                  </div>
-                  <div class="stat-item" style="padding: 8px; background: white; border-radius: 6px;">
-                    <span class="stat-label" style="font-size: 11px;" id="total-violations-label">Total Alerts:</span>
-                    <span class="stat-value" id="total-violations-count" style="font-size: 16px;">0</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Geofence List -->
-              <div id="geofence-list" style="max-height: 350px; overflow-y: auto;">
-                <h5 style="margin: 0 0 10px 0; color: #374151; font-size: 13px;">
-                  📍 <span id="geofence-list-title">Active Geofences</span>
-                </h5>
-                <div id="geofence-items">
-                  <div style="color: #9ca3af; font-size: 12px; text-align: center; padding: 20px;">
-                    <span id="no-geofences-msg">No geofences created yet</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- routes tab -->
-        <div class="tab-content" id="routes-tab">
-          <div class="card">
-            <div class="card-body">
-              <h4 style="margin-bottom: 15px; color: #374151;">🛣️ <span id="route-management-title">route management</span></h4>
-
-              <!-- actions -->
-              <div class="button-group" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
-                <button class="btn" onclick="window.locationTracker.routeManager?.startcreatingroute()">
-                  📍 <span id="create-route-btn-text">create route from history</span>
-                </button>
-                <button class="btn secondary" onclick="window.locationTracker.routeManager?.loadroutes()">
-                  🔄 <span id="reload-routes-btn-text">reload routes</span>
-                </button>
-                <button class="btn secondary" onclick="window.locationTracker.routeManager?.toggleallroutesvisibility()">
-                  👁️ <span id="toggle-routes-visibility-btn-text">toggle visibility</span>
-                </button>
-              </div>
-
-              <!-- statistics -->
-              <div class="route-stats" style="background: #f9fafb; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                <h5 style="margin: 0 0 10px 0; color: #374151; font-size: 13px;">
-                  📊 <span id="route-stats-title">statistics</span>
-                </h5>
-                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
-                  <div class="stat-item" style="padding: 8px; background: white; border-radius: 6px;">
-                    <span class="stat-label" style="font-size: 11px;" id="total-routes-label">total routes:</span>
-                    <span class="stat-value" id="total-routes-count" style="font-size: 16px;">0</span>
-                  </div>
-                  <div class="stat-item" style="padding: 8px; background: white; border-radius: 6px;">
-                    <span class="stat-label" style="font-size: 11px;" id="total-distance-label">total distance:</span>
-                    <span class="stat-value" id="total-distance-count" style="font-size: 16px;">0 km</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- route list -->
-              <div id="route-list" style="max-height: 350px; overflow-y: auto;">
-                <h5 style="margin: 0 0 10px 0; color: #374151; font-size: 13px;">
-                  📍 <span id="route-list-title">active routes</span>
-                </h5>
-                <div id="route-items">
-                  <div style="color: #9ca3af; font-size: 12px; text-align: center; padding: 20px;">
-                    <span id="no-routes-msg">no routes created yet</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Statistics Tab - Hidden but kept for stats polling -->
-        <div class="tab-content" id="stats-tab" style="display: none !important;">
-          <div class="card">
-            <div class="card-body stats">
-              <div class="stat-item">
-                <span class="stat-label">Connected Clients:</span>
-                <span class="stat-value" id="connected-clients">-</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">Total Locations:</span>
-                <span class="stat-value" id="total-locations">-</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">Active Devices:</span>
-                <span class="stat-value" id="active-devices">-</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">Last Update:</span>
-                <span class="stat-value" id="last-update">-</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- History Configuration Popup -->
+  <!-- History Configuration Popup (Keep this as it is a modal) -->
   <div class="popup-menu" id="history-config-popup">
+    <!-- ... content ... -->
     <div class="popup-content">
       <div class="popup-header">
         <h2>📅 <span id="history-config-title">Historical View Configuration</span></h2>
@@ -409,6 +217,7 @@
       </div>
     </div>
   </div>
+
   <!-- Unified Sliding Panel - Left Side -->
   <div class="sliding-panel" id="sliding-panel">
     <!-- Hamburger Toggle Button -->
@@ -434,6 +243,10 @@
         <button class="panel-tab" data-panel-tab="routes">
           🛣️ <span id="routes-tab-title">Routes</span>
         </button>
+        <!-- Added Settings Tab -->
+        <button class="panel-tab" data-panel-tab="settings">
+          ⚙️ <span id="settings-tab-title">Settings</span>
+        </button>
       </div>
 
       <div class="panel-body">
@@ -452,7 +265,11 @@
             <button class="panel-action-btn" onclick="window.locationTracker.geofenceManager?.startDrawing()">
               🖊️ <span id="draw-geofence-panel-text">Draw New</span>
             </button>
-            <button class="panel-action-btn secondary" onclick="window.locationTracker.geofenceManager?.toggleGeofenceVisibility()">
+            <!-- Added Create From Route Button -->
+            <button class="panel-action-btn secondary" onclick="window.locationTracker.geofenceManager?.createGeofenceFromRoute()">
+              🛣️ <span id="create-from-route-panel-text">From Route</span>
+            </button>
+            <button class="panel-action-btn secondary" onclick="window.locationTracker.geofenceManager?.toggleAllGeofencesVisibility()">
               👁️ <span id="toggle-geofence-panel-text">Toggle</span>
             </button>
             <button class="panel-action-btn secondary" onclick="window.locationTracker.geofenceManager?.loadGeofences()">
@@ -513,10 +330,51 @@
             </div>
           </div>
         </div>
+
+        <!-- Settings Tab (MOVED FROM POPUP) -->
+        <div class="panel-tab-content" id="settings-panel-tab">
+          <div class="control-group">
+            <label for="history-limit">History Limit:</label>
+            <input type="number" id="history-limit" value="50" min="10" max="500">
+          </div>
+          <button class="btn" id="refresh-data-btn" onclick="locationTracker.refreshData()">Refresh Data</button>
+
+          <div class="control-item" style="margin-top: 15px;">
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer; width:100%;">
+              <input type="checkbox" id="toggle-trace-dots" checked>
+              <span id="trace-dots-label">Show trace dots</span>
+            </label>
+          </div>
+          <div class="control-item" style="margin-top: 10px;">
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer; width:100%;">
+              <input type="checkbox" id="toggle-clustering">
+              <span>Use marker clustering (>100 points)</span>
+            </label>
+          </div>
+
+          <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee;">
+             <div class="stat-item">
+                <span class="stat-label">Connected Clients:</span>
+                <span class="stat-value" id="connected-clients">-</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">Total Locations:</span>
+                <span class="stat-value" id="total-locations">-</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">Active Devices:</span>
+                <span class="stat-value" id="active-devices">-</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">Last Update:</span>
+                <span class="stat-value" id="last-update">-</span>
+              </div>
+          </div>
+        </div>
+
       </div>
     </div>
   </div>
   <script type="module" src="js/app.js"></script>
 </body>
-
 </html>
