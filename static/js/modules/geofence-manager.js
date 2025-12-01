@@ -756,10 +756,10 @@ export class GeofenceManager {
   async createGeofenceFromRoute(routeId = null) {
     const popup = document.createElement('div');
     popup.className = 'popup-menu active';
-    popup. id = 'geofence-from-route-popup';
+    popup.id = 'geofence-from-route-popup';
     popup.style.zIndex = '10001';
 
-    popup. innerHTML = `
+    popup.innerHTML = `
       <div class="popup-content" style="max-width: 500px;">
         <div class="popup-header">
           <h2>🛣️ Create Geofence from Route</h2>
@@ -771,7 +771,7 @@ export class GeofenceManager {
               <div class="control-group">
                 <label for="geofence-route-select">Select Route:</label>
                 <select id="geofence-route-select" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px;">
-                  <option value="">Choose a route...</option>
+                  <option value="">Choose a route... </option>
                 </select>
               </div>
 
@@ -795,7 +795,7 @@ export class GeofenceManager {
               </div>
 
               <div style="display: flex; gap: 10px; margin-top: 20px;">
-                <button class="btn" onclick="window.locationTracker.geofenceManager.generateGeofenceFromRoute()" style="flex: 1;">
+                <button class="btn" onclick="window.locationTracker.geofenceManager. generateGeofenceFromRoute()" style="flex: 1;">
                   Create Geofence
                 </button>
                 <button class="btn secondary" onclick="document.getElementById('geofence-from-route-popup').remove()" style="flex: 1;">
@@ -847,7 +847,7 @@ export class GeofenceManager {
 
     // Calculate convex hull of buffer points
     const hullPoints = this.calculateConvexHull(bufferPoints);
-    const coordinates = [...hullPoints, hullPoints[0]]; // Close polygon
+    const coordinates = [... hullPoints, hullPoints[0]]; // Close polygon
 
     const geofenceData = {
       name: name,
@@ -865,7 +865,7 @@ export class GeofenceManager {
       if (response.ok) {
         const newGeofence = await response.json();
         this.geofences.set(newGeofence.id, newGeofence);
-        this. visibleGeofences.add(newGeofence.id);
+        this.visibleGeofences.add(newGeofence.id);
         this.drawGeofence(newGeofence);
 
         document.getElementById('geofence-from-route-popup').remove();
@@ -901,7 +901,7 @@ export class GeofenceManager {
           const offsetLng = radiusDegrees * Math.cos(angle) / Math.cos(coord[1] * Math.PI / 180);
           const offsetLat = radiusDegrees * Math.sin(angle);
 
-          bufferPoints. push([
+          bufferPoints.push([
             coord[0] + offsetLng,
             coord[1] + offsetLat
           ]);
@@ -911,7 +911,7 @@ export class GeofenceManager {
         const offsetLng = radiusDegrees / Math.cos(coord[1] * Math. PI / 180);
         const offsetLat = radiusDegrees;
 
-        bufferPoints. push(
+        bufferPoints.push(
           [coord[0] - offsetLng, coord[1] - offsetLat], // SW
           [coord[0] + offsetLng, coord[1] - offsetLat], // SE
           [coord[0] + offsetLng, coord[1] + offsetLat], // NE
