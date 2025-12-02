@@ -233,12 +233,10 @@
         <button class="panel-close-btn">×</button>
       </div>
 
+      <!-- Top Tabs: Only Vehicles, Geofences, Routes -->
       <div class="panel-tabs">
         <button class="panel-tab active" data-panel-tab="vehicles">
           🚗 <span id="vehicles-tab-title">Vehicles</span>
-        </button>
-        <button class="panel-tab" data-panel-tab="locations">
-          📍 <span id="locations-tab-title">Locations</span>
         </button>
         <button class="panel-tab" data-panel-tab="geofences">
           🗺️ <span id="geofences-tab-title">Geofences</span>
@@ -246,29 +244,16 @@
         <button class="panel-tab" data-panel-tab="routes">
           🛣️ <span id="routes-tab-title">Routes</span>
         </button>
-        <!-- Added Settings Tab -->
-        <button class="panel-tab" data-panel-tab="settings">
-          ⚙️ <span id="settings-tab-title">Settings</span>
-        </button>
       </div>
 
+      <!-- Panel Body (Scrollable) -->
       <div class="panel-body">
+
         <!-- Vehicles Tab -->
         <div class="panel-tab-content active" id="vehicles-panel-tab">
           <div id="vehicle-list-panel">
-            <div class="loading">
-              <div class="spinner"></div>Loading vehicles...
-            </div>
-          </div>
-        </div>
-
-        <!-- ✅ ADDED LOCATIONS CONTENT CONTAINER -->
-        <div class="panel-tab-content" id="locations-panel-tab">
-          <div id="location-list">
-             <!-- LocationTracker will populate this, fixing the null error -->
-             <div class="loading">
-               <div class="spinner"></div>Loading locations...
-             </div>
+            <!-- Content populated by JS -->
+            <div class="loading"><div class="spinner"></div>Loading vehicles...</div>
           </div>
         </div>
 
@@ -278,7 +263,6 @@
             <button class="panel-action-btn" onclick="window.locationTracker.geofenceManager?.startDrawing()">
               🖊️ <span id="draw-geofence-panel-text">Draw New</span>
             </button>
-            <!-- Added Create From Route Button -->
             <button class="panel-action-btn secondary" onclick="window.locationTracker.geofenceManager?.createGeofenceFromRoute()">
               🛣️ <span id="create-from-route-panel-text">From Route</span>
             </button>
@@ -344,8 +328,10 @@
           </div>
         </div>
 
-        <!-- Settings Tab (MOVED FROM POPUP) -->
-        <div class="panel-tab-content" id="settings-panel-tab">
+        <!-- Settings Content (Hidden by default, shown when toggled via footer) -->
+        <div class="panel-tab-content" id="settings-panel-content" style="display: none;">
+          <h4 style="margin-top:0; color: #374151; font-size: 16px; border-bottom: 1px solid #eee; padding-bottom: 10px;">System Settings</h4>
+
           <div class="control-group">
             <label for="history-limit">History Limit:</label>
             <input type="number" id="history-limit" value="50" min="10" max="500">
@@ -366,25 +352,21 @@
           </div>
 
           <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee;">
-             <div class="stat-item">
-                <span class="stat-label">Connected Clients:</span>
-                <span class="stat-value" id="connected-clients">-</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">Total Locations:</span>
-                <span class="stat-value" id="total-locations">-</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">Active Devices:</span>
-                <span class="stat-value" id="active-devices">-</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">Last Update:</span>
-                <span class="stat-value" id="last-update">-</span>
-              </div>
+             <h5 style="margin-bottom: 10px;">System Stats</h5>
+             <div class="stat-item"><span class="stat-label">Connected Clients:</span> <span class="stat-value" id="connected-clients">-</span></div>
+             <div class="stat-item"><span class="stat-label">Total Locations:</span> <span class="stat-value" id="total-locations">-</span></div>
+             <div class="stat-item"><span class="stat-label">Active Devices:</span> <span class="stat-value" id="active-devices">-</span></div>
+             <div class="stat-item"><span class="stat-label">Last Update:</span> <span class="stat-value" id="last-update">-</span></div>
           </div>
         </div>
 
+      </div>
+
+      <!-- ✅ NEW FOOTER: Settings & Stats Button -->
+      <div class="panel-footer">
+        <button class="settings-toggle-btn" onclick="window.locationTracker.vehiclePanelManager.toggleSettings()">
+          ⚙️ Settings & Stats
+        </button>
       </div>
     </div>
   </div>

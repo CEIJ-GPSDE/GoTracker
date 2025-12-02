@@ -707,6 +707,74 @@ body {
   margin-bottom: 4px;
 }
 
+/* Panel Footer for Settings */
+.panel-footer {
+  padding: 15px;
+  border-top: 1px solid #e5e7eb;
+  background: #f9fafb;
+  flex-shrink: 0; /* Prevent shrinking */
+}
+
+.settings-toggle-btn {
+  width: 100%;
+  background: transparent;
+  border: 1px solid #d1d5db;
+  color: #6b7280;
+  padding: 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.settings-toggle-btn:hover {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.settings-toggle-btn.active {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+
+/* Nested Locations View */
+.nested-history-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 15px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.back-btn {
+  background: transparent;
+  border: none;
+  color: #667eea;
+  cursor: pointer;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 0;
+}
+
+.back-btn:hover {
+  text-decoration: underline;
+}
+
+.history-title {
+  flex: 1;
+  text-align: center;
+  font-weight: 600;
+  color: #374151;
+}
+
 #location-list .location-item .timestamp {
   font-size: 11px;
   color: #9ca3af;

@@ -262,16 +262,18 @@ func (db *Database) InitializeSchema(prefix string) error {
 		return err
 	}
 
-	// ✅ NEW: Migrations for new columns
-	_, err = db.Exec(`ALTER TABLE geofences ADD COLUMN IF NOT EXISTS color VARCHAR(50);`)
+	_, err = db.Exec(`ALTER TABLE geofences ADD COLUMN IF NOT EXISTS color VARCHAR(50) DEFAULT '#667eea';`)
 	if err != nil {
-		log.Printf("Warning adding color column: %v", err)
+		log.Printf("Error adding color column: %v", err)
 	}
 
 	_, err = db.Exec(`ALTER TABLE geofences ADD COLUMN IF NOT EXISTS linked_device_id VARCHAR(255);`)
 	if err != nil {
-		log.Printf("Warning adding linked_device_id column: %v", err)
+		log.Printf("Error adding linked_device_id column: %v", err)
 	}
+
+	log.Printf("✅ Schema initialized for tables: %s, %s, geofences", tableName, routesTableName)
+	return nil
 
 	// Restore data if we had a backup
 	var backupExists bool
