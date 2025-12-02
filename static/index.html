@@ -234,99 +234,64 @@
       </div>
 
       <!-- Top Tabs: Only Vehicles, Geofences, Routes -->
-      <div class="panel-tabs">
-        <button class="panel-tab active" data-panel-tab="vehicles">
-          🚗 <span id="vehicles-tab-title">Vehicles</span>
-        </button>
-        <button class="panel-tab" data-panel-tab="geofences">
-          🗺️ <span id="geofences-tab-title">Geofences</span>
-        </button>
-        <button class="panel-tab" data-panel-tab="routes">
-          🛣️ <span id="routes-tab-title">Routes</span>
-        </button>
+    <div class="panel-tabs">
+      <button class="panel-tab active" data-panel-tab="vehicles">
+        🚗 Vehicles
+      </button>
+      <!-- Unified Tab -->
+      <button class="panel-tab" data-panel-tab="zones">
+        🗺️ Zones
+      </button>
+      <!-- New Alerts Tab -->
+      <button class="panel-tab" data-panel-tab="alerts">
+        🔔 Alerts <span id="alert-badge" style="display:none; background:#ef4444; color:white; border-radius:50%; padding:2px 5px; font-size:10px;">0</span>
+      </button>
+    </div>
+
+    <div class="panel-body">
+
+      <!-- Vehicles Tab -->
+      <div class="panel-tab-content active" id="vehicles-panel-tab">
+        <div id="vehicle-list-panel">
+          <div class="loading"><div class="spinner"></div>Loading vehicles...</div>
+        </div>
+        <!-- HIDDEN CONTAINER FOR LOCATIONS LIST TO FIX ERROR -->
+        <div id="location-list" style="display:none;"></div>
       </div>
 
-      <!-- Panel Body (Scrollable) -->
-      <div class="panel-body">
-
-        <!-- Vehicles Tab -->
-        <div class="panel-tab-content active" id="vehicles-panel-tab">
-          <div id="vehicle-list-panel">
-            <!-- Content populated by JS -->
-            <div class="loading"><div class="spinner"></div>Loading vehicles...</div>
-          </div>
+      <!-- Unified Zones Tab -->
+      <div class="panel-tab-content" id="zones-panel-tab">
+        <div class="zone-type-toggle">
+          <button class="zone-type-btn active" onclick="window.locationTracker.zoneManager.switchType('geofence')">Geofences</button>
+          <button class="zone-type-btn" onclick="window.locationTracker.zoneManager.switchType('route')">Routes</button>
         </div>
 
-        <!-- Geofences Tab -->
-        <div class="panel-tab-content" id="geofences-panel-tab">
-          <div class="panel-section-actions">
-            <button class="panel-action-btn" onclick="window.locationTracker.geofenceManager?.startDrawing()">
-              🖊️ <span id="draw-geofence-panel-text">Draw New</span>
-            </button>
-            <button class="panel-action-btn secondary" onclick="window.locationTracker.geofenceManager?.createGeofenceFromRoute()">
-              🛣️ <span id="create-from-route-panel-text">From Route</span>
-            </button>
-            <button class="panel-action-btn secondary" onclick="window.locationTracker.geofenceManager?.toggleAllGeofencesVisibility()">
-              👁️ <span id="toggle-geofence-panel-text">Toggle</span>
-            </button>
-            <button class="panel-action-btn secondary" onclick="window.locationTracker.geofenceManager?.loadGeofences()">
-              🔄 <span id="reload-geofence-panel-text">Reload</span>
-            </button>
-          </div>
-
-          <div class="panel-stats">
-            <div class="stat-box">
-              <span class="stat-label" id="panel-total-geofences-label">Total:</span>
-              <span class="stat-value" id="panel-total-geofences-count">0</span>
-            </div>
-            <div class="stat-box">
-              <span class="stat-label" id="panel-active-geofences-label">Active:</span>
-              <span class="stat-value" id="panel-active-geofences-count">0</span>
-            </div>
-            <div class="stat-box">
-              <span class="stat-label" id="panel-devices-inside-label">Devices:</span>
-              <span class="stat-value" id="panel-devices-inside-count">0</span>
-            </div>
-          </div>
-
-          <div id="geofence-panel-items">
-            <div style="color: #9ca3af; font-size: 12px; text-align: center; padding: 20px;">
-              <span id="no-geofences-panel-msg">No geofences created yet</span>
-            </div>
-          </div>
+        <!-- Dynamic Actions Area -->
+        <div class="panel-section-actions" id="zone-actions">
+          <!-- Populated by JS -->
         </div>
 
-        <!-- Routes Tab -->
-        <div class="panel-tab-content" id="routes-panel-tab">
-          <div class="panel-section-actions">
-            <button class="panel-action-btn" onclick="window.locationTracker.routeManager?.startCreatingRoute()">
-              📍 <span id="create-route-panel-text">Create Route</span>
-            </button>
-            <button class="panel-action-btn secondary" onclick="window.locationTracker.routeManager?.toggleAllRoutesVisibility()">
-              👁️ <span id="toggle-route-panel-text">Toggle</span>
-            </button>
-            <button class="panel-action-btn secondary" onclick="window.locationTracker.routeManager?.loadRoutes()">
-              🔄 <span id="reload-route-panel-text">Reload</span>
-            </button>
-          </div>
-
-          <div class="panel-stats">
-            <div class="stat-box">
-              <span class="stat-label" id="panel-total-routes-label">Total:</span>
-              <span class="stat-value" id="panel-total-routes-count">0</span>
-            </div>
-            <div class="stat-box">
-              <span class="stat-label" id="panel-total-distance-label">Distance:</span>
-              <span class="stat-value" id="panel-total-distance-count">0 km</span>
-            </div>
-          </div>
-
-          <div id="route-panel-items">
-            <div style="color: #9ca3af; font-size: 12px; text-align: center; padding: 20px;">
-              <span id="no-routes-panel-msg">No routes created yet</span>
-            </div>
-          </div>
+        <!-- Stats -->
+        <div class="panel-stats" id="zone-stats">
+          <!-- Populated by JS -->
         </div>
+
+        <!-- List -->
+        <div id="zone-list-items">
+          <div class="loading">Loading...</div>
+        </div>
+      </div>
+
+      <!-- Alerts Tab -->
+      <div class="panel-tab-content" id="alerts-panel-tab">
+        <div class="panel-section-actions">
+          <button class="panel-action-btn" onclick="window.locationTracker.notificationManager.markAllRead()">✓ Mark All Read</button>
+          <button class="panel-action-btn secondary" onclick="window.locationTracker.notificationManager.loadNotifications()">🔄 Refresh</button>
+        </div>
+        <div id="notification-list">
+          <div style="padding:20px; text-align:center; color:#9ca3af">No alerts found</div>
+        </div>
+      </div>
 
         <!-- Settings Content (Hidden by default, shown when toggled via footer) -->
         <div class="panel-tab-content" id="settings-panel-content" style="display: none;">

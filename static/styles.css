@@ -707,6 +707,71 @@ body {
   margin-bottom: 4px;
 }
 
+/* Notifications Tab */
+.notification-item {
+  padding: 12px;
+  border-bottom: 1px solid #eee;
+  border-left: 4px solid transparent;
+  background: white;
+  transition: background 0.2s;
+  cursor: pointer;
+}
+
+.notification-item.unread {
+  background: #f0f9ff;
+  border-left-color: #3b82f6;
+}
+
+.notification-item.alert {
+  border-left-color: #ef4444;
+}
+
+.notification-item:hover {
+  background: #f8fafc;
+}
+
+.notification-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.notification-message {
+  color: #374151;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* Unified Zones Tab */
+.zone-type-toggle {
+  display: flex;
+  background: #f1f5f9;
+  padding: 4px;
+  border-radius: 8px;
+  margin-bottom: 15px;
+}
+
+.zone-type-btn {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.zone-type-btn.active {
+  background: white;
+  color: #3b82f6;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
 /* Panel Footer for Settings */
 .panel-footer {
   padding: 15px;

@@ -223,23 +223,17 @@ export class GeofenceManager {
     const isVisible = isIndividuallyVisible && this.showGeofences;
     const baseColor = geofence.color || '#667eea';
 
-    console.log(`Drawing geofence ${geofence.id}: individually=${isIndividuallyVisible}, global=${this.showGeofences}, final=${isVisible}`);
+    // Validate hex color (basic check)
+    const validColor = /^#[0-9A-F]{6}$/i.test(baseColor) ? baseColor : '#667eea';
 
-    const fillColor = geofence.active ? 'baseColor' : '#9ca3af';
-    const outlineColor = geofence.active ? 'baseColor' : '#6b7280';
-    const fillOpacity = geofence.active ? 0.2 : 0.1;
-
-    // Add fill layer
     this.map.addLayer({
       id: `${sourceId}-fill`,
       type: 'fill',
       source: sourceId,
-      layout: {
-        'visibility': isVisible ? 'visible' : 'none'
-      },
+      layout: { 'visibility': isVisible ? 'visible' : 'none' },
       paint: {
-        'fill-color': fillColor,
-        'fill-opacity': fillOpacity
+        'fill-color': validColor, // ✅ Pass the value directly
+        'fill-opacity': 0.2
       }
     });
 

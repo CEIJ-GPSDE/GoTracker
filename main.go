@@ -241,18 +241,6 @@ func (db *Database) InitializeSchema(prefix string) error {
     CREATE INDEX IF NOT EXISTS idx_%s_routes_device ON %s(device_id);
     CREATE INDEX IF NOT EXISTS idx_%s_routes_time ON %s(start_time, end_time);
 
-    -- Geofences table (already exists but ensuring it's here)
-    CREATE TABLE IF NOT EXISTS geofences (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        description TEXT,
-        geom GEOGRAPHY(POLYGON, 4326) NOT NULL,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-        active BOOLEAN DEFAULT TRUE
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_geofences_geom ON geofences USING GIST(geom);
     `,
 		tableName, tableName, tableName, tableName, tableName, tableName, tableName,
 		routesTableName, routesTableName, routesTableName, routesTableName, routesTableName, routesTableName, routesTableName)
@@ -262,6 +250,47 @@ func (db *Database) InitializeSchema(prefix string) error {
 		return err
 	}
 
+	_, err = db.Exec(`
+    CREATE TABLE IF NOT EXISTS geofences (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        description TEXT,
+        geom GEOGRAPHY(POLYGON, 4326) NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        active BOOLEAN DEFAULT TRUE
+    );
+    CREATE INDEX IF NOT EXISTS idx_geofences_geom ON geofences USING GIST(geom);
+    `)
+    if err != nil {
+        return err
+    }
+
+    // ✅ FIX: Explicitly add columns individually to prevent transaction errors
+    db.Exec(`ALTER TABLE geofences ADD COLUMN IF NOT EXISTS color VARCHAR(50) DEFAULT '#667eea';`)
+    db.Exec(`ALTER TABLE geofences ADD COLUMN IF NOT EXISTS linked_device_id VARCHAR(255);`)
+
+    // ✅ NEW: Notifications table
+    _, err = db.Exec(`
+    CREATE TABLE IF NOT EXISTS notifications (
+        id SERIAL PRIMARY KEY,
+        device_id VARCHAR(255) NOT NULL,
+        message TEXT NOT NULL,
+        type VARCHAR(50) NOT NULL, -- 'alert', 'info', 'warning'
+        timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        read BOOLEAN DEFAULT FALSE,
+        location GEOGRAPHY(POINT, 4326)
+    );
+    CREATE INDEX IF NOT EXISTS idx_notifications_device ON notifications(device_id);
+    CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read);
+    `)
+    if err != nil {
+        return err
+    }
+
+    log.Printf("✅ Schema initialized for tables: %s, %s, geofences, notifications", tableName, routesTableName)
+    return nil
+	}
 	_, err = db.Exec(`ALTER TABLE geofences ADD COLUMN IF NOT EXISTS color VARCHAR(50) DEFAULT '#667eea';`)
 	if err != nil {
 		log.Printf("Error adding color column: %v", err)
@@ -343,6 +372,17 @@ type WebSocketHub struct {
 	register   chan *websocket.Conn
 	unregister chan *websocket.Conn
 	mutex      sync.RWMutex
+}
+
+type Notification struct {
+    ID        int       `json:"id"`
+    DeviceID  string    `json:"device_id"`
+    Message   string    `json:"message"`
+    Type      string    `json:"type"`
+    Timestamp time.Time `json:"timestamp"`
+    Read      bool      `json:"read"`
+    Latitude  float64   `json:"latitude,omitempty"`
+    Longitude float64   `json:"longitude,omitempty"`
 }
 
 var upgrader = websocket.Upgrader{
@@ -660,6 +700,8 @@ func (api *APIServer) Run(ctx context.Context) {
 	r.HandleFunc("/api/routes", api.getRoutesHandler).Methods("GET")
 	r.HandleFunc("/api/routes", api.createRouteHandler).Methods("POST")
 	r.HandleFunc("/api/routes/{id}", api.deleteRouteHandler).Methods("DELETE")
+	r.HandleFunc("/api/notifications", api.getNotificationsHandler).Methods("GET")
+	r.HandleFunc("/api/notifications/{id}/read", api.markNotificationReadHandler).Methods("PUT")
 
 	// Static file serving (MUST be last)
 	r.PathPrefix("/").Handler(http.FileServer(http.Dir("./static/")))
@@ -1583,6 +1625,71 @@ func (api *APIServer) geofenceCheckHandler(w http.ResponseWriter, r *http.Reques
 		"geofences": geofences,
 		"count":     len(geofences),
 	})
+}
+
+func (api *APIServer) getNotificationsHandler(w http.ResponseWriter, r *http.Request) {
+    limit := r.URL.Query().Get("limit")
+    if limit == "" { limit = "50" }
+
+    query := `
+        SELECT id, device_id, message, type, timestamp, read,
+               ST_Y(location::geometry) as lat, ST_X(location::geometry) as lng
+        FROM notifications
+        ORDER BY timestamp DESC LIMIT $1
+    `
+
+    rows, err := api.db.Query(query, limit)
+    if err != nil {
+        http.Error(w, "Database error", http.StatusInternalServerError)
+        return
+    }
+    defer rows.Close()
+
+    var notifications []Notification
+    for rows.Next() {
+        var n Notification
+        var lat, lng sql.NullFloat64
+        if err := rows.Scan(&n.ID, &n.DeviceID, &n.Message, &n.Type, &n.Timestamp, &n.Read, &lat, &lng); err != nil {
+            continue
+        }
+        if lat.Valid { n.Latitude = lat.Float64 }
+        if lng.Valid { n.Longitude = lng.Float64 }
+        notifications = append(notifications, n)
+    }
+
+    if notifications == nil { notifications = []Notification{} }
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(notifications)
+}
+
+func (api *APIServer) markNotificationReadHandler(w http.ResponseWriter, r *http.Request) {
+    vars := mux.Vars(r)
+    id := vars["id"]
+
+    query := "UPDATE notifications SET read = TRUE WHERE id = $1"
+    if id == "all" {
+        query = "UPDATE notifications SET read = TRUE WHERE read = FALSE"
+        _, err := api.db.Exec(query)
+        if err != nil {
+             http.Error(w, "Database error", http.StatusInternalServerError)
+             return
+        }
+    } else {
+        _, err := api.db.Exec(query, id)
+        if err != nil {
+             http.Error(w, "Database error", http.StatusInternalServerError)
+             return
+        }
+    }
+    w.WriteHeader(http.StatusOK)
+}
+
+func (api *APIServer) createNotification(deviceID, message, msgType string, lat, lng float64) {
+    query := `
+        INSERT INTO notifications (device_id, message, type, location)
+        VALUES ($1, $2, $3, ST_SetSRID(ST_MakePoint($5, $4), 4326)::geography)
+    `
+    api.db.Exec(query, deviceID, message, msgType, lat, lng)
 }
 
 // Get routes
