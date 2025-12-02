@@ -1,5 +1,5 @@
 import { LocationTracker } from './core/location-tracker.js';
-import { CONFIG, getApiConfig } from './config.js';
+import { CONFIG, getApiConfig } from './core/config.js';
 
 // Initialize the application
 let locationTracker;
