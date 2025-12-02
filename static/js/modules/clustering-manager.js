@@ -7,70 +7,83 @@ export class ClusteringManager {
   }
 
   initialize() {
+    // ✅ VERIFICAR si las capas ya existen ANTES de crearlas
+    if (this.map.getLayer('clusters')) {
+      console.log('Clustering layers already exist, skipping initialization');
+      return;
+    }
+
     // Add cluster source
-    this.map.addSource(this.clusterSourceId, {
-      type: 'geojson',
-      data: {
-        type: 'FeatureCollection',
-        features: []
-      },
-      cluster: true,
-      clusterMaxZoom: 14,
-      clusterRadius: 50
-    });
+    if (!this.map.getSource(this.clusterSourceId)) {
+      this.map.addSource(this.clusterSourceId, {
+        type: 'geojson',
+        data: {
+          type: 'FeatureCollection',
+          features: []
+        },
+        cluster: true,
+        clusterMaxZoom: 14,
+        clusterRadius: 50
+      });
+    }
 
-    // Cluster circles
-    this.map.addLayer({
-      id: 'clusters',
-      type: 'circle',
-      source: this.clusterSourceId,
-      filter: ['has', 'point_count'],
-      paint: {
-        'circle-color': [
-          'step',
-          ['get', 'point_count'],
-          '#51bbd6', 100,
-          '#f1f075', 300,
-          '#f28cb1'
-        ],
-        'circle-radius': [
-          'step',
-          ['get', 'point_count'],
-          20, 100,
-          30, 300,
-          40
-        ]
-      }
-    });
+    // ✅ Solo agregar capas si NO existen
+    if (!this.map.getLayer('clusters')) {
+      this.map.addLayer({
+        id: 'clusters',
+        type: 'circle',
+        source: this.clusterSourceId,
+        filter: ['has', 'point_count'],
+        paint: {
+          'circle-color': [
+            'step',
+            ['get', 'point_count'],
+            '#51bbd6', 100,
+            '#f1f075', 300,
+            '#f28cb1'
+          ],
+          'circle-radius': [
+            'step',
+            ['get', 'point_count'],
+            20, 100,
+            30, 300,
+            40
+          ]
+        }
+      });
+    }
 
-    // Cluster count labels
-    this.map.addLayer({
-      id: 'cluster-count',
-      type: 'symbol',
-      source: this.clusterSourceId,
-      filter: ['has', 'point_count'],
-      layout: {
-        'text-field': '{point_count_abbreviated}',
-        'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
-        'text-size': 12
-      }
-    });
+    if (!this.map.getLayer('cluster-count')) {
+      this.map.addLayer({
+        id: 'cluster-count',
+        type: 'symbol',
+        source: this.clusterSourceId,
+        filter: ['has', 'point_count'],
+        layout: {
+          'text-field': '{point_count_abbreviated}',
+          'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
+          'text-size': 12
+        }
+      });
+    }
 
-    // Unclustered points
-    this.map.addLayer({
-      id: 'unclustered-point',
-      type: 'circle',
-      source: this.clusterSourceId,
-      filter: ['!', ['has', 'point_count']],
-      paint: {
-        'circle-color': ['get', 'color'],
-        'circle-radius': 8,
-        'circle-stroke-width': 2,
-        'circle-stroke-color': '#fff'
-      }
-    });
+    if (!this.map.getLayer('unclustered-point')) {
+      this.map.addLayer({
+        id: 'unclustered-point',
+        type: 'circle',
+        source: this.clusterSourceId,
+        filter: ['!', ['has', 'point_count']],
+        paint: {
+          'circle-color': ['get', 'color'],
+          'circle-radius': 8,
+          'circle-stroke-width': 2,
+          'circle-stroke-color': '#fff'
+        }
+      });
+    }
 
-    // Click handlers
+    // Click handlers (solo agregar una vez)
+    this.map.off('click', 'clusters'); // ✅ Remover listeners previos
     this.map.on('click', 'clusters', (e) => {
       const features = this.map.queryRenderedFeatures(e.point, {
         layers: ['clusters']
@@ -88,10 +101,11 @@ export class ClusteringManager {
       );
     });
 
+    this.map.off('click', 'unclustered-point'); // ✅ Remover listeners previos
     this.map.on('click', 'unclustered-point', (e) => {
       const coordinates = e.features[0].geometry.coordinates.slice();
       const properties = e.features[0].properties;
-      
+
       new maplibregl.Popup()
         .setLngLat(coordinates)
         .setHTML(`
@@ -113,9 +127,11 @@ export class ClusteringManager {
     });
 
     // Change cursor
+    this.map.off('mouseenter', 'clusters');
     this.map.on('mouseenter', 'clusters', () => {
       this.map.getCanvas().style.cursor = 'pointer';
     });
+    this.map.off('mouseleave', 'clusters');
     this.map.on('mouseleave', 'clusters', () => {
       this.map.getCanvas().style.cursor = '';
     });

@@ -7,71 +7,32 @@ export class UIManager {
   }
 
   setupPopupMenu() {
-    const menuToggleBottom = document.getElementById('menu-toggle-btn-bottom');
-    const popupMenu = document.getElementById('popup-menu');
-    const popupClose = document.getElementById('popup-close');
+    // Cleaned up setupPopupMenu - removed bottom-right menu logic
     const historyConfigPopup = document.getElementById('history-config-popup');
     const historyConfigClose = document.getElementById('history-config-close');
-    const tabButtons = document.querySelectorAll('.tab-button');
-    const tabContents = document.querySelectorAll('.tab-content');
-
-    menuToggleBottom.addEventListener('click', () => {
-      popupMenu.classList.add('active');
-    });
-
-    const closeMenu = () => {
-      popupMenu.classList.remove('active');
-    };
 
     const closeHistoryConfig = () => {
-      historyConfigPopup.classList.remove('active');
+      if(historyConfigPopup) historyConfigPopup.classList.remove('active');
     };
 
-    popupClose.addEventListener('click', closeMenu);
-    historyConfigClose.addEventListener('click', closeHistoryConfig);
+    if (historyConfigClose) historyConfigClose.addEventListener('click', closeHistoryConfig);
 
-    popupMenu.querySelector('.popup-content').addEventListener('click', (e) => {
-      e.stopPropagation();
-    });
-
-    historyConfigPopup.querySelector('.popup-content').addEventListener('click', (e) => {
-      e.stopPropagation();
-    });
-
-    popupMenu.addEventListener('click', (e) => {
-      if (e.target === popupMenu) {
-        closeMenu();
-      }
-    });
-
-    historyConfigPopup.addEventListener('click', (e) => {
-      if (e.target === historyConfigPopup) {
-        closeHistoryConfig();
-      }
-    });
-
-    tabButtons.forEach(button => {
-      button.addEventListener('click', () => {
-        const tabId = button.dataset.tab;
-
-        tabButtons.forEach(btn => btn.classList.remove('active'));
-        button.classList.add('active');
-
-        tabContents.forEach(content => {
-          content.classList.remove('active');
-          if (content.id === `${tabId}-tab`) {
-            content.classList.add('active');
-          }
-        });
+    if (historyConfigPopup) {
+      historyConfigPopup.querySelector('.popup-content').addEventListener('click', (e) => {
+        e.stopPropagation();
       });
-    });
 
+      historyConfigPopup.addEventListener('click', (e) => {
+        if (e.target === historyConfigPopup) {
+          closeHistoryConfig();
+        }
+      });
+    }
+
+    // ESC key handler
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        if (popupMenu.classList.contains('active')) {
-          closeMenu();
-        }
-        if (historyConfigPopup.classList.contains('active')) {
+        if (historyConfigPopup && historyConfigPopup.classList.contains('active')) {
           closeHistoryConfig();
         }
       }
@@ -131,16 +92,36 @@ export class UIManager {
   }
 
   setupEventListeners() {
+    // ✅ PANEL HAMBURGER - Con verificación y debug
     const panelHamburger = document.getElementById('panel-hamburger');
+    console.log('Panel hamburger encontrado:', panelHamburger); // Debug
+
     if (panelHamburger) {
-      panelHamburger.addEventListener('click', () => {
+      // Remover listeners previos
+      panelHamburger.replaceWith(panelHamburger.cloneNode(true));
+      const newHamburger = document.getElementById('panel-hamburger');
+
+      newHamburger.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('Hamburger clicked!'); // Debug
         this.tracker.toggleSlidingPanel();
       });
+
+      console.log('Event listener agregado al hamburger'); // Debug
+    } else {
+      console.error('❌ Panel hamburger NO encontrado en el DOM');
     }
 
+    // ✅ PANEL CLOSE BUTTON
     const panelCloseBtn = document.querySelector('.panel-close-btn');
+    console.log('Panel close button encontrado:', panelCloseBtn); // Debug
+
     if (panelCloseBtn) {
-      panelCloseBtn.addEventListener('click', () => {
+      panelCloseBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('Close button clicked!'); // Debug
         this.tracker.toggleSlidingPanel();
       });
     }
@@ -212,7 +193,7 @@ export class UIManager {
     // Enable/disable time filter
     const timeCheckbox = document.getElementById('enable-time-filter');
     const timeContent = document.getElementById('time-filter-content');
-    
+
     if (timeCheckbox) {
       timeCheckbox.addEventListener('change', (e) => {
         this.tracker.historyManager.timeFilterEnabled = e.target.checked;
@@ -223,7 +204,7 @@ export class UIManager {
     // Enable/disable location filter
     const locationCheckbox = document.getElementById('enable-location-filter');
     const locationContent = document.getElementById('location-filter-content');
-    
+
     if (locationCheckbox) {
       locationCheckbox.addEventListener('change', (e) => {
         this.tracker.historyManager.locationFilterEnabled = e.target.checked;
@@ -236,7 +217,7 @@ export class UIManager {
       btn.addEventListener('click', () => {
         const hours = parseInt(btn.dataset.hours);
         this.tracker.historyManager.setQuickTimeRange(hours);
-        
+
         // Update active state
         document.querySelectorAll('.quick-range-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
@@ -265,7 +246,7 @@ export class UIManager {
       selectOnMapBtn.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        
+
         if (this.tracker.isSelectingLocationOnMap) {
           this.endMapLocationSelection();
           this.reopenHistoryConfigPopup();
@@ -280,31 +261,31 @@ export class UIManager {
     this.tracker.isSelectingLocationOnMap = true;
     const selectBtn = document.getElementById('select-on-map-btn');
     const historyConfigPopup = document.getElementById('history-config-popup');
-    
+
     const activeTab = document.querySelector('#history-config-popup .tab-button.active');
     if (activeTab) {
       this.tracker.historyManager.lastActiveConfigTab = activeTab.dataset.tab;
     }
-    
+
     if (historyConfigPopup) {
       historyConfigPopup.classList.remove('active');
     }
-    
+
     selectBtn.textContent = '✖ ' + this.tracker.t('cancelSelection');
     selectBtn.classList.add('secondary');
-    
+
     const mapContainer = document.getElementById('map');
     mapContainer.style.cursor = 'crosshair';
 
     this.tracker.mapSelectionHandler = (e) => {
       const {lng, lat} = e.lngLat;
-      
+
       document.getElementById('location-lat-input').value = lat.toFixed(6);
       document.getElementById('location-lng-input').value = lng.toFixed(6);
-      
+
       this.endMapLocationSelection();
       this.reopenHistoryConfigPopup();
-      
+
       console.log(this.tracker.t('locationSelected'), `Lat: ${lat.toFixed(6)}, Lng: ${lng.toFixed(6)}`);
     };
 
@@ -322,12 +303,12 @@ export class UIManager {
     this.tracker.isSelectingLocationOnMap = false;
     const selectBtn = document.getElementById('select-on-map-btn');
     const mapContainer = document.getElementById('map');
-    
+
     selectBtn.textContent = '🗺 ' + this.tracker.t('selectOnMap');
     selectBtn.classList.remove('secondary');
-    
+
     mapContainer.style.cursor = '';
-    
+
     if (this.tracker.mapSelectionHandler) {
       this.tracker.mapManager.map.off('click', this.tracker.mapSelectionHandler);
       this.tracker.mapSelectionHandler = null;
@@ -339,21 +320,21 @@ export class UIManager {
   reopenHistoryConfigPopup() {
     const historyConfigPopup = document.getElementById('history-config-popup');
     const lastTab = this.tracker.historyManager.lastActiveConfigTab || 'location-filter';
-    
+
     if (historyConfigPopup) {
       historyConfigPopup.classList.add('active');
     }
-    
+
     const tabButtons = document.querySelectorAll('#history-config-popup .tab-button');
     const tabContents = document.querySelectorAll('#history-config-popup .tab-content');
-    
+
     tabButtons.forEach(btn => {
       btn.classList.remove('active');
       if (btn.dataset.tab === lastTab) {
         btn.classList.add('active');
       }
     });
-    
+
     tabContents.forEach(content => {
       content.classList.remove('active');
       if (content.id === `${lastTab}-tab`) {
@@ -371,6 +352,27 @@ export class UIManager {
     document.getElementById('start-time-popup').value = formatDateTimeLocal(startTime);
   }
 
+  closeAllMenus() {
+    // Close Main Popup Menu
+    const popupMenu = document.getElementById('popup-menu');
+    if (popupMenu) {
+      popupMenu.classList.remove('active');
+    }
+
+    // Close Sliding Panel
+    const slidingPanel = document.getElementById('sliding-panel');
+    if (slidingPanel) {
+      slidingPanel.classList.remove('open');
+      this.tracker.slidingPanelOpen = false;
+    }
+
+    // Close History Config if open
+    const historyConfig = document.getElementById('history-config-popup');
+    if (historyConfig) {
+      historyConfig.classList.remove('active');
+    }
+  }
+
   updateUILanguage() {
     const headerP = document.querySelector('.header p');
     if (headerP) headerP.textContent = this.tracker.t('subtitle');
@@ -385,10 +387,10 @@ export class UIManager {
 
     const historyModeSpan = document.querySelector('#history-mode-btn span:last-child');
     if (historyModeSpan) historyModeSpan.textContent = this.tracker.t('historyMode');
-    
+
     const changeFilterSpan = document.querySelector('#change-filter-btn span:last-child');
     if (changeFilterSpan) changeFilterSpan.textContent = this.tracker.t('changeFilter');
-    
+
     const liveModeSpan = document.querySelector('#live-mode-btn span:last-child');
     if (liveModeSpan) liveModeSpan.textContent = this.tracker.t('liveMode');
 
@@ -406,13 +408,22 @@ export class UIManager {
       }
     }
 
+    const settingsTabTitle = document.getElementById('settings-tab-title');
+    if (settingsTabTitle) {
+      settingsTabTitle.textContent = this.tracker.t('settingsPanel');
+    }
+
     // Popup menu elements
     const popupHeader = document.querySelector('#popup-menu .popup-header h2');
     if (popupHeader) popupHeader.textContent = this.tracker.t('controlsAndInfo');
-    
+
     const controlsTab = document.querySelector('[data-tab="controls"]');
     if (controlsTab) controlsTab.textContent = this.tracker.t('controls');
-    
+
+    // Update the new Locations tab title in sliding panel
+    const locationsTabTitle = document.getElementById('locations-tab-title');
+    if (locationsTabTitle) locationsTabTitle.textContent = this.tracker.t('locations');
+
     const locationsTab = document.querySelector('[data-tab="locations"]');
     if (locationsTab) locationsTab.textContent = this.tracker.t('locations');
 
@@ -433,7 +444,7 @@ export class UIManager {
 
     const startTimeLabel = document.querySelector('label[for="start-time-popup"]');
     if (startTimeLabel) startTimeLabel.textContent = this.tracker.t('from');
-    
+
     const endTimeLabel = document.querySelector('label[for="end-time-popup"]');
     if (endTimeLabel) endTimeLabel.textContent = this.tracker.t('to');
 

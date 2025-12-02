@@ -1,7 +1,7 @@
 // Configuration and constants
 export const CONFIG = {
   mapStyle: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
-  defaultCenter: [-74.0060, 40.7128],
+  defaultCenter: [-74.819, 10.985],
   defaultZoom: 10,
   maxReconnectAttempts: 10,
   historyLimit: 50,

@@ -9,31 +9,43 @@ export class MapManager {
     this.selectedLocationMarker = null;
   }
 
-  initialize() {
-    const { mapStyle, defaultCenter, defaultZoom } = this.tracker.config;
+initialize() {
+  const { mapStyle, defaultCenter, defaultZoom } = this.tracker.config;
 
+  try {
     this.map = new maplibregl.Map({
       container: 'map',
       style: mapStyle,
       center: defaultCenter,
       zoom: defaultZoom,
-      attributionControl: true
+      attributionControl: true,
+      localIdeographFontFamily: "'Arial', 'Helvetica', sans-serif"
     });
 
     this.map.addControl(new maplibregl.NavigationControl(), 'bottom-left');
     this.map.addControl(new maplibregl.FullscreenControl(), 'bottom-left');
 
     this.setupMapEvents();
-    
-    this.map.on('load', () => {
+
+    // ✅ ESPERAR a que el mapa cargue completamente
+    this.map.once('load', () => {
+      console.log('✅ Map loaded successfully');
       this.initializeRouteLine();
-      console.log('Map loaded successfully');
+
+      // ✅ Notificar que el mapa está listo
+      if (this.tracker.onMapReady) {
+        this.tracker.onMapReady();
+      }
     });
 
     this.map.on('error', (e) => {
-      console.error('Map error:', e);
+      console.warn('Map warning:', e);
     });
+
+  } catch (error) {
+    console.error('❌ Failed to initialize map:', error);
   }
+}
 
   setupMapEvents() {
     this.map.on('dragstart', () => {
@@ -347,6 +359,27 @@ export class MapManager {
     }
   }
 
+  // NEW METHOD: Update markers for all selected devices with their latest locations
+  updateAllDeviceMarkers() {
+    // Get the latest location for each selected device
+    const latestByDevice = new Map();
+
+    this.tracker.locations.forEach(loc => {
+      if (this.tracker.selectedDevices.has(loc.device_id)) {
+        if (!latestByDevice.has(loc.device_id)) {
+          latestByDevice.set(loc.device_id, loc);
+        }
+      }
+    });
+
+    // Update marker for each device
+    latestByDevice.forEach((location, deviceId) => {
+      this.updateMapMarker(location, true);
+    });
+
+    console.log(`Updated markers for ${latestByDevice.size} devices`);
+  }
+
   centerMapOnLocation(location) {
     this.tracker.userInteracted = false;
     this.tracker.suppressUserInteraction = true;
@@ -409,14 +442,14 @@ export class MapManager {
     }
 
     let locationsToConsider;
-    
+
     // Get locations based on current mode
     if (this.tracker.isHistoryMode) {
-      locationsToConsider = this.tracker.filteredLocations.filter(loc => 
+      locationsToConsider = this.tracker.filteredLocations.filter(loc =>
         visibleDevices.includes(loc.device_id)
       );
     } else {
-      locationsToConsider = this.tracker.locations.filter(loc => 
+      locationsToConsider = this.tracker.locations.filter(loc =>
         visibleDevices.includes(loc.device_id)
       );
     }
@@ -472,9 +505,9 @@ export class MapManager {
       max-width: 300px;
       animation: slideInRight 0.3s ease-out;
     `;
-    
+
     document.body.appendChild(notification);
-    
+
     setTimeout(() => {
       notification.style.animation = 'slideOutRight 0.3s ease-out';
       setTimeout(() => notification.remove(), 300);
