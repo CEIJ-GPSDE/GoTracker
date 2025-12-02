@@ -266,17 +266,12 @@ func (db *Database) InitializeSchema(prefix string) error {
 		return err
 	}
 
-	// ✅ CRITICAL FIX: Explicitly add columns individually.
-	// This ensures that if the table exists but columns don't, they are added.
-	// This prevents the "500 Internal Server Error" during INSERT.
-	_, err = db.Exec(`ALTER TABLE geofences ADD COLUMN IF NOT EXISTS color VARCHAR(50) DEFAULT '#667eea';`)
-	if err != nil {
-		log.Printf("Warning adding color column: %v", err)
+	// Add columns safely - ADD ERROR LOGGING HERE
+	if _, err := db.Exec(`ALTER TABLE geofences ADD COLUMN IF NOT EXISTS color VARCHAR(50) DEFAULT '#667eea';`); err != nil {
+		log.Printf("Warning: Failed to add 'color' column to geofences: %v", err)
 	}
-
-	_, err = db.Exec(`ALTER TABLE geofences ADD COLUMN IF NOT EXISTS linked_device_id VARCHAR(255);`)
-	if err != nil {
-		log.Printf("Warning adding linked_device_id column: %v", err)
+	if _, err := db.Exec(`ALTER TABLE geofences ADD COLUMN IF NOT EXISTS linked_device_id VARCHAR(255);`); err != nil {
+		log.Printf("Warning: Failed to add 'linked_device_id' column to geofences: %v", err)
 	}
 
 	// 5. Notifications Table (New Feature)
@@ -1451,7 +1446,7 @@ func (api *APIServer) updateGeofenceHandler(w http.ResponseWriter, r *http.Reque
 		argIdx++
 	}
 
-	if input.Coordinates != nil && len(input.Coordinates) >= 3 {
+	if len(input.Coordinates) >= 3 {
 		// Close polygon if needed
 		firstPoint := input.Coordinates[0]
 		lastPoint := input.Coordinates[len(input.Coordinates)-1]
