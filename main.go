@@ -702,6 +702,7 @@ func (api *APIServer) Run(ctx context.Context) {
 	r.HandleFunc("/api/routes/{id}", api.deleteRouteHandler).Methods("DELETE")
 	r.HandleFunc("/api/notifications", api.getNotificationsHandler).Methods("GET")
 	r.HandleFunc("/api/notifications/{id}/read", api.markNotificationReadHandler).Methods("PUT")
+	r.HandleFunc("/api/notifications", api.createNotificationHandler).Methods("POST")
 
 	// Static file serving (MUST be last)
 	r.PathPrefix("/").Handler(http.FileServer(http.Dir("./static/")))
@@ -1692,6 +1693,54 @@ func (api *APIServer) markNotificationReadHandler(w http.ResponseWriter, r *http
 		}
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+func (api *APIServer) createNotificationHandler(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		DeviceID  string  `json:"device_id"`
+		Message   string  `json:"message"`
+		Type      string  `json:"type"`
+		Latitude  float64 `json:"latitude"`
+		Longitude float64 `json:"longitude"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if input.DeviceID == "" || input.Message == "" {
+		http.Error(w, "device_id and message are required", http.StatusBadRequest)
+		return
+	}
+
+	if input.Type == "" {
+		input.Type = "info"
+	}
+
+	query := `
+		INSERT INTO notifications (device_id, message, type, location)
+		VALUES ($1, $2, $3, ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography)
+		RETURNING id, timestamp
+	`
+
+	var id int
+	var timestamp time.Time
+	err := api.db.QueryRow(query, input.DeviceID, input.Message, input.Type,
+		input.Longitude, input.Latitude).Scan(&id, &timestamp)
+	if err != nil {
+		log.Printf("Error creating notification: %v", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"id":        id,
+		"timestamp": timestamp,
+		"message":   input.Message,
+	})
 }
 
 func (api *APIServer) createNotification(deviceID, message, msgType string, lat, lng float64) {

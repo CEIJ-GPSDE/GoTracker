@@ -1098,14 +1098,36 @@ export class GeofenceManager {
     }
   }
 
-  handleViolationEvent(location, eventType, geofences) {
-    const geofenceNames = geofences.map(gf => gf.name).join(', ');
+async handleViolationEvent(location, eventType, geofences) {
+  const geofenceNames = geofences.map(gf => gf.name).join(', ');
 
-    const message = eventType === 'entered'
-      ? `🚨 ${location.device_id} ${this.tracker.t('deviceEntered')}: ${geofenceNames}`
-      : `🚨 ${location.device_id} ${this.tracker.t('deviceExited')}: ${geofenceNames}`;
+  const message = eventType === 'entered'
+    ? `🚨 ${location.device_id} ${this.tracker.t('deviceEntered')}: ${geofenceNames}`
+    : `🚨 ${location.device_id} ${this.tracker.t('deviceExited')}: ${geofenceNames}`;
 
-    this.showNotification(message, eventType === 'entered' ? 'warning' : 'info', 5000);
+  this.showNotification(message, eventType === 'entered' ? 'warning' : 'info', 5000);
+
+  // ✅ NEW: Save notification to database
+  try {
+    await fetch(`${this.tracker.config.apiBaseUrl}/api/notifications`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        device_id: location.device_id,
+        message: message,
+        type: eventType === 'entered' ? 'alert' : 'info',
+        latitude: location.latitude,
+        longitude: location.longitude
+      })
+    });
+
+    // Reload notifications in UI
+    if (this.tracker.notificationManager) {
+      this.tracker. notificationManager.loadNotifications();
+    }
+  } catch (error) {
+    console.error('Failed to save notification:', error);
+  }
 
     const marker = this.tracker.mapManager.markers.get(location.device_id);
     if (marker) {

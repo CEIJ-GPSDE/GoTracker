@@ -2,6 +2,11 @@ export class NotificationManager {
   constructor(tracker) {
     this.tracker = tracker;
     this.unreadCount = 0;
+
+    // ✅ Auto-refresh every 10 seconds
+    setInterval(() => {
+      this.loadNotifications();
+    }, 10000);
   }
 
   async loadNotifications() {
@@ -26,16 +31,25 @@ export class NotificationManager {
       return;
     }
 
-    container.innerHTML = notifications.map(n => `
-      <div class="notification-item ${n.read ? '' : 'unread'} ${n.type === 'alert' ? 'alert' : ''}"
-           onclick="window.locationTracker.mapManager.centerMapOnLocation({latitude: ${n.latitude}, longitude: ${n.longitude}})">
-        <div class="notification-header">
-          <span>${n.device_id}</span>
-          <span>${new Date(n.timestamp).toLocaleString()}</span>
+    container.innerHTML = notifications.map(n => {
+      const hasLocation = n.latitude && n.longitude;
+      const clickHandler = hasLocation
+        ? `onclick="window.locationTracker.mapManager.centerMapOnLocation({latitude: ${n.latitude}, longitude: ${n.longitude}, device_id: '${n.device_id}'})"`
+        : '';
+
+      return `
+        <div class="notification-item ${n.read ? '' : 'unread'} ${n.type === 'alert' ?  'alert' : ''}"
+            ${clickHandler}
+            style="${hasLocation ? 'cursor: pointer;' : ''}">
+          <div class="notification-header">
+            <span style="font-weight: 600;">${n.device_id}</span>
+            <span style="font-size: 11px; color: #9ca3af;">${new Date(n.timestamp).toLocaleString()}</span>
+          </div>
+          <div class="notification-message">${n.message}</div>
+          ${hasLocation ?  '<div style="font-size: 10px; color: #3b82f6; margin-top: 4px;">📍 Click to view location</div>' : ''}
         </div>
-        <div class="notification-message">${n.message}</div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
   }
 
   updateBadge(count) {
