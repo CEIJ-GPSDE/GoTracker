@@ -8,17 +8,18 @@ export class ClusteringManager {
 
   initialize() {
     // Add cluster source
-    this.map.addSource(this.clusterSourceId, {
-      type: 'geojson',
-      data: {
-        type: 'FeatureCollection',
-        features: []
-      },
-      cluster: true,
-      clusterMaxZoom: 14,
-      clusterRadius: 50
-    });
-
+    if (!this.map.getSource(this.clusterSourceId)) {
+      this.map.addSource(this.clusterSourceId, {
+        type: 'geojson',
+        data: {
+          type: 'FeatureCollection',
+          features: []
+        },
+        cluster: true,
+        clusterMaxZoom: 14,
+        clusterRadius: 50
+      });
+    }
     // Cluster circles
     this.map.addLayer({
       id: 'clusters',
@@ -91,7 +92,7 @@ export class ClusteringManager {
     this.map.on('click', 'unclustered-point', (e) => {
       const coordinates = e.features[0].geometry.coordinates.slice();
       const properties = e.features[0].properties;
-      
+
       new maplibregl.Popup()
         .setLngLat(coordinates)
         .setHTML(`

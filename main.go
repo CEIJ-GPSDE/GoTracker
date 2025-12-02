@@ -1379,7 +1379,8 @@ func (api *APIServer) getGeofenceHandler(w http.ResponseWriter, r *http.Request)
 	query := `
         SELECT id, name, description,
                ST_AsGeoJSON(geom::geometry) as geom_json,
-               active, created_at, updated_at
+               active, created_at, updated_at,
+							COALESCE(color, ''), COALESCE(linked_device_id, '')
         FROM geofences
         WHERE id = $1
     `
@@ -1390,6 +1391,7 @@ func (api *APIServer) getGeofenceHandler(w http.ResponseWriter, r *http.Request)
 	err := api.db.QueryRow(query, geofenceID).Scan(
 		&gf.ID, &gf.Name, &gf.Description, &geomJSON,
 		&gf.Active, &gf.CreatedAt, &gf.UpdatedAt,
+		&gf.Color, &gf.LinkedDeviceID,
 	)
 
 	if err == sql.ErrNoRows {
