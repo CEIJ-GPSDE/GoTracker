@@ -10,6 +10,8 @@ import { GeofenceManager } from '../modules/geofence-manager.js';
 import { ClusteringManager } from '../modules/clustering-manager.js';
 import { RouteManager } from '../modules/route-manager.js';
 import { VehiclePanelManager } from '../modules/vehicle-panel-manager.js';
+import { ZoneManager } from '../modules/zone-manager.js';
+import { NotificationManager } from '../modules/notification-manager.js';
 
 export class LocationTracker {
   constructor() {
@@ -27,6 +29,8 @@ export class LocationTracker {
     this.clusteringManager = null; // Initialized after map loads
     this.routeManager = null; // Initialized after map loads
     this.vehiclePanelManager = null; // Initialized after map loads
+    this.zoneManager = null; // ✅ AGREGAR
+    this.notificationManager = null; // ✅ AGREGAR
     this.useMarkerClustering = false; // Toggle for clustering
     this.slidingPanelOpen = false; // Panel starts closed
     this.activePanelTab = 'vehicles'; // Default tab
@@ -114,6 +118,10 @@ export class LocationTracker {
 
         this.routeManager = new RouteManager(this);
         this.routeManager.initialize();
+        this.zoneManager = new ZoneManager(this);
+        this.zoneManager.initialize();
+        this.notificationManager = new NotificationManager(this);
+        this.notificationManager.loadNotifications();
         // Setup map event handlers for geofence drawing
         this.mapManager.map.on('click', (e) => {
           this.geofenceManager.handleMapClick(e);
