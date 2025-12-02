@@ -9,18 +9,17 @@ export class MapManager {
     this.selectedLocationMarker = null;
   }
 
-  initialize() {
-    const { mapStyle, defaultCenter, defaultZoom } = this.tracker.config;
+initialize() {
+  const { mapStyle, defaultCenter, defaultZoom } = this.tracker.config;
 
+  try {
     this.map = new maplibregl.Map({
       container: 'map',
       style: mapStyle,
       center: defaultCenter,
       zoom: defaultZoom,
       attributionControl: true,
-      localIdeographFontFamily: "'Arial', 'Helvetica', sans-serif",
-      maxBounds: [[-180, -85], [180, 85]], // Limitar el área visible
-      renderWorldCopies: false
+      localIdeographFontFamily: "'Arial', 'Helvetica', sans-serif"
     });
 
     this.map.addControl(new maplibregl.NavigationControl(), 'bottom-left');
@@ -28,31 +27,25 @@ export class MapManager {
 
     this.setupMapEvents();
 
-    this.map.on('load', () => {
+    // ✅ ESPERAR a que el mapa cargue completamente
+    this.map.once('load', () => {
+      console.log('✅ Map loaded successfully');
       this.initializeRouteLine();
-      console.log('Map loaded successfully');
+
+      // ✅ Notificar que el mapa está listo
+      if (this.tracker.onMapReady) {
+        this.tracker.onMapReady();
+      }
     });
 
     this.map.on('error', (e) => {
-        // Filtrar errores comunes que no afectan funcionalidad
-        const ignorableErrors = [
-          'Error: Not Found',
-          'Error: NetworkError',
-          'Error: AbortError'
-        ];
+      console.warn('Map warning:', e);
+    });
 
-        const errorMessage = e.error?.message || String(e.error);
-
-        if (!ignorableErrors.some(msg => errorMessage.includes(msg))) {
-          console.error('Map error:', errorMessage);
-        }
-
-        // No mostrar errores triviales al usuario
-        if (errorMessage && !errorMessage.includes('Not Found')) {
-          console.warn('Non-critical map error logged');
-        }
-      });
-    }
+  } catch (error) {
+    console.error('❌ Failed to initialize map:', error);
+  }
+}
 
   setupMapEvents() {
     this.map.on('dragstart', () => {

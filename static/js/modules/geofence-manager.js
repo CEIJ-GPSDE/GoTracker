@@ -17,25 +17,32 @@ export class GeofenceManager {
   }
 
   initialize() {
-    if (!this.map.getSource(this.tempLineSourceId)) {
-        this.map.addSource(this.tempLineSourceId, {
-            type: 'geojson',
-            data: {
-                type: 'FeatureCollection',
-                features: []
-            }
-        });
+    // ✅ Prevenir inicialización múltiple
+    if (this.initialized) {
+      console.log('GeofenceManager already initialized');
+      return;
+    }
+    this.initialized = true;
 
-        this.map.addLayer({
-            id: 'temp-drawing-line',
-            type: 'line',
-            source: this.tempLineSourceId,
-            paint: {
-                'line-color': '#667eea',
-                'line-width': 2,
-                'line-dasharray': [2, 2]
-            }
-        });
+    if (!this.map.getSource(this.tempLineSourceId)) {
+      this.map.addSource(this.tempLineSourceId, {
+        type: 'geojson',
+        data: {
+          type: 'FeatureCollection',
+          features: []
+        }
+      });
+
+      this.map.addLayer({
+        id: 'temp-drawing-line',
+        type: 'line',
+        source: this.tempLineSourceId,
+        paint: {
+          'line-color': '#667eea',
+          'line-width': 2,
+          'line-dasharray': [2, 2]
+        }
+      });
     }
 
     // Load existing geofences
@@ -48,7 +55,6 @@ export class GeofenceManager {
     setInterval(() => this.updateGeofenceStats(), 5000);
 
     this.currentPopup = null;
-
     // ADD: Close popup on ESC key
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && this.currentPopup) {
@@ -143,6 +149,14 @@ export class GeofenceManager {
   }
 
   async loadGeofences() {
+    // ✅ Prevenir carga múltiple simultánea
+    if (this.isLoading) {
+      console.log('Geofences already loading...');
+      return;
+    }
+
+    this.isLoading = true;
+
     try {
       const response = await fetch(`${this.tracker.config.apiBaseUrl}/api/geofences`);
       if (response.ok) {
@@ -154,20 +168,24 @@ export class GeofenceManager {
 
         geofences.forEach(gf => {
           this.geofences.set(gf.id, gf);
-          this.visibleGeofences.add(gf.id); // All visible by default
+          this.visibleGeofences.add(gf.id);
           this.drawGeofence(gf);
         });
 
-        console.log(`Loaded ${geofences.length} geofences`);
+        console.log(`✅ Loaded ${geofences.length} geofences`);
         this.updateGeofenceLegend();
         this.updateGeofenceList();
         this.updateGeofenceStats();
 
         // Check all current device locations against geofences
         this.checkAllDeviceLocations();
+      } else {
+        console.error('Failed to load geofences:', response.status);
       }
     } catch (error) {
       console.error('Error loading geofences:', error);
+    } finally {
+      this.isLoading = false;
     }
   }
 

@@ -8,9 +8,16 @@ export class RouteManager {
     this.routeLegendCollapsed = false;
     this.visibleRoutes = new Set();
     this.routeColors = ['#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#8b5cf6', '#06b6d4'];
+    this.initialized = false; // ✅ AGREGAR
+    this.isLoading = false; // ✅ AGREGAR
   }
 
   initialize() {
+    if (this.initialized) {
+      console.log('RouteManager already initialized');
+      return;
+    }
+    this.initialized = true;
     // ADD: Track current popup
     this.currentPopup = null;
 
@@ -37,6 +44,13 @@ export class RouteManager {
   }
 
   async loadRoutes() {
+    if (this.isLoading) {
+      console.log('Routes already loading...');
+      return;
+    }
+
+    this.isLoading = true;
+
     try {
       const response = await fetch(`${this.tracker.config.apiBaseUrl}/api/routes?limit=50`);
       if (response.ok) {
@@ -52,14 +66,18 @@ export class RouteManager {
           this.drawRoute(route);
         });
 
-        console.log(`Loaded ${routes.length} routes`);
+        console.log(`✅ Loaded ${routes.length} routes`);
         this.updateRouteList();
         this.updateRouteStats();
+      } else {
+        console.error('Failed to load routes:', response.status);
       }
     } catch (error) {
       console.error('Error loading routes:', error);
+    } finally {
+      this.isLoading = false;
+      this.updateRouteLegend();
     }
-    this.updateRouteLegend();
   }
 
   clearAllRouteLayers() {

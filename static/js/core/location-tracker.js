@@ -102,52 +102,81 @@ export class LocationTracker {
 
   async initializeApp() {
     try {
+      // ✅ PASO 1: Inicializar mapa primero
       this.mapManager.initialize();
 
-      // Initialize geofence and clustering managers after map loads
-      this.mapManager.map.on('load', () => {
-        this.geofenceManager = new GeofenceManager(this);
-        this.geofenceManager.initialize();
+      // ✅ PASO 2: Configurar callback para cuando el mapa esté listo
+      this.onMapReady = () => {
+        console.log('🗺️ Map ready, initializing managers...');
 
-        this.clusteringManager = new ClusteringManager(this.mapManager);
-        this.clusteringManager.initialize();
+        // Solo inicializar si no existen ya
+        if (!this.geofenceManager) {
+          this.geofenceManager = new GeofenceManager(this);
+          this.geofenceManager.initialize();
+        }
 
-        // AGREGAR ESTAS LÍNEAS:
-        this.vehiclePanelManager = new VehiclePanelManager(this);
-        this.vehiclePanelManager.initialize();
+        if (!this.clusteringManager) {
+          this.clusteringManager = new ClusteringManager(this.mapManager);
+          this.clusteringManager.initialize();
+        }
 
-        this.routeManager = new RouteManager(this);
-        this.routeManager.initialize();
-        this.zoneManager = new ZoneManager(this);
-        this.zoneManager.initialize();
-        this.notificationManager = new NotificationManager(this);
-        this.notificationManager.loadNotifications();
-        // Setup map event handlers for geofence drawing
+        if (!this.vehiclePanelManager) {
+          this.vehiclePanelManager = new VehiclePanelManager(this);
+          this.vehiclePanelManager.initialize();
+        }
+
+        if (!this.routeManager) {
+          this.routeManager = new RouteManager(this);
+          this.routeManager.initialize();
+        }
+
+        if (!this.zoneManager) {
+          this.zoneManager = new ZoneManager(this);
+          this.zoneManager.initialize();
+        }
+
+        if (!this.notificationManager) {
+          this.notificationManager = new NotificationManager(this);
+          this.notificationManager.loadNotifications();
+        }
+
+        // ✅ Setup map event handlers DESPUÉS de que todo esté listo
         this.mapManager.map.on('click', (e) => {
-          this.geofenceManager.handleMapClick(e);
+          if (this.geofenceManager) {
+            this.geofenceManager.handleMapClick(e);
+          }
         });
 
         this.mapManager.map.on('dblclick', (e) => {
-          this.geofenceManager.handleMapDoubleClick(e);
+          if (this.geofenceManager) {
+            this.geofenceManager.handleMapDoubleClick(e);
+          }
         });
 
-        // Setup keyboard handler for finishing drawing
-        document.addEventListener('keydown', (e) => {
+        console.log('✅ All managers initialized');
+      };
+
+      // ✅ PASO 3: Inicializar UI y cargar datos
+      this.uiManager.setupEventListeners();
+      this.uiManager.setupPopupMenu();
+      this.uiManager.setupOverlayEventListeners();
+
+      await this.deviceManager.loadDevices();
+      await this.loadInitialData();
+
+      // ✅ PASO 4: Setup resto de funcionalidad
+      this.setupVisibilityHandler();
+
+      // Setup keyboard handler
+      document.addEventListener('keydown', (e) => {
+        if (this.geofenceManager) {
           if (e.key === 'Enter' && this.geofenceManager.drawingMode) {
             this.geofenceManager.finishDrawing();
           } else if (e.key === 'Escape' && this.geofenceManager.drawingMode) {
             this.geofenceManager.cancelDrawing();
           }
-        });
+        }
       });
-
-      this.uiManager.setupEventListeners();
-      this.uiManager.setupPopupMenu();
-      this.uiManager.setupOverlayEventListeners();
-      await this.deviceManager.loadDevices();
-      await this.loadInitialData();
-
-      this.setupVisibilityHandler();
 
       this.wsManager.connect();
       this.startStatsPolling();
@@ -155,9 +184,12 @@ export class LocationTracker {
       this.uiManager.updateRefreshButtonState();
       this.updateTimeFilterIndicator();
       this.uiManager.updateUILanguage();
+
       document.getElementById('language-selector').value = this.translationManager.currentLanguage;
+
+      console.log('✅ Application initialized successfully');
     } catch (error) {
-      console.error('Failed to initialize app:', error);
+      console.error('❌ Failed to initialize app:', error);
       this.showError('Failed to initialize application');
     }
   }
