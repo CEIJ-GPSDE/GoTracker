@@ -24,7 +24,7 @@ export class ZoneManager {
     this.updateView();
   }
 
-updateView() {
+  updateView() {
     const actionsContainer = document.getElementById('zone-actions');
     const listContainer = document.getElementById('zone-list-items');
 
@@ -37,6 +37,7 @@ updateView() {
       // Show Geofence Controls
       actionsContainer.innerHTML = `
         <button class="panel-action-btn" onclick="window.locationTracker.geofenceManager?.startDrawing()">🖊️ Draw New</button>
+        <button class="panel-action-btn" onclick="window.locationTracker.geofenceManager?.createGeofenceFromRoute()">🛣️ From Route</button>
         <button class="panel-action-btn secondary" onclick="window.locationTracker.geofenceManager?.toggleAllGeofencesVisibility()">👁️ Toggle</button>
         <button class="panel-action-btn secondary" onclick="window.locationTracker.geofenceManager?.loadGeofences()">🔄 Reload</button>
       `;

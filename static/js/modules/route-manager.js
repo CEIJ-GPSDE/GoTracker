@@ -195,6 +195,11 @@ export class RouteManager {
               🎯 Center on Route
             </button>
             <button
+              onclick="window.locationTracker.geofenceManager.createGeofenceFromRoute(${route.id}); window.locationTracker.routeManager.currentPopup.remove();"
+              style="width: 100%; padding: 8px 12px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500;">
+              🗺️ Create Geofence
+            </button>
+            <button
               onclick="window.locationTracker.routeManager.deleteRoute(${route.id})"
               style="width: 100%; padding: 8px 12px; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500;">
               🗑️ Delete Route
