@@ -1315,7 +1315,7 @@ func (api *APIServer) getGeofencesHandler(w http.ResponseWriter, r *http.Request
 	query := `
         SELECT id, name, description,
                ST_AsGeoJSON(geom::geometry) as geom_json,
-               active, created_at, updated_at
+               active, created_at, updated_at,
                COALESCE(color, ''), COALESCE(linked_device_id, '')
         FROM geofences
     `
