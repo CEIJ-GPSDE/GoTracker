@@ -17,25 +17,26 @@ export class GeofenceManager {
   }
 
   initialize() {
-    // Add temporary drawing line source
-    this.map.addSource(this.tempLineSourceId, {
-      type: 'geojson',
-      data: {
-        type: 'FeatureCollection',
-        features: []
-      }
-    });
+    if (!this.map.getSource(this.tempLineSourceId)) {
+        this.map.addSource(this.tempLineSourceId, {
+            type: 'geojson',
+            data: {
+                type: 'FeatureCollection',
+                features: []
+            }
+        });
 
-    this.map.addLayer({
-      id: 'temp-drawing-line',
-      type: 'line',
-      source: this.tempLineSourceId,
-      paint: {
-        'line-color': '#667eea',
-        'line-width': 2,
-        'line-dasharray': [2, 2]
-      }
-    });
+        this.map.addLayer({
+            id: 'temp-drawing-line',
+            type: 'line',
+            source: this.tempLineSourceId,
+            paint: {
+                'line-color': '#667eea',
+                'line-width': 2,
+                'line-dasharray': [2, 2]
+            }
+        });
+    }
 
     // Load existing geofences
     this.loadGeofences();

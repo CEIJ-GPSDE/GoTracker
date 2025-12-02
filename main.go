@@ -266,12 +266,22 @@ func (db *Database) InitializeSchema(prefix string) error {
 		return err
 	}
 
-	// Add columns safely - ADD ERROR LOGGING HERE
-	if _, err := db.Exec(`ALTER TABLE geofences ADD COLUMN IF NOT EXISTS color VARCHAR(50) DEFAULT '#667eea';`); err != nil {
-		log.Printf("Warning: Failed to add 'color' column to geofences: %v", err)
-	}
-	if _, err := db.Exec(`ALTER TABLE geofences ADD COLUMN IF NOT EXISTS linked_device_id VARCHAR(255);`); err != nil {
-		log.Printf("Warning: Failed to add 'linked_device_id' column to geofences: %v", err)
+	// Add columns safely with better error handling
+	_, err = db.Exec(`
+			DO $$
+			BEGIN
+					IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+												WHERE table_name='geofences' AND column_name='color') THEN
+							ALTER TABLE geofences ADD COLUMN color VARCHAR(50) DEFAULT '#667eea';
+					END IF;
+					IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+												WHERE table_name='geofences' AND column_name='linked_device_id') THEN
+							ALTER TABLE geofences ADD COLUMN linked_device_id VARCHAR(255);
+					END IF;
+			END $$;
+	`)
+	if err != nil {
+		log.Printf("Warning: Failed to add geofence columns: %v", err)
 	}
 
 	// 5. Notifications Table (New Feature)
