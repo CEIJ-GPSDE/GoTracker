@@ -16,7 +16,7 @@ export class LocationTracker {
     // Core state
     this.config = { ...CONFIG, ...getApiConfig() };
     this.translationManager = new TranslationManager();
-    
+
     // Initialize managers
     this.mapManager = new MapManager(this);
     this.wsManager = new WebSocketManager(this);
@@ -37,7 +37,7 @@ export class LocationTracker {
     this.liveLocations = [];
     this.routeCoords = [];
     this.liveUpdateQueue = [];
-    
+
     // Flags and settings
     this.isTrackingLatest = true;
     this.isHistoryMode = false;
@@ -48,10 +48,10 @@ export class LocationTracker {
     this.mapSelectionHandler = null;
     this.deviceLegendCollapsed = false;
     this.useMarkerClustering = false; // Toggle for clustering
-    
+
     // Selection state
     this.selectedLocationIndex = -1;
-    
+
     // History mode limits
     this.historyLimit = CONFIG.historyLimit;
     this.maxReconnectAttempts = CONFIG.maxReconnectAttempts;
@@ -66,7 +66,7 @@ export class LocationTracker {
 
   // Proxy methods for translation manager
   t(key) { return this.translationManager.t(key); }
-  setLanguage(lang) { 
+  setLanguage(lang) {
     if (this.translationManager.setLanguage(lang)) {
       this.updateUILanguage();
     }
@@ -83,33 +83,46 @@ export class LocationTracker {
   set activeFilterType(value) { this.historyManager.activeFilterType = value; }
   get ws() { return this.wsManager.ws; }
 
+  toggleSlidingPanel() {
+    this.slidingPanelOpen = !this.slidingPanelOpen;
+    const panel = document.getElementById('sliding-panel');
+
+    if (this.slidingPanelOpen) {
+      panel.classList.add('open');
+    } else {
+      panel.classList.remove('open');
+    }
+
+    console.log('Panel toggled:', this.slidingPanelOpen); // ✅ Debug
+  }
+
   async initializeApp() {
     try {
       this.mapManager.initialize();
-      
+
       // Initialize geofence and clustering managers after map loads
       this.mapManager.map.on('load', () => {
         this.geofenceManager = new GeofenceManager(this);
         this.geofenceManager.initialize();
-        
+
         this.clusteringManager = new ClusteringManager(this.mapManager);
         this.clusteringManager.initialize();
-        
+
         // AGREGAR ESTAS LÍNEAS:
         this.vehiclePanelManager = new VehiclePanelManager(this);
         this.vehiclePanelManager.initialize();
-        
+
         this.routeManager = new RouteManager(this);
         this.routeManager.initialize();
         // Setup map event handlers for geofence drawing
         this.mapManager.map.on('click', (e) => {
           this.geofenceManager.handleMapClick(e);
         });
-        
+
         this.mapManager.map.on('dblclick', (e) => {
           this.geofenceManager.handleMapDoubleClick(e);
         });
-        
+
         // Setup keyboard handler for finishing drawing
         document.addEventListener('keydown', (e) => {
           if (e.key === 'Enter' && this.geofenceManager.drawingMode) {
@@ -119,15 +132,15 @@ export class LocationTracker {
           }
         });
       });
-      
+
       this.uiManager.setupEventListeners();
       this.uiManager.setupPopupMenu();
       this.uiManager.setupOverlayEventListeners();
       await this.deviceManager.loadDevices();
       await this.loadInitialData();
-      
+
       this.setupVisibilityHandler();
-      
+
       this.wsManager.connect();
       this.startStatsPolling();
       this.uiManager.initializeTimePickers();
@@ -204,7 +217,7 @@ export class LocationTracker {
           } else {
             // FIX: Update markers for ALL selected devices, not just the first one
             this.mapManager.updateAllDeviceMarkers();
-            
+
             if (this.isTrackingLatest) {
               this.mapManager.centerMapOnDevices(); // Center on all devices
             }
@@ -222,27 +235,27 @@ export class LocationTracker {
   enableClustering() {
     this.useMarkerClustering = true;
     this.mapManager.clearAllMarkers();
-    
+
     if (this.clusteringManager) {
       this.clusteringManager.toggleClustering(true);
       this.clusteringManager.updateClusteredLocations(this.locations, this.devices);
     }
-    
+
     console.log('Clustering enabled for', this.locations.length, 'locations');
   }
 
   disableClustering() {
     this.useMarkerClustering = false;
-    
+
     if (this.clusteringManager) {
       this.clusteringManager.toggleClustering(false);
     }
-    
+
     // Restore individual markers
     this.locations.forEach(loc => {
       this.mapManager.updateMapMarker(loc, false);
     });
-    
+
     console.log('Clustering disabled');
   }
 
@@ -254,7 +267,7 @@ export class LocationTracker {
       return;
     }
     this.applyLocationUpdate(location);
-    
+
     if (this.vehiclePanelManager) {
       this.vehiclePanelManager.updateVehiclePanel();
     }
@@ -285,12 +298,12 @@ export class LocationTracker {
     }
 
     this.deviceManager.updateDeviceLegend();
-    
+
     // Update clustering if enabled
     if (this.useMarkerClustering && this.clusteringManager) {
       this.clusteringManager.updateClusteredLocations(this.locations, this.devices);
     }
-    
+
     this.filterAndDisplayLocations();
     this.updateStatistics();
 
@@ -482,7 +495,7 @@ export class LocationTracker {
       const color = deviceInfo ? deviceInfo.color : '#6b7280';
 
       return `
-        <div class="location-item ${index === 0 ? 'latest' : ''} ${index === this.selectedLocationIndex ? 'selected' : ''}" 
+        <div class="location-item ${index === 0 ? 'latest' : ''} ${index === this.selectedLocationIndex ? 'selected' : ''}"
             onclick="window.locationTracker.selectLocation(${index})">
           <div class="device-id">
             <div class="device-color-dot" style="background-color: ${color}"></div>
@@ -506,7 +519,7 @@ export class LocationTracker {
     }
 
     container.innerHTML = this.filteredLocations.map((location, index) => `
-          <div class="location-item ${index === this.selectedLocationIndex ? 'selected' : ''}" 
+          <div class="location-item ${index === this.selectedLocationIndex ? 'selected' : ''}"
                 onclick="window.locationTracker.selectLocation(${index})">
               <div class="device-id">${location.device_id}</div>
               <div class="coordinates">${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}</div>
@@ -690,7 +703,7 @@ export class LocationTracker {
     fetchAndUpdate();
     setInterval(fetchAndUpdate, 5000);
   }
-  
+
   setupVisibilityHandler() {
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden && !this.wsManager.isConnected()) {
@@ -722,17 +735,17 @@ export class LocationTracker {
   toggleSlidingPanel() {
     this.slidingPanelOpen = !this.slidingPanelOpen;
     const panel = document.getElementById('sliding-panel');
-    
+
     if (this.slidingPanelOpen) {
       panel.classList.add('open');
     } else {
       panel.classList.remove('open');
     }
   }
-  
+
   switchPanelTab(tabName) {
     this.activePanelTab = tabName;
-    
+
     // Update tab buttons
     document.querySelectorAll('.panel-tab').forEach(btn => {
       btn.classList.remove('active');
@@ -740,7 +753,7 @@ export class LocationTracker {
         btn.classList.add('active');
       }
     });
-    
+
     // Update tab content
     document.querySelectorAll('.panel-tab-content').forEach(content => {
       content.classList.remove('active');

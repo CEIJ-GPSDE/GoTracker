@@ -18,7 +18,9 @@ export class MapManager {
       center: defaultCenter,
       zoom: defaultZoom,
       attributionControl: true,
-      localIdeographFontFamily: "'Arial', 'Helvetica', sans-serif"
+      localIdeographFontFamily: "'Arial', 'Helvetica', sans-serif",
+      maxBounds: [[-180, -85], [180, 85]], // Limitar el área visible
+      renderWorldCopies: false
     });
 
     this.map.addControl(new maplibregl.NavigationControl(), 'bottom-left');
@@ -32,9 +34,25 @@ export class MapManager {
     });
 
     this.map.on('error', (e) => {
-      console.error('Map error:', e);
-    });
-  }
+        // Filtrar errores comunes que no afectan funcionalidad
+        const ignorableErrors = [
+          'Error: Not Found',
+          'Error: NetworkError',
+          'Error: AbortError'
+        ];
+
+        const errorMessage = e.error?.message || String(e.error);
+
+        if (!ignorableErrors.some(msg => errorMessage.includes(msg))) {
+          console.error('Map error:', errorMessage);
+        }
+
+        // No mostrar errores triviales al usuario
+        if (errorMessage && !errorMessage.includes('Not Found')) {
+          console.warn('Non-critical map error logged');
+        }
+      });
+    }
 
   setupMapEvents() {
     this.map.on('dragstart', () => {

@@ -92,16 +92,36 @@ export class UIManager {
   }
 
   setupEventListeners() {
+    // ✅ PANEL HAMBURGER - Con verificación y debug
     const panelHamburger = document.getElementById('panel-hamburger');
+    console.log('Panel hamburger encontrado:', panelHamburger); // Debug
+
     if (panelHamburger) {
-      panelHamburger.addEventListener('click', () => {
+      // Remover listeners previos
+      panelHamburger.replaceWith(panelHamburger.cloneNode(true));
+      const newHamburger = document.getElementById('panel-hamburger');
+
+      newHamburger.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('Hamburger clicked!'); // Debug
         this.tracker.toggleSlidingPanel();
       });
+
+      console.log('Event listener agregado al hamburger'); // Debug
+    } else {
+      console.error('❌ Panel hamburger NO encontrado en el DOM');
     }
 
+    // ✅ PANEL CLOSE BUTTON
     const panelCloseBtn = document.querySelector('.panel-close-btn');
+    console.log('Panel close button encontrado:', panelCloseBtn); // Debug
+
     if (panelCloseBtn) {
-      panelCloseBtn.addEventListener('click', () => {
+      panelCloseBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('Close button clicked!'); // Debug
         this.tracker.toggleSlidingPanel();
       });
     }
