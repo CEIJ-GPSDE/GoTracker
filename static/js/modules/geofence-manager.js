@@ -238,6 +238,9 @@ export class GeofenceManager {
       }
     });
 
+    // Determine outline color
+    const outlineColor = validColor; // Use the same color as fill, or choose a darker shade
+
     // Add outline layer with dashed pattern for inactive
     this.map.addLayer({
       id: `${sourceId}-outline`,
@@ -249,7 +252,7 @@ export class GeofenceManager {
       paint: {
         'line-color': outlineColor,
         'line-width': 2,
-        'line-dasharray': geofence.active ? [1, 0] : [2, 2] // Solid for active, dashed for inactive
+        'line-dasharray': geofence.active ? [1, 0] : [2, 2]
       }
     });
 

@@ -14,7 +14,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Make it globally available for HTML onclick handlers
   window.locationTracker = locationTracker;
-
+  window.toggleSlidingPanel = function() {
+    if (window.locationTracker) {
+      window.locationTracker.toggleSlidingPanel();
+    }
+  };
   // CRITICAL: Start the application (loads Map, Managers, WebSocket)
   locationTracker.initializeApp();
 });
